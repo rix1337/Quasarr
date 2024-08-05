@@ -1,0 +1,63 @@
+name: Build Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        default: 'false'
+        description: 'Version to build'
+        required: false
+
+env:
+  ENDPOINT: "rix1337/docker-quasarr"
+
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    outputs:
+      output: ${{ steps.get-version.outputs.version }}
+    steps:
+      - id: get-version
+        run: | 
+          if [ -z "${{ github.event.inputs.version }}" ]; then VS="false"; else VS=${{ github.event.inputs.version }}; fi
+          if [[ ${VS} == "false" ]]
+          then
+            echo "Grabbing latest quasarr version from pypi.org"
+            VERSION=$(curl -Ls https://pypi.org/pypi/quasarr/json | jq -r .info.version)
+          else
+            echo "Using version from workflow_dispatch input"
+            VERSION=${VS}
+          fi
+          echo $VERSION
+          echo "version=$VERSION" >>$GITHUB_OUTPUT
+  build:
+    runs-on: ubuntu-latest
+    needs: version-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: whoan/docker-build-with-cache-action@v6
+        id: firstrun
+        continue-on-error: true
+        with:
+          username: "${{ secrets.DOCKERUSER }}"
+          password: "${{ secrets.DOCKERPASS }}"
+          image_name: "${{ env.ENDPOINT }}"
+          image_tag: latest,${{needs.version-check.outputs.output}}
+          context: "./docker"
+          stages_image_name: "rix1337/cache-quasarr-latest"
+          build_extra_args: "--build-arg=VS=${{needs.version-check.outputs.output}}"
+      - name: Sleep before retry
+        if: steps.firstrun.outcome=='failure'
+        uses: jakejarvis/wait-action@master
+        with:
+          time: '1m'
+      - uses: whoan/docker-build-with-cache-action@v6
+        if: steps.firstrun.outcome=='failure'
+        with:
+          username: "${{ secrets.DOCKERUSER }}"
+          password: "${{ secrets.DOCKERPASS }}"
+          image_name: "${{ env.ENDPOINT }}"
+          image_tag: latest,${{needs.version-check.outputs.output}}
+          context: "./docker"
+          stages_image_name: "rix1337/cache-quasarr-latest"
+          build_extra_args: "--build-arg=VS=${{needs.version-check.outputs.output}}"

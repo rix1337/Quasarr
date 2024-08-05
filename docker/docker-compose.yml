@@ -1,0 +1,12 @@
+version: '3.3'
+services:
+    quasarr:
+        container_name: 'Quasarr'
+        ports:
+            - 'port:8080'
+        volumes:
+            - '/path/to/config/:/config:rw'
+        environment:
+            - 'INTERNAL_ADDRESS=http://quasarr:8080'
+            - 'EXTERNAL_ADDRESS=https://quasarr.example.org:9443'
+        image: 'rix1337/docker-quasarr:latest'
