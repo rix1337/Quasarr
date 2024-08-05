@@ -1,0 +1,11 @@
+version: '3.3'
+services:
+    quasarr:
+        container_name: 'Quasarr'
+        ports:
+            - 'port:8080'
+        volumes:
+            - '/path/to/config/:/config:rw'
+        environment:
+            - 'EXAMPLE=test'
+        image: 'rix1337/docker-quasarr:latest'

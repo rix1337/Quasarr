@@ -1,0 +1,22 @@
+# Project by https://github.com/rix1337
+
+# Python
+*.pyc
+*.bak
+*.spec
+file_version_info.txt
+version.txt
+__pycache__
+
+# Build Tools
+build
+dist
+venv
+*.egg-info
+
+# PyCharm
+.idea
+.eggs
+
+# Quasarr
+config/**
