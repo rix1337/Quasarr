@@ -13,6 +13,9 @@ JDownloader Bridge for Radarr and (later also) Sonarr.
 
 **Warning: this is a very early dev version. Only tested with Radarr. Only one hostname supported.**
 
+Everything should work in Radarr, except:
+- Deleting downloads
+
 # Setup
 
 `pip install quasarr`
@@ -26,7 +29,7 @@ quasarr
   --external_address=https://quasarr.example.org:9443
   ```
 
-* External Address: required, if you want to fully use Quasarr from outside your local network
+* External Address: optional, will later enable using Quasarr from outside your local network
 
 # Docker
 
@@ -40,5 +43,5 @@ docker run -d \
   rix1337/docker-quasarr:latest
   ```
 
-* Internal Address: required so Radarr/Sonarr can reach Quasarr
-* External Address: required, if you want to fully use Quasarr from outside your local network
+* Internal Address: required so Radarr/Sonarr can reach Quasarr. **Must** include port!
+* External Address: optional, will later enable using Quasarr from outside your local network
