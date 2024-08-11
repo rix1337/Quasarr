@@ -27,5 +27,8 @@ RUN if [[ ${VS} == "false" ]] ; then echo "Grabbing latest version from pypi.org
 VOLUME /config
 EXPOSE 8080
 ENV PYTHONUNBUFFERED=1
+ENV DOCKER="true"
+ENV INTERNAL_ADDRESS=""
+ENV EXTERNAL_ADDRESS=""
 
-ENTRYPOINT ["sh", "-c", "quasarr --port=8080 --config=/config --example=$EXAMPLE"]
+ENTRYPOINT ["sh", "-c", "quasarr --port=8080 --internal_address=$INTERNAL_ADDRESS --external_address=$EXTERNAL_ADDRESS"]

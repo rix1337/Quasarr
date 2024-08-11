@@ -7,5 +7,6 @@ services:
         volumes:
             - '/path/to/config/:/config:rw'
         environment:
-            - 'EXAMPLE=test'
+            - 'INTERNAL_ADDRESS=http://quasarr:8080'
+            - 'EXTERNAL_ADDRESS=https://quasarr.example.org:9443'
         image: 'rix1337/docker-quasarr:latest'

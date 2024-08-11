@@ -19,4 +19,6 @@ venv
 .eggs
 
 # Quasarr
-config/**
+*.conf
+*.db
+*.ini

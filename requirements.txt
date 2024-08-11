@@ -1,1 +1,4 @@
-bottle==0.12.25 # web framework
+beautifulsoup4==4.12.3 # web scraping
+bottle==0.12.25
+pycryptodomex==3.20.0
+requests
