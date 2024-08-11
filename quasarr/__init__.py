@@ -15,7 +15,6 @@ from quasarr.persistence.config import Config, get_clean_hostnames
 from quasarr.persistence.sqlite_database import DataBase
 from quasarr.providers import shared_state, version
 from quasarr.providers.setup import path_config, hostnames_config, nx_credentials_config, jdownloader_config
-from quasarr.providers.shared_state import sanitize_external_address
 
 
 def run():
@@ -27,8 +26,6 @@ def run():
         parser = argparse.ArgumentParser()
         parser.add_argument("--port", help="Desired Port, defaults to 8080")
         parser.add_argument("--internal_address", help="Must be provided when running in Docker")
-        parser.add_argument("--external_address",
-                            help="Address/URL of Quasarr available outside your LAN, must include port and protocol")
         arguments = parser.parse_args()
 
         sys.stdout = Unbuffered(sys.stdout)
@@ -54,17 +51,10 @@ def run():
                 port = int(arguments.port)
             internal_address = f'http://{check_ip()}'
 
-
         if arguments.internal_address:
             internal_address = arguments.internal_address
 
-        external_address = ""
-        if arguments.external_address:
-            sanitized_url = sanitize_external_address(arguments.external_address)
-            if sanitized_url:
-                external_address = sanitized_url
-
-        shared_state.set_connection_info(internal_address, port, external_address)
+        shared_state.set_connection_info(internal_address, port)
 
         if not config_path:
             config_path_file = "Quasarr.conf"
@@ -118,8 +108,12 @@ def run():
         print(f'\nQuasarr API now running at "{shared_state.values["internal_address"]}"')
         print('Use this exact URL as "Newznab Indexer" and "SABnzbd Download Client" in Sonarr/Radarr')
         print("Leave settings at default and use this API key: 'quasarr'")
-        if shared_state.values["external_address"] != shared_state.values["internal_address"]:
-            print(f'External address: "{shared_state.values["external_address"]}"')
+
+        protected = shared_state.get_db("protected").retrieve_all_titles()
+        if protected:
+            package_count = len(protected)
+            print(f"\nCAPTCHA-Solution required for {package_count} package{'s' if package_count > 1 else ''} at "
+                  f'{shared_state.values["internal_address"]}/captcha"!\n')
 
         try:
             api(shared_state_dict, shared_state_lock)

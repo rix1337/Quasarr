@@ -10,28 +10,10 @@ import requests
 from quasarr.providers.imdb_metadata import get_localized_title
 
 
-def convert_to_bytes(item):
-    size = float(item['size'])
-    unit = item['sizeunit'].upper()
-
-    if unit == 'B':
-        size_b = size
-    elif unit == 'KB':
-        size_b = size * 1024
-    elif unit == 'MB':
-        size_b = size * 1024 * 1024
-    elif unit == 'GB':
-        size_b = size * 1024 * 1024 * 1024
-    elif unit == 'TB':
-        size_b = size * 1024 * 1024 * 1024 * 1024
-    else:
-        raise ValueError(f"Unsupported size unit {item['name']} {item['size']} {item['sizeunit']}")
-
-    return int(size_b)
-
-
 def nx_feed(shared_state, request_from):
     releases = []
+
+    password = ""
 
     if "Radarr" in request_from:
         category = "movie"
@@ -40,13 +22,13 @@ def nx_feed(shared_state, request_from):
 
     nx = shared_state.values["config"]("Hostnames").get("nx")
 
-    feed = f'https://{nx}/api/frontend/releases/category/{category}/tag/all/1/51?sort=date'
+    url = f'https://{nx}/api/frontend/releases/category/{category}/tag/all/1/51?sort=date'
     headers = {
         'User-Agent': shared_state.values["user_agent"],
     }
 
     try:
-        response = requests.get(feed, headers)
+        response = requests.get(url, headers)
         feed = response.json()
     except Exception as e:
         print(f"Error loading NX feed: {e}")
@@ -58,14 +40,15 @@ def nx_feed(shared_state, request_from):
             title = item['name']
             if title:
                 try:
-                    source = "https://" + nx + "/release/" + item['slug']
-                    payload = urlsafe_b64encode(f"{title}|{source}".encode("utf-8")).decode("utf-8")
-                    link = f"{shared_state.values['external_address']}/download/?payload={payload}"  # ToDo will not work with auth
+                    source = f"https://{nx}/release/{item['slug']}"
+                    mb = shared_state.convert_to_mb(item)
+                    payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode("utf-8")
+                    link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                 except:
                     continue
 
                 try:
-                    size = convert_to_bytes(item)
+                    size = mb * 1024 * 1024
                 except:
                     continue
 
@@ -76,10 +59,11 @@ def nx_feed(shared_state, request_from):
 
                 releases.append({
                     "details": {
-                        "title": title,
+                        "title": f"[NX] {title}",
                         "link": link,
                         "size": size,
-                        "date": published
+                        "date": published,
+                        "source": source
                     },
                     "type": "protected"
                 })
@@ -92,6 +76,8 @@ def nx_feed(shared_state, request_from):
 
 def nx_search(shared_state, request_from, imdb_id):
     releases = []
+
+    password = ""
 
     if "Radarr" in request_from:
         valid_type = "movie"
@@ -107,13 +93,13 @@ def nx_search(shared_state, request_from, imdb_id):
 
     german_title = html.unescape(german_title)
 
-    feed = f'https://{nx}/api/frontend/search/{german_title}'
+    url = f'https://{nx}/api/frontend/search/{german_title}'
     headers = {
         'User-Agent': shared_state.values["user_agent"],
     }
 
     try:
-        response = requests.get(feed, headers)
+        response = requests.get(url, headers)
         feed = response.json()
     except Exception as e:
         print(f"Error loading NX search: {e}")
@@ -126,14 +112,16 @@ def nx_search(shared_state, request_from, imdb_id):
                 title = item['name']
                 if title:
                     try:
-                        source = "https://" + nx + "/release/" + item['slug']
-                        payload = urlsafe_b64encode(f"{title}|{source}".encode("utf-8")).decode("utf-8")
-                        link = f"{shared_state.values['external_address']}/download/?payload={payload}"  # ToDo will not work with auth
+                        source = f"https://{nx}/release/{item['slug']}"
+                        mb = shared_state.convert_to_mb(item)
+                        payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".
+                                                    encode("utf-8")).decode("utf-8")
+                        link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                     except:
                         continue
 
                     try:
-                        size = convert_to_bytes(item)
+                        size = mb * 1024 * 1024
                     except:
                         continue
 
@@ -144,10 +132,11 @@ def nx_search(shared_state, request_from, imdb_id):
 
                     releases.append({
                         "details": {
-                            "title": title,
+                            "title": f"[NX] {title}",
                             "link": link,
                             "size": size,
-                            "date": published
+                            "date": published,
+                            "source": source
                         },
                         "type": "protected"
                     })
