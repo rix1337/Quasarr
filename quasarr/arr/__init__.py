@@ -117,7 +117,7 @@ def api(shared_state_dict, shared_state_lock):
                     if request.query.name and request.query.name == "delete":
                         package_id = request.query.value
                         deleted = delete_package(shared_state, package_id)
-                        print(f"Package {package_id} deleted {"successfully" if deleted else "unsuccessfully"}")
+                        print(f"Package {package_id} deleted {'successfully' if deleted else 'unsuccessfully'}")
                         return {
                             "status": deleted,
                             "nzo_ids": [package_id]

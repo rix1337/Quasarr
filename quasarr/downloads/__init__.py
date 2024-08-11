@@ -133,7 +133,7 @@ def download_package(shared_state, title, url):
 
         download_links = str(links).replace(" ", "")
         download_path = "Quasarr/<jd:packagename>"
-        package_id = f"Quasarr_decrypted_{str(hash(title + url)).replace("-", "")}"
+        package_id = f"Quasarr_decrypted_{str(hash(title + url)).replace('-', '')}"
 
         added = shared_state.get_device().linkgrabber.add_links(params=[
             {
@@ -161,4 +161,5 @@ def delete_package(shared_state, package_id):
     deleted = False
     # todo implement (detect package by id from jdownloader or table)
     # delete it at the correct location
+    print(f"Deleting package {package_id} - not implemented yet")
     return deleted
