@@ -37,8 +37,7 @@ def set_sites():
 
 
 def set_connection_info(internal_address, port, external_address):
-    parsed_url = urlparse(f"http://{internal_address}")
-    if not parsed_url.port:
+    if internal_address.count(":") < 2:
         internal_address = f"{internal_address}:{port}"
     if not external_address:
         external_address = internal_address
