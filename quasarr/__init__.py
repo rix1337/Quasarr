@@ -43,9 +43,7 @@ def run():
         config_path = ""
         if os.environ.get('DOCKER'):
             config_path = "/config"
-            if arguments.internal_address:
-                internal_address = arguments.internal_address
-            else:
+            if not arguments.internal_address:
                 print(
                     "You must set the INTERNAL_ADDRESS variable to a locally reachable URL, e.g. http://localhost:8080")
                 print("The local URL will be used by Radarr/Sonarr to connect to Quasarr")
@@ -55,6 +53,10 @@ def run():
             if arguments.port:
                 port = int(arguments.port)
             internal_address = f'http://{check_ip()}'
+
+
+        if arguments.internal_address:
+            internal_address = arguments.internal_address
 
         external_address = ""
         if arguments.external_address:
