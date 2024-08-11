@@ -3,7 +3,7 @@
 [![PyPI version](https://badge.fury.io/py/quasarr.svg)](https://badge.fury.io/py/quasarr)
 [![GitHub Sponsorship](https://img.shields.io/badge/support-me-red.svg)](https://github.com/users/rix1337/sponsorship)
 
-JDownloader Bridge for Radarr and Sonarr.
+JDownloader Bridge for Radarr and (later also) Sonarr.
 
 * Follow instructions to set up at least one hostname
 * Provide your [My JDownloader credentials](https://my.jdownloader.org)
@@ -16,6 +16,7 @@ JDownloader Bridge for Radarr and Sonarr.
 # Setup
 
 `pip install quasarr`
+* Requires Python 3.12
 
 # Run
 
@@ -34,8 +35,8 @@ docker run -d \
   --name="Quasarr" \
   -p port:8080 \
   -v /path/to/config/:/config:rw \
-  -e 'INTERNAL_ADDRESS'='http://quasarr:8080'
-  -e 'EXTERNAL_ADDRESS'='https://quasarr.example.org:9443'
+  -e 'INTERNAL_ADDRESS'='http://quasarr:8080' \
+  -e 'EXTERNAL_ADDRESS'='https://quasarr.example.org:9443' \
   rix1337/docker-quasarr:latest
   ```
 

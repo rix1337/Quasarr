@@ -37,7 +37,7 @@ setuptools.setup(
     ],
     entry_points={
         'console_scripts': [
-            'quasarr = quasarr.run:main',
+            'quasarr = quasarr:run',
         ],
     },
 )
