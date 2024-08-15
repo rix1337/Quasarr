@@ -57,7 +57,7 @@ def path_config(shared_state):
         return render_success(f'Config path set to: "{config_path}"',
                               5)
 
-    print(f'Starting web server for config at: "{shared_state.values['external_address']}".')
+    print(f'Starting web server for config at: "{shared_state.values['internal_address']}".')
     print("Please set desired config path there!")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
 
@@ -73,7 +73,7 @@ def hostnames_config(shared_state):
         '''
 
         hostname_form_content = "".join(
-            [hostname_fields.format(id=label.lower(), label=label) for label in shared_state.values["sites"]])  # todo
+            [hostname_fields.format(id=label.lower(), label=label) for label in shared_state.values["sites"]])
 
         hostname_form_html = f'''
         <form action="/api/hostnames" method="post">
@@ -131,7 +131,7 @@ def hostnames_config(shared_state):
             return render_fail("No valid hostname provided!")
 
     print(
-        f'Hostnames not set. Starting web server for config at: "{shared_state.values['external_address']}".')
+        f'Hostnames not set. Starting web server for config at: "{shared_state.values['internal_address']}".')
     print("Please set at least one valid hostname there!")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
 
@@ -177,8 +177,8 @@ def nx_credentials_config(shared_state):
         return render_fail("User and Password wrong or empty!")
 
     print(
-        f'NX credentials required to decrypt download links.'
-        f'Starting web server for config at: "{shared_state.values['external_address']}".')
+        f'NX credentials required to decrypt download links. '
+        f'Starting web server for config at: "{shared_state.values['internal_address']}".')
     print("Please set your NX user and password there! First register an account if you don't have one yet.")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
 
@@ -289,6 +289,6 @@ def jdownloader_config(shared_state):
 
     print(
         f'My-JDownloader-Credentials not set. '
-        f'Starting web server for config at: "{shared_state.values['external_address']}".')
+        f'Starting web server for config at: "{shared_state.values['internal_address']}".')
     print("Please set your Credentials there!")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()

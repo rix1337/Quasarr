@@ -6,16 +6,53 @@ from quasarr.downloads.sources.nx import get_nx_download_links
 from quasarr.providers.myjd_api import TokenExpiredException, RequestTimeoutException, MYJDException
 
 
+def get_first_matching_comment(package, package_links):
+    package_uuid = package.get("uuid")
+    if package_uuid:
+        for link in package_links:
+            if link.get("packageUUID") == package_uuid:
+                return link.get("comment")
+    return None
+
+
+def get_links_matching_package_uuid(package, package_links):
+    package_uuid = package.get("uuid")
+    link_ids = []
+    if package_uuid:
+        for link in package_links:
+            if link.get("packageUUID") == package_uuid:
+                link_ids.append(link.get("uuid"))
+    return link_ids
+
+
+def format_eta(seconds):
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    seconds = seconds % 60
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
+
+
 def get_packages(shared_state):
     packages = []
 
-    protected_packages = shared_state.get_db("to_decrypt").retrieve_all_titles()  # todo not implemented yet
+    protected_packages = shared_state.get_db("protected").retrieve_all_titles()
     if protected_packages:
         for package in protected_packages:
+            package_id = package[0]
+            package_details = package[1].split("|")
+
+            details = {
+                "title": package_details[0],
+                "url": package_details[1],
+                "size_mb": package_details[2],
+                "password": package_details[3]
+            }
+
             packages.append({
-                "details": package,
+                "details": details,
                 "location": "queue",
-                "type": "protected"
+                "type": "protected",
+                "package_id": package_id
             })
     try:
         linkgrabber_packages = shared_state.get_device().linkgrabber.query_packages()
@@ -24,10 +61,13 @@ def get_packages(shared_state):
 
     if linkgrabber_packages:
         for package in linkgrabber_packages:
+            comment = get_first_matching_comment(package, shared_state.get_device().linkgrabber.query_links())
             packages.append({
                 "details": package,
                 "location": "queue",
-                "type": "linkgrabber"
+                "type": "linkgrabber",
+                "comment": comment,
+                "uuid": package.get("uuid")
             })
     try:
         downloader_packages = shared_state.get_device().downloads.query_packages()
@@ -36,6 +76,7 @@ def get_packages(shared_state):
 
     if downloader_packages:
         for package in downloader_packages:
+            comment = get_first_matching_comment(package, shared_state.get_device().downloads.query_links())
             finished = False
             try:
                 finished = package["finished"]
@@ -44,7 +85,9 @@ def get_packages(shared_state):
             packages.append({
                 "details": package,
                 "location": "history" if finished else "queue",
-                "type": "downloader"
+                "type": "downloader",
+                "comment": comment,
+                "uuid": package.get("uuid")
             })
 
     downloads = {
@@ -55,66 +98,92 @@ def get_packages(shared_state):
         queue_index = 0
         history_index = 0
 
-        def format_eta(seconds):
-            hours = seconds // 3600
-            minutes = (seconds % 3600) // 60
-            seconds = seconds % 60
-            return f"{hours:02}:{minutes:02}:{seconds:02}"
-
         if package["location"] == "queue":
-            time_left = "2385:09:09"  # to signify that its not running
-            if package["type"] == "protected":  # todo load from db
+            time_left = "2376:00:00"  # yields "99d" to signify that its not running
+            if package["type"] == "linkgrabber":
                 details = package["details"]
-                name = "Protected package"
-                mb = 1000
-                mb_left = mb
-                nzo_id = "Quasarr_protected_1"
-            elif package["type"] == "linkgrabber":
-                details = package["details"]
-                name = details["name"]
-                mb = int(details["bytesTotal"]) / (1024 * 1024)
-                mb_left = mb
-                nzo_id = "Quasarr_protected_234"
+                name = f"[Linkgrabber] {details["name"]}"
+                try:
+                    mb = mb_left = int(details["bytesTotal"]) / (1024 * 1024)
+                except KeyError:
+                    mb = mb_left = 0
+                package_id = package["comment"]
+                if "movies" in package_id:
+                    category = "movies"
+                else:
+                    category = "tv"
+                package_type = "linkgrabber"
+                package_uuid = package["uuid"]
             elif package["type"] == "downloader":
                 details = package["details"]
-                name = details["name"]
+                name = f"[Downloading] {details["name"]}"
                 try:
                     if details["eta"]:
                         time_left = format_eta(int(details["eta"]))
                 except KeyError:
-                    pass
-                mb = int(details["bytesTotal"]) / (1024 * 1024)
-                mb_left = (int(details["bytesTotal"]) - int(details["bytesLoaded"])) / (1024 * 1024)
-                nzo_id = "Quasarr_protected_2"
+                    name = name.replace("[Downloading]", "[Paused]")
+                try:
+                    mb = int(details["bytesTotal"]) / (1024 * 1024)
+                    mb_left = (int(details["bytesTotal"]) - int(details["bytesLoaded"])) / (1024 * 1024)
+                except KeyError:
+                    mb = mb_left = 0
+                package_id = package["comment"]
+                if "movies" in package_id:
+                    category = "movies"
+                else:
+                    category = "tv"
+                package_type = "downloader"
+                package_uuid = package["uuid"]
+            else:
+                details = package["details"]
+                name = f"[CAPTCHA not solved!] {details["title"]}"
+                mb = mb_left = details["size_mb"]
+                package_id = package["package_id"]
+                if "movies" in package_id:
+                    category = "movies"
+                else:
+                    category = "tv"
+                package_type = "protected"
+                package_uuid = None
 
             try:
                 downloads["queue"].append({
                     "index": queue_index,
-                    "nzo_id": nzo_id,
+                    "nzo_id": package_id,
                     "priority": "Normal",
                     "filename": name,
-                    "cat": "movies",
+                    "cat": category,
                     "mbleft": int(mb_left),
                     "mb": int(mb),
                     "status": "Downloading",
                     "timeleft": time_left,
+                    "type": package_type,
+                    "uuid": package_uuid
                 })
             except:
                 print(f"Parameters missing for {package}")
             queue_index += 1
         elif package["location"] == "history":
-            package = package["details"]
-            name = package["name"]
-            bytes = int(package["bytesLoaded"])
-            storage = package["saveTo"]
+            details = package["details"]
+            name = f"[Finished] {details["name"]}"
+            size = int(details["bytesLoaded"])
+            storage = details["saveTo"]
+            package_id = package["comment"]
+            if "movies" in package_id:
+                category = "movies"
+            else:
+                category = "tv"
+
             downloads["history"].append({
                 "fail_message": "",
-                "category": "movies",
+                "category": category,
                 "storage": storage,
                 "status": "Completed",
-                "nzo_id": "Quasarr_nzo_3",
+                "nzo_id": package_id,
                 "name": name,
-                "bytes": int(bytes),
+                "bytes": int(size),
+                "type": "downloader",
+                "uuid": package["uuid"]
             })
             history_index += 1
         else:
@@ -123,43 +192,74 @@ def get_packages(shared_state):
     return downloads
 
 
-def download_package(shared_state, title, url):
+def download_package(shared_state, request_from, title, url, size_mb, password):
+    if "radarr".lower() in request_from.lower():
+        category = "movies"
+    else:
+        category = "tv"
+
     package_id = ""
 
     nx = shared_state.values["config"]("Hostnames").get("nx")
     if nx.lower() in url.lower():
         links = get_nx_download_links(shared_state, url, title)
         print(f"Decrypted {len(links)} download links for {title}")
-
-        download_links = str(links).replace(" ", "")
-        download_path = "Quasarr/<jd:packagename>"
-        package_id = f"Quasarr_decrypted_{str(hash(title + url)).replace('-', '')}"
+        package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
 
         added = shared_state.get_device().linkgrabber.add_links(params=[
             {
                 "autostart": True,
-                "links": download_links,
+                "links": str(links).replace(" ", ""),
                 "packageName": title,
                 "extractPassword": nx,
                 "priority": "DEFAULT",
                 "downloadPassword": nx,
-                "destinationFolder": download_path,
+                "destinationFolder": "Quasarr/<jd:packagename>",
                 "comment": package_id,
                 "overwritePackagizerRules": True
             }
         ])
+
         if not added:
             print(f"Failed to add {title} to linkgrabber")
-            package_id = ""
+            package_id = None
 
-    # Todo links are protected -> add them to the database for decryption in the web ui
+    elif "filecrypt".lower() in url.lower():
+        print(f"CAPTCHA-Solution required for {title} at {shared_state.values["internal_address"]}/captcha")
+        package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
+        blob = f"{title}|{url}|{size_mb}|{password}"
+        shared_state.values["database"]("protected").update_store(package_id, blob)
 
     return package_id
 
 
 def delete_package(shared_state, package_id):
-    deleted = False
-    # todo implement (detect package by id from jdownloader or table)
-    # delete it at the correct location
-    print(f"Deleting package {package_id} - not implemented yet")
+    deleted = ""
+
+    packages = get_packages(shared_state)
+    for package_location in packages:
+        for package in packages[package_location]:
+            if package["nzo_id"] == package_id:
+                if package["type"] == "linkgrabber":
+                    ids = get_links_matching_package_uuid(package, shared_state.get_device().linkgrabber.query_links())
+                    shared_state.get_device().linkgrabber.remove_links(ids, [package["uuid"]])
+                elif package["type"] == "downloader":
+                    ids = get_links_matching_package_uuid(package, shared_state.get_device().downloads.query_links())
+                    shared_state.get_device().downloads.remove_links(ids, [package["uuid"]])
+                else:
+                    shared_state.get_db("protected").delete(package_id)
+                if package_location == "queue":
+                    package_name_field = "filename"
+                else:
+                    package_name_field = "name"
+
+                deleted = package[package_name_field].split("] ")[1]
+                break
+        if deleted:
+            break
+
+    if deleted:
+        print(f"Deleted package {deleted} with ID {package_id}")
+    else:
+        print(f"Failed to delete package {package_id}")
     return deleted

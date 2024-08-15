@@ -4,8 +4,11 @@ MAINTAINER rix1337
 # Define package name
 ARG PACKAGE_NAME=quasarr
 
-# build tools
-RUN apk add --no-cache curl build-base jq python3-dev py3-pip
+RUN apk add --no-cache curl \
+    build-base \
+    jq \
+    python3-dev \
+    py3-pip
 
 # Optionally set desired version for the build
 ARG VS="false"
@@ -29,6 +32,5 @@ EXPOSE 8080
 ENV PYTHONUNBUFFERED=1
 ENV DOCKER="true"
 ENV INTERNAL_ADDRESS=""
-ENV EXTERNAL_ADDRESS=""
 
-ENTRYPOINT ["sh", "-c", "quasarr --port=8080 --internal_address=$INTERNAL_ADDRESS --external_address=$EXTERNAL_ADDRESS"]
+ENTRYPOINT ["sh", "-c", "quasarr --port=8080 --internal_address=$INTERNAL_ADDRESS"]

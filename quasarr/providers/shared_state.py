@@ -4,7 +4,6 @@
 
 import os
 import time
-from urllib.parse import urlparse
 
 from quasarr.persistence.config import Config
 from quasarr.persistence.sqlite_database import DataBase
@@ -33,17 +32,14 @@ def update(key, value):
 
 
 def set_sites():
-    update("sites", ["NX"])
+    update("sites", ["FX", "NX"])
 
 
-def set_connection_info(internal_address, port, external_address):
+def set_connection_info(internal_address, port):
     if internal_address.count(":") < 2:
         internal_address = f"{internal_address}:{port}"
-    if not external_address:
-        external_address = internal_address
     update("internal_address", internal_address)
     update("port", port)
-    update("external_address", external_address)
 
 
 def set_files(config_path):
@@ -167,16 +163,22 @@ def get_db(table):
     return DataBase(table)
 
 
-def sanitize_external_address(external_address):
-    try:
-        parsed_url = urlparse(external_address)
-        if not parsed_url.scheme or not parsed_url.hostname:
-            return None
-        scheme = parsed_url.scheme
-        hostname = parsed_url.hostname
-        url_port = f":{parsed_url.port}" if parsed_url.port else ""
-        result = f"{scheme}://{hostname}{url_port}/"
-        return result
-    except Exception as Error:
-        print(f"Error sanitizing base URL: {Error}")
-        return None
+def convert_to_mb(item):
+    size = float(item['size'])
+    unit = item['sizeunit'].upper()
+
+    if unit == 'B':
+        size_b = size
+    elif unit == 'KB':
+        size_b = size * 1024
+    elif unit == 'MB':
+        size_b = size * 1024 * 1024
+    elif unit == 'GB':
+        size_b = size * 1024 * 1024 * 1024
+    elif unit == 'TB':
+        size_b = size * 1024 * 1024 * 1024 * 1024
+    else:
+        raise ValueError(f"Unsupported size unit {item['name']} {item['size']} {item['sizeunit']}")
+
+    size_mb = size_b / (1024 * 1024)
+    return int(size_mb)

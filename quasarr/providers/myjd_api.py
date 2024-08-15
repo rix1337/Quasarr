@@ -32,7 +32,6 @@ import hashlib
 import hmac
 import json
 import time
-from urllib.error import URLError
 from urllib.parse import quote
 
 import requests
@@ -128,6 +127,36 @@ class Linkgrabber:
         resp = self.device.action(self.url + "/removeLinks", params)
         return resp
 
+    def query_links(self,
+                    params=[{
+                        "bytesTotal": True,
+                        "comment": True,
+                        "status": True,
+                        "enabled": True,
+                        "maxResults": -1,
+                        "startAt": 0,
+                        "hosts": True,
+                        "url": True,
+                        "availability": True,
+                        "variantIcon": True,
+                        "variantName": True,
+                        "variantID": True,
+                        "variants": True,
+                        "priority": True
+                    }]):
+        """
+
+        Get the links in the linkcollector/linkgrabber
+
+        :param params: A dictionary with options. The default dictionary is
+        configured so it returns you all the downloads with all details, but you
+        can put your own with your options
+        :type: Dictionary
+        :rtype: List of dictionaries of this style, with more or less detail based on your options.
+        """
+        resp = self.device.action(self.url + "/queryLinks", params)
+        return resp
+
     def query_packages(self, params=[
         {
             "bytesLoaded": True,
@@ -162,6 +191,32 @@ class Downloads:
     def __init__(self, device):
         self.device = device
         self.url = "/downloadsV2"
+
+    def query_links(self,
+                    params=[{
+                        "bytesTotal": True,
+                        "comment": True,
+                        "status": True,
+                        "enabled": True,
+                        "maxResults": -1,
+                        "startAt": 0,
+                        "packageUUIDs": [],
+                        "host": True,
+                        "url": True,
+                        "bytesloaded": True,
+                        "speed": True,
+                        "eta": True,
+                        "finished": True,
+                        "priority": True,
+                        "running": True,
+                        "skipped": True,
+                        "extractionStatus": True
+                    }]):
+        """
+        Get the links in the download list
+        """
+        resp = self.device.action(self.url + "/queryLinks", params)
+        return resp
 
     def query_packages(self,
                        params=[{

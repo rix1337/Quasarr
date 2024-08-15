@@ -31,11 +31,17 @@ def render_centered_html(inner_content):
     """
 
     return f'''
+    <html>
+    <head>
+        <title>Quasarr</title>
+    </head>
+    <body>
     <div style="{style_outer.strip()}">
         <div style="{style_inner.strip()}">
             {inner_content}
         </div>
     </div>
+    </body>
     '''
 
 
