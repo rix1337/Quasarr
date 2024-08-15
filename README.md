@@ -3,23 +3,25 @@
 [![PyPI version](https://badge.fury.io/py/quasarr.svg)](https://badge.fury.io/py/quasarr)
 [![GitHub Sponsorship](https://img.shields.io/badge/support-me-red.svg)](https://github.com/users/rix1337/sponsorship)
 
-JDownloader Bridge for Radarr and (later also) Sonarr.
-Quasarr poses as Newznab Indexer and SABnzbd Download Client.
-Thus it will not work in parallel with a real indexer/download client set up.
-Torrents will remain unaffected.
+Quasarr is a Bridge to use JDownloader in Radarr and (later also) Sonarr.
+
+Quasarr includes a solution to quickly and easily decrypt protected links.
+Just follow the link from the console output and solve the CAPTCHA.
+Quasarr will confidently handle the rest.
+
+Quasarr poses as a Newznab Indexer and a SABnzbd client.
+It will thus never work in parallel with a real NZB indexer and download client set up.
+Torrents are unaffected.
 
 * Follow instructions to set up at least one hostname for Quasarr
 * Provide your [MyJDownloader credentials](https://my.jdownloader.org)
 * Set up Quasarr's URL as 'Newznab Indexer' and 'SABnzbd Download Client' in Sonarr/Radarr.
     * Leave settings at default
     * Use this API key: `quasarr`
+* As with other download clients, you must ensure the download path used by JDownloader is accessible to *arr.
 
-**Warning: this is a very early proof-of-concept.
-It is only tested with Radarr and only one hostname at the moment.**
-
-Everything should work in Radarr, except:
-
-- Deleting downloads
+**Warning: this project is still in the proof-of-concept stage.
+It is only tested with Radarr and only two hostname are currently supported.**
 
 # Setup
 
