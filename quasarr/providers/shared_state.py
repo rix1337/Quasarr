@@ -11,7 +11,6 @@ from quasarr.providers.myjd_api import Myjdapi, TokenExpiredException, RequestTi
 
 values = {}
 lock = None
-logger = None
 
 
 def set_state(manager_dict, manager_lock):

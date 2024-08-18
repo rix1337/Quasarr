@@ -29,10 +29,16 @@ def api(shared_state_dict, shared_state_lock):
         protected = shared_state.get_db("protected").retrieve_all_titles()
         if not protected:
             return render_centered_html('<h1>Quasarr</h1><p>No protected packages found! CAPTCHA not needed.</p>')
+        try:
+            device = shared_state.values["device"]
+        except KeyError:
+            device = None
+        if not device:
+            return render_centered_html('<h1>Quasarr</h1><p>JDownloader connection not established.</p>')
         content = render_centered_html(r'''
             <script type="text/javascript">
                 var api_key = "''' + captcha_values()["api_key"] + r'''";
-                var endpoint = '/captcha/' + api_key + '.html';
+                var endpoint = '/' + window.location.pathname.split('/')[1] + '/' + api_key + '.html';
                 function handleToken(token) {
                     document.getElementById("puzzle-captcha").remove();
                     document.getElementById("captcha-key").innerText = 'Using result "' + token + '" to decrypt links...';
