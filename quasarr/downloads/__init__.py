@@ -4,6 +4,7 @@
 
 from quasarr.downloads.sources.nx import get_nx_download_links
 from quasarr.providers.myjd_api import TokenExpiredException, RequestTimeoutException, MYJDException
+from quasarr.providers.notifications import send_discord_captcha_alert
 
 
 def get_first_matching_comment(package, package_links):
@@ -225,7 +226,8 @@ def download_package(shared_state, request_from, title, url, size_mb, password):
             package_id = None
 
     elif "filecrypt".lower() in url.lower():
-        print(f"CAPTCHA-Solution required for {title} at {shared_state.values["internal_address"]}/captcha")
+        print(f"CAPTCHA-Solution required for {title}{shared_state.values['external_address']}/captcha")
+        send_discord_captcha_alert(shared_state, title)
         package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
         blob = f"{title}|{url}|{size_mb}|{password}"
         shared_state.values["database"]("protected").update_store(package_id, blob)

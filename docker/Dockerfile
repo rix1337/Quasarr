@@ -32,5 +32,7 @@ EXPOSE 8080
 ENV PYTHONUNBUFFERED=1
 ENV DOCKER="true"
 ENV INTERNAL_ADDRESS=""
+ENV EXTERNAL_ADDRESS=""
+ENV DISCORD=""
 
-ENTRYPOINT ["sh", "-c", "quasarr --port=8080 --internal_address=$INTERNAL_ADDRESS"]
+ENTRYPOINT ["sh", "-c", "quasarr --port=8080 --internal_address=$INTERNAL_ADDRESS --external_address=$EXTERNAL_ADDRESS --discord=$DISCORD"]

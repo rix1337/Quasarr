@@ -8,23 +8,6 @@ import time
 from quasarr.providers import shared_state
 
 
-def get_first(iterable):
-    return iterable and list(iterable[:1]).pop() or None
-
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    table_names = [row[0] for row in cursor.fetchall()]
-
-    tables_to_drop = set(table_names) - set(keep_tables)
-
-    for table in tables_to_drop:
-        cursor.execute(f"DROP TABLE IF EXISTS {table}")
-        print(f"Entferne überflüssige Tabelle '{table}' aus der Datenbank.")
-
-    conn.commit()
-    cursor.execute("VACUUM")
-    conn.close()
-
-
 class DataBase(object):
     def __init__(self, table):
         try:
@@ -36,8 +19,6 @@ class DataBase(object):
                 self._conn.commit()
         except sqlite3.OperationalError as e:
             try:
-                shared_state.logger.debug(
-                    "Fehler bei Zugriff auf Quasarr.db: " + str(e) + " (neuer Versuch in 5 Sekunden).")
                 time.sleep(5)
                 self._conn = sqlite3.connect(shared_state.values["dbfile"], check_same_thread=False, timeout=10)
                 self._table = table
@@ -45,9 +26,8 @@ class DataBase(object):
                         f"SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '{self._table}';").fetchall():
                     self._conn.execute(f"CREATE TABLE {self._table} (key, value)")
                     self._conn.commit()
-                    shared_state.logger.debug("Zugriff auf Quasarr.db nach Wartezeit war erfolgreich.")
             except sqlite3.OperationalError as e:
-                print("Fehler bei Zugriff auf Quasarr.db: ", str(e))
+                print(f"Error accessing Quasarr.db: {e}")
 
     def retrieve(self, key):
         query = f"SELECT value FROM {self._table} WHERE key=?"

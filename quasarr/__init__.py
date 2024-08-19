@@ -5,6 +5,7 @@
 import argparse
 import multiprocessing
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -26,6 +27,8 @@ def run():
         parser = argparse.ArgumentParser()
         parser.add_argument("--port", help="Desired Port, defaults to 8080")
         parser.add_argument("--internal_address", help="Must be provided when running in Docker")
+        parser.add_argument("--external_address", help="External address for CAPTCHA notifications")
+        parser.add_argument("--discord", help="Discord Webhook URL")
         arguments = parser.parse_args()
 
         sys.stdout = Unbuffered(sys.stdout)
@@ -53,8 +56,12 @@ def run():
 
         if arguments.internal_address:
             internal_address = arguments.internal_address
+        if arguments.external_address:
+            external_address = arguments.external_address
+        else:
+            external_address = internal_address
 
-        shared_state.set_connection_info(internal_address, port)
+        shared_state.set_connection_info(internal_address, external_address, port)
 
         if not config_path:
             config_path_file = "Quasarr.conf"
@@ -101,6 +108,19 @@ def run():
         if not user or not password or not device:
             jdownloader_config(shared_state)
 
+        discord_url = ""
+        if arguments.discord:
+            discord_webhook_pattern = r'^https://discord\.com/api/webhooks/\d+/[\w-]+$'
+            if re.match(discord_webhook_pattern, arguments.discord):
+                shared_state.update("webhook", arguments.discord)
+                print(f"Using Discord Webhook URL: {arguments.discord}")
+                discord_url = arguments.discord
+            else:
+                print(f"Invalid Discord Webhook URL provided: {arguments.discord}")
+        else:
+            print("No Discord Webhook URL provided")
+        shared_state.update("discord", discord_url)
+
         jdownloader = multiprocessing.Process(target=jdownloader_connection,
                                               args=(shared_state_dict, shared_state_lock))
         jdownloader.start()
@@ -113,7 +133,7 @@ def run():
         if protected:
             package_count = len(protected)
             print(f"\nCAPTCHA-Solution required for {package_count} package{'s' if package_count > 1 else ''} at "
-                  f'{shared_state.values["internal_address"]}/captcha"!\n')
+                  f'{shared_state.values["external_address"]}/captcha"!\n')
 
         try:
             api(shared_state_dict, shared_state_lock)
@@ -138,9 +158,9 @@ def jdownloader_connection(shared_state_dict, shared_state_lock):
             if connection_established:
                 break
 
-    if connection_established:
+    try:
         print(f'Connection to JDownloader successful. Device name: "{shared_state.get_device().name}"')
-    else:
+    except:
         print('Error connecting to JDownloader! Stopping Quasarr!')
         sys.exit(1)
 
