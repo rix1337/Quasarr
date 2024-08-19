@@ -34,10 +34,11 @@ def set_sites():
     update("sites", ["FX", "NX"])
 
 
-def set_connection_info(internal_address, port):
+def set_connection_info(internal_address, external_address, port):
     if internal_address.count(":") < 2:
         internal_address = f"{internal_address}:{port}"
     update("internal_address", internal_address)
+    update("external_address", external_address)
     update("port", port)
 
 
