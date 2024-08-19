@@ -34,7 +34,12 @@ It is only tested with Radarr and only two hostname are currently supported.**
 ```
 quasarr
   --port=8080
+  --discord=https://discord.com/api/webhooks/1234567890/ABCDEFGHIJKLMN
+  --external_address=http://foo.bar/
   ```
+
+* `--discord` must be a valid Discord Webhook URL and is optional.
+* `--external_address` is used in Discord notifications and is optional.
 
 # Docker
 
@@ -44,7 +49,11 @@ docker run -d \
   -p port:8080 \
   -v /path/to/config/:/config:rw \
   -e 'INTERNAL_ADDRESS'='http://192.168.0.1:8080' \
+  -e 'EXTERNAL_ADDRESS'='http://foo.bar/' \
+  -e 'DISCORD'='https://discord.com/api/webhooks/1234567890/ABCDEFGHIJKLMN' \
   rix1337/docker-quasarr:latest
   ```
 
-* Internal Address: required so Radarr/Sonarr can reach Quasarr. **Must** include port!
+* `INTERNAL_ADDRESS` is required so Radarr/Sonarr can reach Quasarr. **Must** include port!
+* `EXTERNAL_ADDRESS` is optional and used in Discord notifications.
+* `DISCORD` is optional and must be a valid Discord Webhook URL.
