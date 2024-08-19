@@ -5,6 +5,7 @@
 import re
 import traceback
 from base64 import urlsafe_b64decode
+from datetime import datetime
 from xml.etree import ElementTree as ET
 
 import requests
@@ -335,6 +336,18 @@ def api(shared_state_dict, shared_state_lock):
                     releases = get_search_results(shared_state, request_from, imdb_id=imdb_id)
 
                     items = ""
+
+                    if not releases:
+                        items += f'''
+                                <item>
+                                    <title>No releases found</title>
+                                    <link></link>
+                                    <pubDate>{datetime.now().strftime('%a, %d %b %Y %H:%M:%S %z')}</pubDate>
+                                    <enclosure url="_" length="0" type="application/x-nzb"/>
+                                    <guid></guid>
+                                    <comments></comments>
+                                    <description></description>
+                                </item>'''
 
                     for release in releases:
                         release = release["details"]
