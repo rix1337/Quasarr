@@ -80,9 +80,16 @@ def get_packages(shared_state):
             comment = get_first_matching_comment(package, shared_state.get_device().downloads.query_links())
             finished = False
             try:
-                finished = package["finished"]
+                status = package["status"]
             except KeyError:
-                pass
+                status = ""
+            if status and "entpacken" in status.lower() or "extracting" in status.lower():
+                finished = False
+            else:
+                try:
+                    finished = package["finished"]
+                except KeyError:
+                    pass
             packages.append({
                 "details": package,
                 "location": "history" if finished else "queue",
@@ -166,7 +173,7 @@ def get_packages(shared_state):
             queue_index += 1
         elif package["location"] == "history":
             details = package["details"]
-            name = f"[Finished] {details["name"]}"
+            name = details["name"]
             size = int(details["bytesLoaded"])
             storage = details["saveTo"]
             package_id = package["comment"]
@@ -207,19 +214,7 @@ def download_package(shared_state, request_from, title, url, size_mb, password):
         print(f"Decrypted {len(links)} download links for {title}")
         package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
 
-        added = shared_state.get_device().linkgrabber.add_links(params=[
-            {
-                "autostart": True,
-                "links": str(links).replace(" ", ""),
-                "packageName": title,
-                "extractPassword": nx,
-                "priority": "DEFAULT",
-                "downloadPassword": nx,
-                "destinationFolder": "Quasarr/<jd:packagename>",
-                "comment": package_id,
-                "overwritePackagizerRules": True
-            }
-        ])
+        added = shared_state.download_package(links, title, password, package_id)
 
         if not added:
             print(f"Failed to add {title} to linkgrabber")
@@ -255,7 +250,7 @@ def delete_package(shared_state, package_id):
                 else:
                     package_name_field = "name"
 
-                deleted = package[package_name_field].split("] ")[1]
+                deleted = package[package_name_field]
                 break
         if deleted:
             break

@@ -13,14 +13,14 @@ from quasarr.providers.imdb_metadata import get_localized_title
 def nx_feed(shared_state, request_from):
     releases = []
 
-    password = ""
+    nx = shared_state.values["config"]("Hostnames").get("nx")
+
+    password = nx
 
     if "Radarr" in request_from:
         category = "movie"
     else:
         category = "episode"
-
-    nx = shared_state.values["config"]("Hostnames").get("nx")
 
     url = f'https://{nx}/api/frontend/releases/category/{category}/tag/all/1/51?sort=date'
     headers = {

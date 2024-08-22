@@ -182,3 +182,84 @@ def convert_to_mb(item):
 
     size_mb = size_b / (1024 * 1024)
     return int(size_mb)
+
+
+def download_package(links, title, password, package_id):
+    device = get_device()
+    added = device.linkgrabber.add_links(params=[
+        {
+            "autostart": False,
+            "links": str(links).replace(" ", ""),
+            "packageName": title,
+            "extractPassword": password,
+            "priority": "DEFAULT",
+            "downloadPassword": password,
+            "destinationFolder": "Quasarr/<jd:packagename>",
+            "comment": package_id,
+            "overwritePackagizerRules": True
+        }
+    ])
+
+    package_uuids = []
+    link_ids = []
+    archive_id = None
+
+    for _ in range(30):
+        try:
+            collecting = device.linkgrabber.is_collecting()
+            if not collecting:
+                links = device.linkgrabber.query_links()
+                for link in links:
+                    if link["comment"] == package_id:
+                        link_id = link["uuid"]
+                        if link_id not in link_ids:
+                            link_ids.append(link_id)
+                        package_uuid = link["packageUUID"]
+                        if package_uuid not in package_uuids:
+                            package_uuids.append(package_uuid)
+
+                if link_ids and package_uuids:
+                    archive = device.extraction.get_archive_info(link_ids=link_ids, package_ids=package_uuids)
+                    if archive:
+                        archive_id = archive[0].get("archiveId", None)
+                        if archive_id:
+                            break  # Exit the loop as archive_id is found
+
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+        time.sleep(1)
+
+    if not link_ids and not package_uuids:
+        print(f"No links or packages found within 30 seconds! Adding {title} package failed.")
+        return False
+
+    if not archive_id:
+        print(f"Archive ID for {title} not found! Release may not be compressed.")
+    else:
+        settings = {
+            "autoExtract": True,
+            "removeDownloadLinksAfterExtraction": False,
+            "removeFilesAfterExtraction": True
+        }
+        settings_set = device.extraction.set_archive_settings(archive_id, archive_settings=settings)
+        if not settings_set:
+            print(f"Failed to set archive settings for {title}!")
+
+    time.sleep(3)
+    links = device.linkgrabber.query_links()
+    for link in links:
+        if link["comment"] == package_id:
+            link_id = link["uuid"]
+            if link_id not in link_ids:
+                link_ids.append(link_id)
+            package_uuid = link["packageUUID"]
+            if package_uuid not in package_uuids:
+                package_uuids.append(package_uuid)
+
+    try:
+        device.linkgrabber.move_to_downloadlist(link_ids, package_uuids)
+    except Exception as e:
+        print(f"Failed to start download for {title}: {e}")
+        return False
+    return True
