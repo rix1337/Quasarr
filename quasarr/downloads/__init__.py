@@ -78,18 +78,13 @@ def get_packages(shared_state):
     if downloader_packages:
         for package in downloader_packages:
             comment = get_first_matching_comment(package, shared_state.get_device().downloads.query_links())
-            finished = False
-            try:
-                status = package["status"]
-            except KeyError:
-                status = ""
-            if status and "entpacken" in status.lower() or "extracting" in status.lower():
+            status = package.get("status", "")
+
+            if any(ex_str in status.lower() for ex_str in ["entpacken", "extracting"]) and "ok:" not in status.lower():
                 finished = False
             else:
-                try:
-                    finished = package["finished"]
-                except KeyError:
-                    pass
+                finished = package.get("finished", False)
+
             packages.append({
                 "details": package,
                 "location": "history" if finished else "queue",
