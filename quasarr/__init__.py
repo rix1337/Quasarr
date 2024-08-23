@@ -113,7 +113,7 @@ def run():
             discord_webhook_pattern = r'^https://discord\.com/api/webhooks/\d+/[\w-]+$'
             if re.match(discord_webhook_pattern, arguments.discord):
                 shared_state.update("webhook", arguments.discord)
-                print(f"Using Discord Webhook URL: {arguments.discord}")
+                print(f"Using Discord Webhook URL for CAPTCHA notifications")
                 discord_url = arguments.discord
             else:
                 print(f"Invalid Discord Webhook URL provided: {arguments.discord}")

@@ -95,6 +95,10 @@ class Linkgrabber:
         self.device = device
         self.url = '/linkgrabberv2'
 
+    def is_collecting(self):
+        resp = self.device.action("/linkgrabberv2/isCollecting")
+        return resp
+
     def add_links(self,
                   params=[{
                       "autostart": True,
@@ -125,6 +129,18 @@ class Linkgrabber:
     def remove_links(self, links_ids, packages_ids):
         params = [links_ids, packages_ids]
         resp = self.device.action(self.url + "/removeLinks", params)
+        return resp
+
+    def move_to_downloadlist(self, link_ids, package_ids):
+        """
+        Moves packages and/or links to download list.
+
+        :param package_ids: Package UUID's.
+        :type: list of strings.
+        :param link_ids: Link UUID's.
+        """
+        params = [link_ids, package_ids]
+        resp = self.device.action(self.url + "/moveToDownloadlist", params)
         return resp
 
     def query_links(self,
@@ -248,6 +264,43 @@ class Downloads:
         return resp
 
 
+class Extraction:
+    """
+    Class that represents the extraction functionalities of a Device.
+    """
+
+    def __init__(self, device):
+        self.device = device
+        self.url = '/extraction'
+
+    def get_archive_info(self, link_ids, package_ids):
+        params = [link_ids, package_ids]
+        resp = self.device.action(self.url + "/getArchiveInfo", params)
+        return resp
+
+    def set_archive_settings(self, archive_id, archive_settings=None):
+        """
+        Sets the extraction settings for a specific archive.
+
+        :param archive_id: The ID of the archive.
+        :type archive_id: string
+        :param archive_settings: Dictionary of archive settings.
+        :type archive_settings: dict
+        :rtype: boolean indicating success or failure
+        """
+        if archive_settings is None:
+            archive_settings = {
+                "autoExtract": True,
+                "removeDownloadLinksAfterExtraction": True,
+                "removeFilesAfterExtraction": True
+            }
+
+        params = [archive_id, archive_settings]
+
+        resp = self.device.action(self.url + "/setArchiveSettings", params)
+        return resp
+
+
 class Jddevice:
     """
     Class that represents a JDownloader device and it's functions
@@ -266,6 +319,7 @@ class Jddevice:
         self.linkgrabber = Linkgrabber(self)
         self.downloads = Downloads(self)
         self.downloadcontroller = DownloadController(self)
+        self.extraction = Extraction(self)
         self.__direct_connection_info = None
         self.__refresh_direct_connections()
         self.__direct_connection_enabled = True

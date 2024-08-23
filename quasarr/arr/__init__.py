@@ -105,19 +105,7 @@ def api(shared_state_dict, shared_state_lock):
 
                 print(f"Decrypted {len(links)} download links for {title}")
 
-                shared_state.get_device().linkgrabber.add_links(params=[
-                    {
-                        "autostart": True,
-                        "links": str(links).replace(" ", ""),
-                        "packageName": title,
-                        "extractPassword": password,
-                        "priority": "DEFAULT",
-                        "downloadPassword": password,
-                        "destinationFolder": "Quasarr/<jd:packagename>",
-                        "comment": package_id,
-                        "overwritePackagizerRules": True
-                    }
-                ])
+                shared_state.download_package(links, title, password, package_id)
 
                 shared_state.get_db("protected").delete(package_id)
 
