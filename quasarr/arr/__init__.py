@@ -2,6 +2,7 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+import json
 import re
 import traceback
 from base64 import urlsafe_b64decode
@@ -25,30 +26,72 @@ def api(shared_state_dict, shared_state_lock):
 
     app = Bottle()
 
-    @app.route('/captcha')
+    @app.get('/captcha')
     def serve_captcha():
-        protected = shared_state.get_db("protected").retrieve_all_titles()
-        if not protected:
-            return render_centered_html('<h1>Quasarr</h1><p>No protected packages found! CAPTCHA not needed.</p>')
         try:
             device = shared_state.values["device"]
         except KeyError:
             device = None
         if not device:
-            return render_centered_html('<h1>Quasarr</h1><p>JDownloader connection not established.</p>')
+            return render_centered_html(f'''<h1>Quasarr</h1>
+            <p>JDownloader connection not established.</p>
+             {render_button("Back", "primary", {"onclick": "location.href='/'"})}''')
+
+        protected = shared_state.get_db("protected").retrieve_all_titles()
+        if not protected:
+            return render_centered_html(f'''<h1>Quasarr</h1>
+            <p>No protected packages found! CAPTCHA not needed.</p>
+             {render_button("Back", "primary", {"onclick": "location.href='/'"})}''')
+        else:
+            package = protected[0]
+            package_id = package[0]
+            data = json.loads(package[1])
+            title = data["title"]
+            links = data["links"]
+            password = data["password"]
+
+        link_options = ""
+        if len(links) > 1:
+            for link in links:
+                if "filecrypt." in link[0]:
+                    link_options += f'<option value="{link[0]}">{link[1]}</option>'
+            link_select = f'''<div id="mirrors-select">
+                    <label for="link-select">Mirror:</label>
+                    <select id="link-select">
+                        {link_options}
+                    </select>
+                </div>
+                <script>
+                    document.getElementById("link-select").addEventListener("change", function() {{
+                        var selectedLink = this.value;
+                        document.getElementById("link-hidden").value = selectedLink;
+                    }});
+                </script>
+            '''
+        else:
+            link_select = f'<div id="mirrors-select">Mirror: <b>{links[0][1]}</b></div>'
+
         content = render_centered_html(r'''
             <script type="text/javascript">
                 var api_key = "''' + captcha_values()["api_key"] + r'''";
                 var endpoint = '/' + window.location.pathname.split('/')[1] + '/' + api_key + '.html';
                 function handleToken(token) {
                     document.getElementById("puzzle-captcha").remove();
+                    document.getElementById("mirrors-select").remove();
                     document.getElementById("captcha-key").innerText = 'Using result "' + token + '" to decrypt links...';
+                    var link = document.getElementById("link-hidden").value;
                     fetch('/decrypt-filecrypt', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({ token: token })
+                        body: JSON.stringify({ 
+                            token: token,
+                            ''' + f'''package_id: '{package_id}',
+                            title: '{title}',
+                            link: link,
+                            password: '{password}'
+                        ''' + '''})
                     })
                     .then(response => response.json())
                     .then(data => {
@@ -65,16 +108,19 @@ def api(shared_state_dict, shared_state_lock):
                 ''' + captcha_js() + f'''</script>
                 <div>
                     <h1>Quasarr</h1>
+                    {link_select}<br><br>
+                    <input type="hidden" id="link-hidden" value="{links[0][0]}" />
                     <div id="puzzle-captcha" aria-style="mobile">
                         <strong>Your adblocker prevents the captcha from loading. Disable it!</strong>
                     </div>
-        
+
                     <div id="captcha-key"></div>
                     <div id="reload-button" style="display: none;">
                     {render_button("Solve another CAPTCHA", "secondary", {
             "onclick": "location.reload()",
         })}</div>
-        
+        <br>{render_button("Back", "primary", {"onclick": "location.href='/'"})}
+
                 </div>
                 </html>''')
 
@@ -85,34 +131,31 @@ def api(shared_state_dict, shared_state_lock):
         protected = shared_state.get_db("protected").retrieve_all_titles()
         if not protected:
             return {"success": False, "title": "No protected packages found! CAPTCHA not needed."}
-        else:
-            first_protected = protected[0]
-            package_id = first_protected[0]
-            details = first_protected[1].split("|")
-            title = details[0]
-            link = details[1]
-            password = details[3]
 
-        links = []
+        download_links = []
 
         try:
             data = request.json
             token = data.get('token')
+            package_id = data.get('package_id')
+            title = data.get('title')
+            link = data.get('link')
+            password = data.get('password')
             if token:
                 print(f"Received token: {token}")
                 print(f"Decrypting links for {title}")
-                links = get_filecrypt_links(shared_state, token, title, link, password)
+                download_links = get_filecrypt_links(shared_state, token, title, link, password)
 
-                print(f"Decrypted {len(links)} download links for {title}")
+                print(f"Decrypted {len(download_links)} download links for {title}")
 
-                shared_state.download_package(links, title, password, package_id)
+                shared_state.download_package(download_links, title, password, package_id)
 
                 shared_state.get_db("protected").delete(package_id)
 
         except Exception as e:
             print(f"Error decrypting: {e}")
 
-        return {"success": bool(links), "title": title}
+        return {"success": bool(download_links), "title": title}
 
     @app.post('/captcha/<captcha_id>.html')
     def proxy(captcha_id):

@@ -10,7 +10,7 @@ from bottle import Bottle, request
 
 import quasarr
 from quasarr.downloads.sources import nx
-from quasarr.persistence.config import Config
+from quasarr.storage.config import Config
 from quasarr.providers.html_templates import render_button, render_form, render_success, render_fail
 from quasarr.providers.web_server import Server
 
@@ -69,7 +69,7 @@ def hostnames_config(shared_state):
     def hostname_form():
         hostname_fields = '''
         <label for="{id}">{label}</label><br>
-        <input type="text" id="{id}" name="{id}" placeholder="example.com"><br>
+        <input type="text" id="{id}" name="{id}" placeholder="example.com" autocorrect="off" autocomplete="off"><br>
         '''
 
         hostname_form_content = "".join(
@@ -143,7 +143,7 @@ def nx_credentials_config(shared_state):
     def nx_credentials_form():
         form_content = '''
         <label for="user">Username</label><br>
-        <input type="text" id="user" name="user" placeholder="user"><br>
+        <input type="text" id="user" name="user" placeholder="user" autocorrect="off"><br>
 
         <label for="password">Password</label><br>
         <input type="password" id="password" name="password" placeholder="Password"><br>
@@ -191,7 +191,7 @@ def jdownloader_config(shared_state):
         verify_form_html = f'''
         <form id="verifyForm" action="/api/verify_jdownloader" method="post">
             <label for="user">E-Mail</label><br>
-            <input type="text" id="user" name="user" placeholder="user@example.org"><br>
+            <input type="text" id="user" name="user" placeholder="user@example.org" autocorrect="off"><br>
             <label for="pass">Password</label><br>
             <input type="password" id="pass" name="pass" placeholder="Password"><br>
             {render_button("Verify Credentials",

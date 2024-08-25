@@ -12,10 +12,10 @@ import tempfile
 import time
 
 from quasarr.arr import api
-from quasarr.persistence.config import Config, get_clean_hostnames
-from quasarr.persistence.sqlite_database import DataBase
+from quasarr.storage.config import Config, get_clean_hostnames
+from quasarr.storage.sqlite_database import DataBase
 from quasarr.providers import shared_state, version
-from quasarr.providers.setup import path_config, hostnames_config, nx_credentials_config, jdownloader_config
+from quasarr.storage.setup import path_config, hostnames_config, nx_credentials_config, jdownloader_config
 
 
 def run():
@@ -45,7 +45,7 @@ def run():
             config_path = "/config"
             if not arguments.internal_address:
                 print(
-                    "You must set the INTERNAL_ADDRESS variable to a locally reachable URL, e.g. http://localhost:8080")
+                    "You must set the INTERNAL_ADDRESS variable to a locally reachable URL, e.g. http://192.168.1.1:8080")
                 print("The local URL will be used by Radarr/Sonarr to connect to Quasarr")
                 print("Stopping Quasarr...")
                 sys.exit(1)

@@ -11,7 +11,7 @@ from Cryptodome.Cipher import AES
 from Cryptodome.Random import get_random_bytes
 from Cryptodome.Util.Padding import pad
 
-from quasarr.persistence.sqlite_database import DataBase
+from quasarr.storage.sqlite_database import DataBase
 from quasarr.providers import shared_state
 
 

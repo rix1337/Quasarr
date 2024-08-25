@@ -2,6 +2,9 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+import json
+
+from quasarr.downloads.sources.dw import get_dw_download_links
 from quasarr.downloads.sources.nx import get_nx_download_links
 from quasarr.providers.myjd_api import TokenExpiredException, RequestTimeoutException, MYJDException
 from quasarr.providers.notifications import send_discord_captcha_alert
@@ -40,13 +43,13 @@ def get_packages(shared_state):
     if protected_packages:
         for package in protected_packages:
             package_id = package[0]
-            package_details = package[1].split("|")
 
+            data = json.loads(package[1])
             details = {
-                "title": package_details[0],
-                "url": package_details[1],
-                "size_mb": package_details[2],
-                "password": package_details[3]
+                "title": data["title"],
+                "urls": data["links"],
+                "size_mb": data["size_mb"],
+                "password": data["password"]
             }
 
             packages.append({
@@ -195,36 +198,6 @@ def get_packages(shared_state):
     return downloads
 
 
-def download_package(shared_state, request_from, title, url, size_mb, password):
-    if "radarr".lower() in request_from.lower():
-        category = "movies"
-    else:
-        category = "tv"
-
-    package_id = ""
-
-    nx = shared_state.values["config"]("Hostnames").get("nx")
-    if nx.lower() in url.lower():
-        links = get_nx_download_links(shared_state, url, title)
-        print(f"Decrypted {len(links)} download links for {title}")
-        package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
-
-        added = shared_state.download_package(links, title, password, package_id)
-
-        if not added:
-            print(f"Failed to add {title} to linkgrabber")
-            package_id = None
-
-    elif "filecrypt".lower() in url.lower():
-        print(f"CAPTCHA-Solution required for {title}{shared_state.values['external_address']}/captcha")
-        send_discord_captcha_alert(shared_state, title)
-        package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
-        blob = f"{title}|{url}|{size_mb}|{password}"
-        shared_state.values["database"]("protected").update_store(package_id, blob)
-
-    return package_id
-
-
 def delete_package(shared_state, package_id):
     deleted = ""
 
@@ -255,3 +228,43 @@ def delete_package(shared_state, package_id):
     else:
         print(f"Failed to delete package {package_id}")
     return deleted
+
+
+def download_package(shared_state, request_from, title, url, size_mb, password):
+    if "radarr".lower() in request_from.lower():
+        category = "movies"
+    else:
+        category = "tv"
+
+    package_id = ""
+
+    dw = shared_state.values["config"]("Hostnames").get("dw")
+    nx = shared_state.values["config"]("Hostnames").get("nx")
+
+    if nx.lower() in url.lower():
+        links = get_nx_download_links(shared_state, url, title)
+        print(f"Decrypted {len(links)} download links for {title}")
+        package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
+
+        added = shared_state.download_package(links, title, password, package_id)
+
+        if not added:
+            print(f"Failed to add {title} to linkgrabber")
+            package_id = None
+
+    elif dw.lower() in url.lower():
+        links = get_dw_download_links(shared_state, url, title)
+        print(f"CAPTCHA-Solution required for {title} - {shared_state.values['external_address']}/captcha")
+        send_discord_captcha_alert(shared_state, title)
+        package_id = f"Quasarr_{category}_{str(hash(title + str(links))).replace('-', '')}"
+        blob = json.dumps({"title": title, "links": links, "size_mb": size_mb, "password": password})
+        shared_state.values["database"]("protected").update_store(package_id, blob)
+
+    elif "filecrypt".lower() in url.lower():
+        print(f"CAPTCHA-Solution required for {title} - {shared_state.values['external_address']}/captcha")
+        send_discord_captcha_alert(shared_state, title)
+        package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
+        blob = json.dumps({"title": title, "links": [[url, "filecrypt"]], "size_mb": size_mb, "password": password})
+        shared_state.values["database"]("protected").update_store(package_id, blob)
+
+    return package_id

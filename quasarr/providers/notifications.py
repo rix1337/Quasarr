@@ -13,7 +13,7 @@ def send_discord_captcha_alert(shared_state, title):
 
     data = {
         'username': 'Quasarr',
-        # 'avatar_url': 'https://imgur.com/fooBar.png',
+        'avatar_url': 'https://i.imgur.com/UXBdr1h.png',
         'embeds': [{
             'title': title,
             'description': 'Links are protected. Please solve the CAPTCHA to continue downloading.',
