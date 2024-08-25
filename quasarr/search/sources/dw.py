@@ -105,7 +105,7 @@ def dw_feed(shared_state, request_from):
                 title = article.a.text.strip()
                 size_info = article.find("span").text.strip()
                 size_item = extract_size(size_info)
-                mb = shared_state.convert_to_mb(size_item)
+                mb = shared_state.convert_to_mb(size_item) * 1024 * 1024
                 date = article.parent.parent.find("span", {"class": "date updated"}).text.strip()
                 published = convert_to_rss_date(date)
                 payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode(
@@ -163,7 +163,7 @@ def dw_search(shared_state, request_from, imdb_id):
                 title = result.a.text.strip()
                 size_info = result.find("span").text.strip()
                 size_item = extract_size(size_info)
-                mb = shared_state.convert_to_mb(size_item)
+                mb = shared_state.convert_to_mb(size_item) * 1024 * 1024
                 date = result.parent.parent.find("span", {"class": "date updated"}).text.strip()
                 published = convert_to_rss_date(date)
                 payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode(
