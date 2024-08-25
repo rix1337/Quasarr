@@ -34,14 +34,12 @@ def api(shared_state_dict, shared_state_lock):
             device = None
         if not device:
             return render_centered_html(f'''<h1>Quasarr</h1>
-            <p>JDownloader connection not established.</p>
-             {render_button("Back", "primary", {"onclick": "location.href='/'"})}''')
+            <p>JDownloader connection not established.</p>''')
 
         protected = shared_state.get_db("protected").retrieve_all_titles()
         if not protected:
             return render_centered_html(f'''<h1>Quasarr</h1>
-            <p>No protected packages found! CAPTCHA not needed.</p>
-             {render_button("Back", "primary", {"onclick": "location.href='/'"})}''')
+            <p>No protected packages found! CAPTCHA not needed.</p>''')
         else:
             package = protected[0]
             package_id = package[0]
@@ -108,19 +106,16 @@ def api(shared_state_dict, shared_state_lock):
                 ''' + captcha_js() + f'''</script>
                 <div>
                     <h1>Quasarr</h1>
+                    <div id="captcha-key"></div>
                     {link_select}<br><br>
                     <input type="hidden" id="link-hidden" value="{links[0][0]}" />
                     <div id="puzzle-captcha" aria-style="mobile">
                         <strong>Your adblocker prevents the captcha from loading. Disable it!</strong>
                     </div>
-
-                    <div id="captcha-key"></div>
                     <div id="reload-button" style="display: none;">
                     {render_button("Solve another CAPTCHA", "secondary", {
             "onclick": "location.reload()",
         })}</div>
-        <br>{render_button("Back", "primary", {"onclick": "location.href='/'"})}
-
                 </div>
                 </html>''')
 
