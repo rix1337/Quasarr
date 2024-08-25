@@ -12,9 +12,7 @@ from quasarr.providers.imdb_metadata import get_localized_title
 
 def nx_feed(shared_state, request_from):
     releases = []
-
     nx = shared_state.values["config"]("Hostnames").get("nx")
-
     password = nx
 
     if "Radarr" in request_from:
@@ -76,15 +74,13 @@ def nx_feed(shared_state, request_from):
 
 def nx_search(shared_state, request_from, imdb_id):
     releases = []
-
-    password = ""
+    nx = shared_state.values["config"]("Hostnames").get("nx")
+    password = nx
 
     if "Radarr" in request_from:
         valid_type = "movie"
     else:
         valid_type = "episode"
-
-    nx = shared_state.values["config"]("Hostnames").get("nx")
 
     german_title = get_localized_title(shared_state, imdb_id, 'de')
     if not german_title:

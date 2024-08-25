@@ -15,6 +15,9 @@ Quasarr includes a solution to quickly and easily decrypt protected links.
 Just follow the link from the console output (or discord notification) and solve the CAPTCHA.
 Quasarr will confidently handle the rest.
 
+**Warning: this project is still in the proof-of-concept stage.
+It is only tested with Radarr and the three currently supported hostnames.**
+
 # Instructions
 
 * Follow instructions to set up at least one hostname for Quasarr
@@ -23,9 +26,6 @@ Quasarr will confidently handle the rest.
     * Leave settings at default
     * Use this API key: `quasarr`
 * As with other download clients, you must ensure the download path used by JDownloader is accessible to *arr.
-
-**Warning: this project is still in the proof-of-concept stage.
-It is only tested with Radarr and only two hostname are currently supported.**
 
 # Setup
 

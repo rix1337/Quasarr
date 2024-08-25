@@ -5,8 +5,8 @@
 import os
 import time
 
-from quasarr.persistence.config import Config
-from quasarr.persistence.sqlite_database import DataBase
+from quasarr.storage.config import Config
+from quasarr.storage.sqlite_database import DataBase
 from quasarr.providers.myjd_api import Myjdapi, TokenExpiredException, RequestTimeoutException, MYJDException, Jddevice
 
 values = {}
@@ -31,7 +31,7 @@ def update(key, value):
 
 
 def set_sites():
-    update("sites", ["FX", "NX"])
+    update("sites", ["DW", "FX", "NX"])
 
 
 def set_connection_info(internal_address, external_address, port):

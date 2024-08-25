@@ -129,20 +129,21 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
     print("Attempting to decrypt Filecrypt link: " + url)
     session = requests.Session()
 
+    password_field = None
     if password:
-        password_id = "password"
         try:
             output = requests.get(url, headers={'User-Agent': shared_state.values["user_agent"]})
             soup = BeautifulSoup(output.text, 'html.parser')
             input_element = soup.find('input', placeholder=lambda value: value and 'password' in value.lower())
-            password_id = input_element['name']
-            print("Password field name identified: " + password_id)
+            password_field = input_element['name']
+            print("Password field name identified: " + password_field)
             url = output.url
         except:
-            print("Could not get password field name! Filecrypt may have changed their layout.")
+            print("No password field found. Skipping password entry!")
 
+    if password and password_field:
         print("Using Password: " + password)
-        output = session.post(url, data=password_id + "=" + password,
+        output = session.post(url, data=password_field + "=" + password,
                               headers={'User-Agent': shared_state.values["user_agent"],
                                        'Content-Type': 'application/x-www-form-urlencoded'})
     else:
