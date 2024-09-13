@@ -398,7 +398,7 @@ class Jddevice:
                 return response['data']
         else:
             # Direct connection info available, we try to use it.
-            for conn in self.__direct_connection_info:
+            for conn in self.__direct_connection_info[:]:
                 connection_ip = conn['conn']['ip']
                 # prevent connection to internal docker ip
                 if time.time() > conn['cooldown']:
