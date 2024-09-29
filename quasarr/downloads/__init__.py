@@ -113,11 +113,14 @@ def get_packages(shared_state):
                     mb = mb_left = int(details["bytesTotal"]) / (1024 * 1024)
                 except KeyError:
                     mb = mb_left = 0
-                package_id = package["comment"]
-                if "movies" in package_id:
-                    category = "movies"
-                else:
-                    category = "tv"
+                try:
+                    package_id = package["comment"]
+                    if "movies" in package_id:
+                        category = "movies"
+                    else:
+                        category = "tv"
+                except TypeError:
+                    category = "not_quasarr"
                 package_type = "linkgrabber"
                 package_uuid = package["uuid"]
             elif package["type"] == "downloader":
@@ -133,22 +136,28 @@ def get_packages(shared_state):
                     mb_left = (int(details["bytesTotal"]) - int(details["bytesLoaded"])) / (1024 * 1024)
                 except KeyError:
                     mb = mb_left = 0
-                package_id = package["comment"]
-                if "movies" in package_id:
-                    category = "movies"
-                else:
-                    category = "tv"
+                try:
+                    package_id = package["comment"]
+                    if "movies" in package_id:
+                        category = "movies"
+                    else:
+                        category = "tv"
+                except TypeError:
+                    category = "not_quasarr"
                 package_type = "downloader"
                 package_uuid = package["uuid"]
             else:
                 details = package["details"]
                 name = f"[CAPTCHA not solved!] {details["title"]}"
                 mb = mb_left = details["size_mb"]
-                package_id = package["package_id"]
-                if "movies" in package_id:
-                    category = "movies"
-                else:
-                    category = "tv"
+                try:
+                    package_id = package["package_id"]
+                    if "movies" in package_id:
+                        category = "movies"
+                    else:
+                        category = "tv"
+                except TypeError:
+                    category = "not_quasarr"
                 package_type = "protected"
                 package_uuid = None
 
@@ -174,11 +183,14 @@ def get_packages(shared_state):
             name = details["name"]
             size = int(details["bytesLoaded"])
             storage = details["saveTo"]
-            package_id = package["comment"]
-            if "movies" in package_id:
-                category = "movies"
-            else:
-                category = "tv"
+            try:
+                package_id = package["comment"]
+                if "movies" in package_id:
+                    category = "movies"
+                else:
+                    category = "tv"
+            except TypeError:
+                category = "not_quasarr"
 
             downloads["history"].append({
                 "fail_message": "",
