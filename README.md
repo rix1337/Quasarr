@@ -5,6 +5,7 @@
 Quasarr is a Bridge to use JDownloader in Radarr and (later also) Sonarr.
 
 [![PyPI version](https://badge.fury.io/py/quasarr.svg)](https://badge.fury.io/py/quasarr)
+[![Discord](https://img.shields.io/discord/1075348594225315891)](https://discord.gg/enn4AG3VnM)
 [![GitHub Sponsorship](https://img.shields.io/badge/support-me-red.svg)](https://github.com/users/rix1337/sponsorship)
 
 Quasarr poses as a Newznab Indexer and a SABnzbd client.

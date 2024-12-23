@@ -78,7 +78,11 @@ def api(shared_state_dict, shared_state_lock):
                     document.getElementById("mirrors-select").remove();
                     document.getElementById("captcha-key").innerText = 'Using result "' + token + '" to decrypt links...';
                     var link = document.getElementById("link-hidden").value;
-                    fetch('/decrypt-filecrypt', {
+                    const currentPath = window.location.pathname;
+                    const endpoint = '/decrypt-filecrypt';
+                    const fullPath = currentPath.endsWith('/') ? currentPath + endpoint.slice(1) : currentPath + endpoint;
+
+                    fetch(fullPath, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -121,7 +125,7 @@ def api(shared_state_dict, shared_state_lock):
 
         return content
 
-    @app.post('/decrypt-filecrypt')
+    @app.post('/captcha/decrypt-filecrypt')
     def submit_token():
         protected = shared_state.get_db("protected").retrieve_all_titles()
         if not protected:
