@@ -10,6 +10,8 @@ def render_centered_html(inner_content):
     height: 100vh;
     max-height: 100vh;
     overflow-y: auto;
+    overflow-x: hidden; /* Prevent horizontal scrolling */
+    width: 100%; /* Ensure it spans full width */
     background-color: #212529;
     color: #fff;
     font-family: system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',
@@ -20,19 +22,21 @@ def render_centered_html(inner_content):
     background-color: #fff;
     border-radius: 0.375rem;
     box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-    padding: 20px;
+    padding: 4px;
     text-align: center;
     color: #212529;
     font-size: 1rem;
     font-weight: 400;
     line-height: 1.5;
-    width: -webkit-fit-content; width: -moz-fit-content; width: fit-content;
+    box-sizing: border-box; /* Ensure padding doesn’t exceed boundaries */
+    max-width: 100%; /* Allow content to shrink */
     margin: auto;
     """
 
     return f'''
     <html>
     <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Quasarr</title>
     </head>
     <body>
@@ -42,6 +46,7 @@ def render_centered_html(inner_content):
         </div>
     </div>
     </body>
+    </html>
     '''
 
 

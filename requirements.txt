@@ -1,5 +1,5 @@
 beautifulsoup4==4.12.3
 bottle==0.12.25
-dukpy==0.4.0
+dukpy==0.5.0
 pycryptodomex==3.20.0
 requests==2.32.3
