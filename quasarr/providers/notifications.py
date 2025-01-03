@@ -7,26 +7,56 @@ import json
 import requests
 
 
-def send_discord_captcha_alert(shared_state, title):
+def send_discord_message(shared_state, title, case):
+    """
+    Sends a Discord message to the webhook provided in the shared state, based on the specified case.
+
+    :param shared_state: Shared state object containing configuration.
+    :param title: Title of the embed to be sent.
+    :param case: A string representing the scenario (e.g., 'captcha', 'captcha_solved', 'package_deleted').
+    :return: True if the message was sent successfully, False otherwise.
+    """
     if not shared_state.values.get("discord"):
         return False
 
+    # Decide the embed content based on the case
+    if case == "captcha":
+        description = 'Links are protected. Please solve the CAPTCHA to start downloading.'
+        fields = [
+            {
+                'name': 'Automatically',
+                'value': f'[Become a sponsor and let SponsorsHelper decrypt links for you]({f"https://github.com/users/rix1337/sponsorship"})',
+            },
+            {
+                'name': 'Manually',
+                'value': f'[Solve the CAPTCHA here yourself]({f"{shared_state.values['external_address']}/captcha"})',
+            }
+        ]
+    elif case == "solved":
+        description = 'Links automatically decrypted by SponsorsHelper!'
+        fields = None
+    elif case == "deleted":
+        description = 'SponsorsHelper failed to solve the CAPTCHA! Package deleted.'
+        fields = None
+    else:
+        print(f"Unknown case: {case}")
+        return False
+
+    # Construct the data payload
     data = {
         'username': 'Quasarr',
         'avatar_url': 'https://i.imgur.com/UXBdr1h.png',
         'embeds': [{
             'title': title,
-            'description': 'Links are protected. Please solve the CAPTCHA to continue downloading.',
-            'fields': [
-                {
-                    'name': '',
-                    'value': f'[Solve the CAPTCHA here!]({f"{shared_state.values['external_address']}/captcha"})',
-                }
-
-            ]
+            'description': description,
         }]
     }
 
+    # Add fields if required
+    if fields:
+        data['embeds'][0]['fields'] = fields
+
+    # Send the message to Discord webhook
     response = requests.post(shared_state.values["discord"], data=json.dumps(data),
                              headers={"Content-Type": "application/json"})
     if response.status_code != 204:

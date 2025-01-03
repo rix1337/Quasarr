@@ -7,7 +7,7 @@ import json
 from quasarr.downloads.sources.dw import get_dw_download_links
 from quasarr.downloads.sources.nx import get_nx_download_links
 from quasarr.providers.myjd_api import TokenExpiredException, RequestTimeoutException, MYJDException
-from quasarr.providers.notifications import send_discord_captcha_alert
+from quasarr.providers.notifications import send_discord_message
 
 
 def get_first_matching_comment(package, package_links):
@@ -267,14 +267,14 @@ def download_package(shared_state, request_from, title, url, size_mb, password):
     elif dw.lower() in url.lower():
         links = get_dw_download_links(shared_state, url, title)
         print(f"CAPTCHA-Solution required for {title} - {shared_state.values['external_address']}/captcha")
-        send_discord_captcha_alert(shared_state, title)
+        send_discord_message(shared_state, title=title, case="captcha")
         package_id = f"Quasarr_{category}_{str(hash(title + str(links))).replace('-', '')}"
         blob = json.dumps({"title": title, "links": links, "size_mb": size_mb, "password": password})
         shared_state.values["database"]("protected").update_store(package_id, blob)
 
     elif "filecrypt".lower() in url.lower():
         print(f"CAPTCHA-Solution required for {title} - {shared_state.values['external_address']}/captcha")
-        send_discord_captcha_alert(shared_state, title)
+        send_discord_message(shared_state, title=title, case="captcha")
         package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
         blob = json.dumps({"title": title, "links": [[url, "filecrypt"]], "size_mb": size_mb, "password": password})
         shared_state.values["database"]("protected").update_store(package_id, blob)
