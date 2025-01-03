@@ -5,9 +5,9 @@
 import os
 import time
 
+from quasarr.providers.myjd_api import Myjdapi, TokenExpiredException, RequestTimeoutException, MYJDException, Jddevice
 from quasarr.storage.config import Config
 from quasarr.storage.sqlite_database import DataBase
-from quasarr.providers.myjd_api import Myjdapi, TokenExpiredException, RequestTimeoutException, MYJDException, Jddevice
 
 values = {}
 lock = None
@@ -186,7 +186,7 @@ def convert_to_mb(item):
 
 def download_package(links, title, password, package_id):
     device = get_device()
-    added = device.linkgrabber.add_links(params=[
+    device.linkgrabber.add_links(params=[
         {
             "autostart": False,
             "links": str(links).replace(" ", ""),
@@ -257,9 +257,19 @@ def download_package(links, title, password, package_id):
             if package_uuid not in package_uuids:
                 package_uuids.append(package_uuid)
 
+    downloaded = False
+
     try:
-        device.linkgrabber.move_to_downloadlist(link_ids, package_uuids)
+        for _ in range(30):
+            collecting = device.linkgrabber.is_collecting()
+            if not collecting:
+                device.linkgrabber.move_to_downloadlist(link_ids, package_uuids)
+                downloaded = True
+            time.sleep(1)
     except Exception as e:
         print(f"Failed to start download for {title}: {e}")
         return False
-    return True
+
+    if not downloaded:
+        print(f"Failed to start download for {title}: Linkgrabber timeout!")
+    return downloaded
