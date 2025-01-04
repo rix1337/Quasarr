@@ -18,6 +18,7 @@ from quasarr.providers import shared_state
 from quasarr.providers.html_templates import render_button, render_centered_html
 from quasarr.providers.notifications import send_discord_message
 from quasarr.providers.obfuscated import captcha_js, captcha_values
+from quasarr.providers.tvmaze_metadata import get_title_from_tvrage_id
 from quasarr.providers.web_server import Server
 from quasarr.search import get_search_results
 
@@ -384,16 +385,20 @@ def api(shared_state_dict, shared_state_lock):
 
                     if mode == 'movie':
                         search_param = f"tt{getattr(request.query, 'imdbid', '')}" \
-                            if getattr(request.query, 'imdbid', '') else None
+                            if getattr(request.query, 'imdbid', '') else ""
 
-                        releases = get_search_results(shared_state, request_from, imdb_id=search_param)
+                        releases = get_search_results(shared_state, request_from, search_string=search_param)
 
                     elif mode == 'tvsearch':
-                        search_param = getattr(request.query, 'q', None)
+                        search_param = getattr(request.query, 'q', "")
+                        if not search_param:
+                            tvrage_id = getattr(request.query, 'rid', "")
+                            if tvrage_id:
+                                search_param = get_title_from_tvrage_id(tvrage_id)
 
-                        offset = getattr(request.query, 'offset', None)  # ignoring offset higher than 0 on purpose
+                        offset = getattr(request.query, 'offset', "")  # ignoring offset higher than 0 on purpose
                         if int(offset) == 0:
-                            releases = get_search_results(shared_state, request_from, title=search_param)
+                            releases = get_search_results(shared_state, request_from, search_string=search_param)
 
                     items = ""
                     if not releases:

@@ -3,6 +3,7 @@
 # Project by https://github.com/rix1337
 
 import html
+import re
 from base64 import urlsafe_b64encode
 
 import requests
@@ -72,7 +73,7 @@ def nx_feed(shared_state, request_from):
     return releases
 
 
-def nx_search(shared_state, request_from, imdb_id):
+def nx_search(shared_state, request_from, search_string):
     releases = []
     nx = shared_state.values["config"]("Hostnames").get("nx")
     password = nx
@@ -82,14 +83,15 @@ def nx_search(shared_state, request_from, imdb_id):
     else:
         valid_type = "episode"
 
-    german_title = get_localized_title(shared_state, imdb_id, 'de')
-    if not german_title:
-        print(f"German title from IMDb required for NX search")
-        return releases
+    if re.match(r'^tt\d{7,8}$', search_string):
+        imdb_id = search_string
+        search_string = get_localized_title(shared_state, imdb_id, 'de')
+        if not search_string:
+            print(f"Could not extract title from IMDb-ID {imdb_id}")
+            return releases
+        search_string = html.unescape(search_string)
 
-    german_title = html.unescape(german_title)
-
-    url = f'https://{nx}/api/frontend/search/{german_title}'
+    url = f'https://{nx}/api/frontend/search/{search_string}'
     headers = {
         'User-Agent': shared_state.values["user_agent"],
     }
