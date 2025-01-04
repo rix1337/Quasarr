@@ -84,7 +84,8 @@ def run():
         shared_state.update("config", Config)
         shared_state.update("database", DataBase)
         shared_state.update("user_agent",
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+        shared_state.update("helper_active", False)
 
         print(f'Config path: "{config_path}"')
 

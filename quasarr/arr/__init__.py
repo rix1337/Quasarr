@@ -21,8 +21,6 @@ from quasarr.providers.obfuscated import captcha_js, captcha_values
 from quasarr.providers.web_server import Server
 from quasarr.search import get_search_results
 
-helper_active = False
-
 
 def api(shared_state_dict, shared_state_lock):
     shared_state.set_state(shared_state_dict, shared_state_lock)
@@ -499,12 +497,11 @@ def api(shared_state_dict, shared_state_lock):
 
     @app.put("/sponsors_helper/api/activate_sponsor_status/")
     def activate_sponsor_status():
-        global helper_active
         try:
             data = request.body.read().decode("utf-8")
             payload = json.loads(data)
             if payload["activate"]:
-                helper_active = True
+                shared_state.update("helper_active", True)
                 print(f"Sponsor status activated successfully")
                 return "Sponsor status activated successfully!"
         except:
