@@ -9,7 +9,7 @@ from quasarr.search.sources.fx import fx_feed, fx_search
 from quasarr.search.sources.nx import nx_feed, nx_search
 
 
-def get_search_results(shared_state, request_from, imdb_id=None):
+def get_search_results(shared_state, request_from, title=None, imdb_id=None):
     results = []
 
     dw = shared_state.values["config"]("Hostnames").get("dw")
