@@ -132,7 +132,7 @@ def dw_feed(shared_state, request_from):
     return releases
 
 
-def dw_search(shared_state, request_from, imdb_id):
+def dw_search(shared_state, request_from, search_string):
     releases = []
     dw = shared_state.values["config"]("Hostnames").get("dw")
     password = dw
@@ -142,7 +142,7 @@ def dw_search(shared_state, request_from, imdb_id):
     else:
         search_type = "videocategory=serien"
 
-    url = f'https://{dw}/?s={imdb_id}&{search_type}'
+    url = f'https://{dw}/?s={search_string}&{search_type}'
     headers = {
         'User-Agent': shared_state.values["user_agent"],
     }

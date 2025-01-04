@@ -9,7 +9,7 @@ from quasarr.search.sources.fx import fx_feed, fx_search
 from quasarr.search.sources.nx import nx_feed, nx_search
 
 
-def get_search_results(shared_state, request_from, title=None, imdb_id=None):
+def get_search_results(shared_state, request_from, search_string=""):
     results = []
 
     dw = shared_state.values["config"]("Hostnames").get("dw")
@@ -17,13 +17,13 @@ def get_search_results(shared_state, request_from, title=None, imdb_id=None):
     nx = shared_state.values["config"]("Hostnames").get("nx")
 
     functions = []
-    if imdb_id:
+    if search_string:
         if dw:
-            functions.append(lambda: dw_search(shared_state, request_from, imdb_id))
+            functions.append(lambda: dw_search(shared_state, request_from, search_string))
         if fx:
-            functions.append(lambda: fx_search(shared_state, imdb_id))
+            functions.append(lambda: fx_search(shared_state, search_string))
         if nx:
-            functions.append(lambda: nx_search(shared_state, request_from, imdb_id))
+            functions.append(lambda: nx_search(shared_state, request_from, search_string))
     else:
         if dw:
             functions.append(lambda: dw_feed(shared_state, request_from))

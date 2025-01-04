@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 
 
 def extract_size(text):
-    match = re.match(r"(\d+)([A-Za-z]+)", text)
+    match = re.match(r"(\d+)\s*([A-Za-z]+)", text)
     if match:
         size = match.group(1)
         unit = match.group(2)
@@ -88,13 +88,13 @@ def fx_feed(shared_state):
     return releases
 
 
-def fx_search(shared_state, imdb_id):
+def fx_search(shared_state, search_string):
     releases = []
 
     fx = shared_state.values["config"]("Hostnames").get("fx")
 
     password = fx.split(".")[0]
-    url = f'https://{fx}/?s={imdb_id}'
+    url = f'https://{fx}/?s={search_string}'
     headers = {
         'User-Agent': shared_state.values["user_agent"],
     }
