@@ -2,7 +2,7 @@
 
 <img src="https://raw.githubusercontent.com/rix1337/Quasarr/main/Quasarr.png" data-canonical-src="https://raw.githubusercontent.com/rix1337/Quasarr/main/Quasarr.png" width="64" height="64" />
 
-Quasarr is a Bridge to use JDownloader in Radarr and (later also) Sonarr.
+Quasarr is a Bridge to use JDownloader in Radarr and Sonarr.
 
 [![PyPI version](https://badge.fury.io/py/quasarr.svg)](https://badge.fury.io/py/quasarr)
 [![Discord](https://img.shields.io/discord/1075348594225315891)](https://discord.gg/enn4AG3VnM)
@@ -13,11 +13,9 @@ It will thus never work in parallel with a real NZB indexer and download client 
 Torrents are unaffected.
 
 Quasarr includes a solution to quickly and easily decrypt protected links.
-Just follow the link from the console output (or discord notification) and solve the CAPTCHA.
+[Active Sponsors get access to SponsorsHelper to do so automatically.](https://github.com/users/rix1337/sponsorship)
+Alternatively follow the link from the console output (or discord notification) to solve the CAPTCHA manually.
 Quasarr will confidently handle the rest.
-
-**Warning: this project is still in the proof-of-concept stage.
-It is only tested with Radarr and the three currently supported hostnames.**
 
 # Instructions
 

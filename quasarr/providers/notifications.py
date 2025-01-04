@@ -21,11 +21,16 @@ def send_discord_message(shared_state, title, case):
 
     # Decide the embed content based on the case
     if case == "captcha":
+        if shared_state.values.get("helper_active"):
+            helper_text = f"Thanks for being a Sponsor! The CAPTCHA will be solved automatically asap."
+        else:
+            helper_text = f'[Become a sponsor and let SponsorsHelper decrypt links for you]({f"https://github.com/users/rix1337/sponsorship"})'
+
         description = 'Links are protected. Please solve the CAPTCHA to start downloading.'
         fields = [
             {
                 'name': 'Automatically',
-                'value': f'[Become a sponsor and let SponsorsHelper decrypt links for you]({f"https://github.com/users/rix1337/sponsorship"})',
+                'value': helper_text,
             },
             {
                 'name': 'Manually',

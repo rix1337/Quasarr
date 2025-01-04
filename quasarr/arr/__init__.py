@@ -21,8 +21,6 @@ from quasarr.providers.obfuscated import captcha_js, captcha_values
 from quasarr.providers.web_server import Server
 from quasarr.search import get_search_results
 
-helper_active = False
-
 
 def api(shared_state_dict, shared_state_lock):
     shared_state.set_state(shared_state_dict, shared_state_lock)
@@ -358,33 +356,60 @@ def api(shared_state_dict, shared_state_lock):
         elif api_type == 'newznab':
             try:
                 mode = request.query.t
-                if mode == 'movie':
-                    if request.query.imdbid:
-                        imdb_id = f"tt{request.query.imdbid}"
-                    else:
-                        imdb_id = None
-
+                if mode == 'caps':
+                    return '''<?xml version="1.0" encoding="UTF-8"?>
+                                    <caps>
+                                      <categories>
+                                          <category id="2000" name="Movies">
+                                              <subcat id="2010" name="Foreign"/>
+                                              <subcat id="2020" name="Other"/>
+                                              <subcat id="2030" name="SD"/>
+                                              <subcat id="2040" name="HD"/>
+                                              <subcat id="2050" name="BluRay"/>
+                                              <subcat id="2060" name="3D"/>
+                                          </category>
+                                          <category id="5000" name="TV">
+                                              <subcat id="5020" name="Foreign"/>
+                                              <subcat id="5030" name="SD"/>
+                                              <subcat id="5040" name="HD"/>
+                                              <subcat id="5050" name="Other"/>
+                                              <subcat id="5060" name="Sport"/>
+                                          </category>
+                                      </categories>
+                                    </caps>'''
+                elif mode in ['movie', 'tvsearch']:
                     request_from = request.headers.get('User-Agent')
 
-                    releases = get_search_results(shared_state, request_from, imdb_id=imdb_id)
+                    releases = []
+
+                    if mode == 'movie':
+                        search_param = f"tt{getattr(request.query, 'imdbid', '')}" \
+                            if getattr(request.query, 'imdbid', '') else None
+
+                        releases = get_search_results(shared_state, request_from, imdb_id=search_param)
+
+                    elif mode == 'tvsearch':
+                        search_param = getattr(request.query, 'q', None)
+
+                        offset = getattr(request.query, 'offset', None)  # ignoring offset higher than 0 on purpose
+                        if int(offset) == 0:
+                            releases = get_search_results(shared_state, request_from, title=search_param)
 
                     items = ""
-
                     if not releases:
                         items += f'''
-                                <item>
-                                    <title>No releases found</title>
-                                    <link></link>
-                                    <pubDate>{datetime.now().strftime('%a, %d %b %Y %H:%M:%S %z')}</pubDate>
-                                    <enclosure url="_" length="0" type="application/x-nzb"/>
-                                    <guid></guid>
-                                    <comments></comments>
-                                    <description></description>
-                                </item>'''
+                            <item>
+                                <title>No releases found</title>
+                                <link></link>
+                                <pubDate>{datetime.now().strftime('%a, %d %b %Y %H:%M:%S %z')}</pubDate>
+                                <enclosure url="_" length="0" type="application/x-nzb"/>
+                                <guid></guid>
+                                <comments></comments>
+                                <description></description>
+                            </item>'''
 
                     for release in releases:
                         release = release["details"]
-
                         items += f'''
                         <item>
                             <title>{release["title"]}</title>
@@ -401,30 +426,11 @@ def api(shared_state_dict, shared_state_lock):
                                         {items}
                                     </channel>
                                 </rss>'''
-                elif mode == 'caps':
-                    return '''<?xml version="1.0" encoding="UTF-8"?>
-                    <caps>
-                      <categories>
-                          <category id="2000" name="Movies">
-                              <subcat id="2010" name="Foreign"/>
-                              <subcat id="2020" name="Other"/>
-                              <subcat id="2030" name="SD"/>
-                              <subcat id="2040" name="HD"/>
-                              <subcat id="2050" name="BluRay"/>
-                              <subcat id="2060" name="3D"/>
-                          </category>
-                          <category id="5000" name="TV">
-                              <subcat id="5020" name="Foreign"/>
-                              <subcat id="5030" name="SD"/>
-                              <subcat id="5040" name="HD"/>
-                              <subcat id="5050" name="Other"/>
-                              <subcat id="5060" name="Sport"/>
-                          </category>
-                      </categories>
-                    </caps>'''
             except Exception as e:
                 print(f"Error loading search results: {e}")
                 print(traceback.format_exc())
+
+            print(f"Unknown request: {request.query}")
             return {"error": True}
 
     @app.get("/sponsors_helper/api/to_decrypt/")
@@ -499,12 +505,11 @@ def api(shared_state_dict, shared_state_lock):
 
     @app.put("/sponsors_helper/api/activate_sponsor_status/")
     def activate_sponsor_status():
-        global helper_active
         try:
             data = request.body.read().decode("utf-8")
             payload = json.loads(data)
             if payload["activate"]:
-                helper_active = True
+                shared_state.update("helper_active", True)
                 print(f"Sponsor status activated successfully")
                 return "Sponsor status activated successfully!"
         except:
