@@ -24,7 +24,7 @@ class Server:
         self.listen = listen
         self.port = port
         self.server = make_server(self.listen, self.port, self.wsgi_app,
-                                  ThreadingWSGIServer)
+                                  ThreadingWSGIServer, handler_class=NoLoggingWSGIRequestHandler)
 
     def serve_temporarily(self):
         global temp_server_success
