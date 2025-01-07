@@ -50,7 +50,7 @@ def send_discord_message(shared_state, title, case):
     # Construct the data payload
     data = {
         'username': 'Quasarr',
-        'avatar_url': 'https://i.imgur.com/UXBdr1h.png',
+        'avatar_url': 'https://raw.githubusercontent.com/rix1337/Quasarr/main/Quasarr.png',
         'embeds': [{
             'title': title,
             'description': description,
