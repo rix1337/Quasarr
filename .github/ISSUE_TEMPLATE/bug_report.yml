@@ -13,14 +13,14 @@ body:
       label: Is this an existing issue?
       description: Check <a href="https://github.com/rix1337/Quasarr/issues?q=is%3Aissue">all issues</a> to prevent duplicates.
       options:
-        - label: Ich habe ältere, offene und geschlossene Issues überprüft
+        - label: I confirm this is not a duplicate.
           required: true
   - type: checkboxes
     attributes:
       label: Are hostnames part of this issue?
-      description: The author does not answer, tell or describe any hostnames. They must be acquired elsewhere!
+      description: The author does not provide any hostnames. You personally decide what sites to use in Quasarr.
       options:
-        - label: No, hostnames are not part of or visible in this issue.
+        - label: No, hostnames are not part of this issue. I am also not asking for any clarification here!
           required: true
   - type: textarea
     attributes:
