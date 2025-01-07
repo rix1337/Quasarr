@@ -6,7 +6,7 @@ import re
 
 
 def get_version():
-    return "0.3.2"
+    return "0.3.3"
 
 
 def create_version_file():

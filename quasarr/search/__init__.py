@@ -9,7 +9,7 @@ from quasarr.search.sources.fx import fx_feed, fx_search
 from quasarr.search.sources.nx import nx_feed, nx_search
 
 
-def get_search_results(shared_state, request_from, search_string=""):
+def get_search_results(shared_state, request_from, search_string="", season="", episode=""):
     results = []
 
     dw = shared_state.values["config"]("Hostnames").get("dw")
@@ -41,5 +41,9 @@ def get_search_results(shared_state, request_from, search_string=""):
             except Exception as e:
                 print(f"An error occurred: {e}")
 
-    print(f"Providing {len(results)} releases to {request_from}")
+    if search_string:
+        print(f'Providing {len(results)} releases to {request_from} for search phrase "{search_string}"')
+    else:
+        print(f'Providing {len(results)} releases to {request_from} from release feed')
+
     return results
