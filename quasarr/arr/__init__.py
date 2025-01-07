@@ -384,12 +384,16 @@ def api(shared_state_dict, shared_state_lock):
                     releases = []
 
                     if mode == 'movie':
+                        # only imdb is implemented
                         search_param = f"tt{getattr(request.query, 'imdbid', '')}" \
                             if getattr(request.query, 'imdbid', '') else ""
 
                         releases = get_search_results(shared_state, request_from, search_string=search_param)
 
                     elif mode == 'tvsearch':
+                        season = getattr(request.query, 'season', "")
+                        episode = getattr(request.query, 'ep', "")
+                        # only plain search string and tvrage id is implemented
                         search_param = getattr(request.query, 'q', "")
                         if not search_param:
                             tvrage_id = getattr(request.query, 'rid', "")
@@ -398,7 +402,11 @@ def api(shared_state_dict, shared_state_lock):
 
                         offset = getattr(request.query, 'offset', "")  # ignoring offset higher than 0 on purpose
                         if int(offset) == 0:
-                            releases = get_search_results(shared_state, request_from, search_string=search_param)
+                            releases = get_search_results(shared_state, request_from,
+                                                          search_string=search_param,
+                                                          season=season,
+                                                          episode=episode
+                                                          )
 
                     items = ""
                     if not releases:
