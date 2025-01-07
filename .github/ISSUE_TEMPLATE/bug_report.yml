@@ -1,0 +1,66 @@
+name: Bug report
+description: Create a bug report
+body:
+  - type: checkboxes
+    attributes:
+      label: Did you read the README?
+      description: Please read the <a href="https://github.com/rix1337/Quasarr/blob/master/README.md">README</a> first.
+      options:
+        - label: I have read the README.
+          required: true
+  - type: checkboxes
+    attributes:
+      label: Is this an existing issue?
+      description: Check <a href="https://github.com/rix1337/Quasarr/issues?q=is%3Aissue">all issues</a> to prevent duplicates.
+      options:
+        - label: I confirm this is not a duplicate.
+          required: true
+  - type: checkboxes
+    attributes:
+      label: Are hostnames part of this issue?
+      description: The author does not provide any hostnames. You personally decide what sites to use in Quasarr.
+      options:
+        - label: No, hostnames are not part of this issue. I am also not asking for any clarification here!
+          required: true
+  - type: textarea
+    attributes:
+      label: Environment
+      description: Tell us about your setup
+      value: |
+        - Quasarr version:
+        - Last working version:
+        - Type: [Docker/Windows-Exe/Manuell]
+        - OS: [Docker/Windows/Linux/macOS]
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Description
+      description: Describe all steps to reproduce the issue. Without these, noone will be able to help you!
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Error from the console
+      description: |
+        Add ALL messages from the log that correlate with your issue.
+        Redact all hostnames you may have set.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Quasarr.ini
+      description: |
+        To reproduce your issue we need to know about your setup.
+        Hostnames and credentials are encrypted in the ini. Never share your Quasarr.db to keep them secure!
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Screenshots
+      description: Add screenshots that show your issue (ideally log and UI e.g. of Radarr/Sonarr)
+    validations:
+      required: false
