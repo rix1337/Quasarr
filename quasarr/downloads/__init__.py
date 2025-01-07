@@ -253,7 +253,7 @@ def download_package(shared_state, request_from, title, url, size_mb, password):
     dw = shared_state.values["config"]("Hostnames").get("dw")
     nx = shared_state.values["config"]("Hostnames").get("nx")
 
-    if nx.lower() in url.lower():
+    if nx and nx.lower() in url.lower():
         links = get_nx_download_links(shared_state, url, title)
         print(f"Decrypted {len(links)} download links for {title}")
         package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
@@ -264,7 +264,7 @@ def download_package(shared_state, request_from, title, url, size_mb, password):
             print(f"Failed to add {title} to linkgrabber")
             package_id = None
 
-    elif dw.lower() in url.lower():
+    elif dw and dw.lower() in url.lower():
         links = get_dw_download_links(shared_state, url, title)
         print(f"CAPTCHA-Solution required for {title} - {shared_state.values['external_address']}/captcha")
         send_discord_message(shared_state, title=title, case="captcha")
