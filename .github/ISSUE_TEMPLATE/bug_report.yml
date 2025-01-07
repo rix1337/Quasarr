@@ -24,7 +24,7 @@ body:
           required: true
   - type: textarea
     attributes:
-      label: Laufzeitumgebung
+      label: Environment
       description: Tell us about your setup
       value: |
         - Quasarr version:
