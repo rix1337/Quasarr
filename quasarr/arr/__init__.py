@@ -5,9 +5,10 @@
 import json
 import re
 import traceback
+import xml.sax.saxutils as sax_utils
 from base64 import urlsafe_b64decode
 from datetime import datetime
-from xml.etree import ElementTree as ET
+from xml.etree import ElementTree as element_tree
 
 import requests
 from bottle import Bottle, request, response, abort
@@ -259,7 +260,7 @@ def api(shared_state_dict, shared_state_lock):
         nzo_ids = []
         for upload in downloads:
             file_content = upload.file.read()
-            root = ET.fromstring(file_content)
+            root = element_tree.fromstring(file_content)
             title = root.find(".//file").attrib["title"]
             url = root.find(".//file").attrib["url"]
             size_mb = root.find(".//file").attrib["size_mb"]
@@ -425,7 +426,7 @@ def api(shared_state_dict, shared_state_lock):
                         release = release["details"]
                         items += f'''
                         <item>
-                            <title>{release["title"]}</title>
+                            <title>{sax_utils.escape(release["title"])}</title>
                             <guid isPermaLink="True">{release["link"]}</guid>
                             <link>{release["link"]}</link>
                             <comments>{release["source"]}</comments>
