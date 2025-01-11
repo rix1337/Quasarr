@@ -4,15 +4,15 @@
 
 import os
 import sys
-from urllib import parse
 
 from bottle import Bottle, request
 
 import quasarr
 from quasarr.downloads.sources import nx
-from quasarr.storage.config import Config
 from quasarr.providers.html_templates import render_button, render_form, render_success, render_fail
+from quasarr.providers.shared_state import extract_valid_hostname
 from quasarr.providers.web_server import Server
+from quasarr.storage.config import Config
 
 
 def path_config(shared_state):
@@ -86,25 +86,6 @@ def hostnames_config(shared_state):
 
     @app.post("/api/hostnames")
     def set_hostnames():
-        def extract_domain(url, shorthand):
-            # Check if both characters from the shorthand appear in the url
-            try:
-                if '://' not in url:
-                    url = 'http://' + url
-                result = parse.urlparse(url)
-                domain = result.netloc
-
-                # Check if both characters in the shorthand are in the domain
-                if all(char in domain for char in shorthand):
-                    print(f"{domain} matches both characters from {shorthand}. Continuing...")
-                    return domain
-                else:
-                    print(f"Invalid domain {domain}: Does not contain both characters from shorthand {shorthand}")
-                    return None
-            except Exception as e:
-                print(f"Error parsing URL {url}: {e}")
-                return None
-
         hostnames = Config('Hostnames')
 
         hostname_set = False
@@ -114,7 +95,7 @@ def hostnames_config(shared_state):
             hostname = request.forms.get(shorthand)
             try:
                 if hostname:
-                    hostname = extract_domain(hostname, shorthand)
+                    hostname = extract_valid_hostname(hostname, shorthand)
             except Exception as e:
                 print(f"Error extracting domain from {hostname}: {e}")
                 continue
@@ -136,12 +117,13 @@ def hostnames_config(shared_state):
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
 
 
-def nx_credentials_config(shared_state):
+def nx_credentials_config(shared_state, domain):
     app = Bottle()
 
     @app.get('/')
     def nx_credentials_form():
-        form_content = '''
+        form_content = f'''
+        <span>Register an account, if you haven't yet at <a href="https://{domain}">{domain}</a>!</span><br><br>
         <label for="user">Username</label><br>
         <input type="text" id="user" name="user" placeholder="user" autocorrect="off"><br>
 
@@ -179,7 +161,7 @@ def nx_credentials_config(shared_state):
     print(
         f'NX credentials required to decrypt download links. '
         f'Starting web server for config at: "{shared_state.values['internal_address']}".')
-    print("Please set your NX user and password there! First register an account if you don't have one yet.")
+    print(f"Please set your credentials there! If needed register here: 'https://{domain}'")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
 
 
@@ -189,6 +171,9 @@ def jdownloader_config(shared_state):
     @app.get('/')
     def hostname_form():
         verify_form_html = f'''
+        <span>Register an account, if you haven't yet at <a href="https://my.jdownloader.org/login.html#register">
+        my.jdownloader.org</a>!</span><br><br>
+        
         <form id="verifyForm" action="/api/verify_jdownloader" method="post">
             <label for="user">E-Mail</label><br>
             <input type="text" id="user" name="user" placeholder="user@example.org" autocorrect="off"><br>
@@ -243,7 +228,7 @@ def jdownloader_config(shared_state):
         }
         </script>
         '''
-        return render_form("Set your credentials from my.jdownloader.org", verify_form_html, verify_script)
+        return render_form("Set your credentials for My JDownloader", verify_form_html, verify_script)
 
     @app.post("/api/verify_jdownloader")
     def verify_jdownloader():
@@ -290,5 +275,5 @@ def jdownloader_config(shared_state):
     print(
         f'My-JDownloader-Credentials not set. '
         f'Starting web server for config at: "{shared_state.values['internal_address']}".')
-    print("Please set your Credentials there!")
+    print(f"Please set your credentials there!  If needed register here: 'https://my.jdownloader.org/login.html#register'")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
