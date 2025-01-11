@@ -20,18 +20,19 @@ Quasarr will confidently handle the rest.
 # Instructions
 
 * Follow instructions to :
-  * Set up at least one hostname for Quasarr to use
-    * You chose what hostnames to search - do your own research.
-    * Asking for hostnames on this GitHub repo is forbidden.
-    * Quasarr will become available once at least one suitable hostname is set.
-  * Provide your [MyJDownloader credentials](https://my.jdownloader.org)
+    * Set up at least one hostname for Quasarr to use
+        * Chose your own or use the `HOSTNAMES` variable to provide a list of hostnames.
+        * Always redact hostnames when creating issues in this repo.
+        * Quasarr will become available once at least one suitable hostname is set.
+    * Provide your [My-JDownloader-Credentials](https://my.jdownloader.org)
 * Set up Quasarr's URL as 'Newznab Indexer' and 'SABnzbd Download Client' in Sonarr/Radarr.
     * Leave settings at default
     * Use this API key: `quasarr`
 * As with other download clients, you must ensure the download path used by JDownloader is accessible to *arr.
 
 # Docker
-It is highly recommended to run the latest docker image with all optional Variables set.
+
+It is highly recommended to run the latest docker image with all optional variables set.
 
 ```
 docker run -d \
@@ -39,16 +40,22 @@ docker run -d \
   -p port:8080 \
   -v /path/to/config/:/config:rw \
   -e 'INTERNAL_ADDRESS'='http://192.168.0.1:8080' \
-  -e 'EXTERNAL_ADDRESS'='http://foo.bar/' \
+  -e 'EXTERNAL_ADDRESS'='https://foo.bar/' \
   -e 'DISCORD'='https://discord.com/api/webhooks/1234567890/ABCDEFGHIJKLMN' \
+  -e 'HOSTNAMES'='https://pastebin.com/raw/eX4Mpl3'
   rix1337/docker-quasarr:latest
   ```
 
 * `INTERNAL_ADDRESS` is required so Radarr/Sonarr can reach Quasarr. **Must** include port!
 * `EXTERNAL_ADDRESS` is optional and used in Discord notifications.
 * `DISCORD` is optional and must be a valid Discord Webhook URL.
+* `HOSTNAMES` is optional and allows skipping the Hostname setting on first launch.
+    * Must be a publicly available `HTTP` or `HTTPs` link
+    * Must be a raw `.ini` / text file (not html or json)
+    * Must contain at least one valid Hostname per line `ab = xyz`
 
 # Manual setup
+
 Use this only in case you cant run the docker image.
 
 `pip install quasarr`
@@ -59,8 +66,13 @@ Use this only in case you cant run the docker image.
 quasarr
   --port=8080
   --discord=https://discord.com/api/webhooks/1234567890/ABCDEFGHIJKLMN
-  --external_address=http://foo.bar/
+  --external_address=https://foo.bar/
+  --hostnames=https://pastebin.com/raw/eX4Mpl3
   ```
 
 * `--discord` must be a valid Discord Webhook URL and is optional.
 * `--external_address` is used in Discord notifications and is optional.
+* `--hostnames` is optional and allows skipping the manual hostname step during setup.
+    * Must be a publicly available `HTTP` or `HTTPs` link
+    * Must be a raw `.ini` / text file (not html or json)
+    * Must contain at least one valid Hostname per line `ab = xyz`

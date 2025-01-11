@@ -10,12 +10,15 @@ import socket
 import sys
 import tempfile
 import time
+from urllib.parse import urlparse
+
+import requests
 
 from quasarr.arr import api
-from quasarr.storage.config import Config, get_clean_hostnames
-from quasarr.storage.sqlite_database import DataBase
 from quasarr.providers import shared_state, version
+from quasarr.storage.config import Config, get_clean_hostnames
 from quasarr.storage.setup import path_config, hostnames_config, nx_credentials_config, jdownloader_config
+from quasarr.storage.sqlite_database import DataBase
 
 
 def run():
@@ -29,6 +32,7 @@ def run():
         parser.add_argument("--internal_address", help="Must be provided when running in Docker")
         parser.add_argument("--external_address", help="External address for CAPTCHA notifications")
         parser.add_argument("--discord", help="Discord Webhook URL")
+        parser.add_argument("--hostnames", help="Public HTTP(s) Link that contains hostnames definition.")
         arguments = parser.parse_args()
 
         sys.stdout = Unbuffered(sys.stdout)
@@ -91,15 +95,40 @@ def run():
 
         shared_state.set_sites()
 
+        try:
+            if arguments.hostnames:
+                hostnames_link = arguments.hostnames
+
+                if is_valid_url(hostnames_link):
+                    allowed_keys = extract_allowed_keys(Config._DEFAULT_CONFIG, 'Hostnames')
+                    data = requests.get(hostnames_link).text
+                    results = extract_kv_pairs(data, allowed_keys)
+
+                    if results:
+                        hostnames = Config('Hostnames')
+                        for shorthand, hostname in results.items():
+                            valid_domain = shared_state.extract_valid_hostname(hostname, shorthand)
+                            if valid_domain:
+                                hostnames.save(shorthand, hostname)
+                                print(f'Hostname for "{shorthand}" extracted from {hostnames_link}.')
+                    else:
+                        print(f'No Hostnames found at "{hostnames_link}". '
+                              'Ensure to pass a plain hostnames list, not html or json!')
+                else:
+                    print(f"Invalid hostnames URL: {hostnames_link}")
+        except Exception as e:
+            print(f'Error parsing hostnames link: {e}')
+
         if not get_clean_hostnames(shared_state):
             hostnames_config(shared_state)
             get_clean_hostnames(shared_state)
 
         if Config('Hostnames').get('nx'):
+            nx = Config('Hostnames').get('nx')
             user = Config('NX').get('user')
             password = Config('NX').get('password')
             if not user or not password:
-                nx_credentials_config(shared_state)
+                nx_credentials_config(shared_state, nx)
 
         config = Config('JDownloader')
         user = config.get('user')
@@ -192,3 +221,41 @@ def check_ip():
     finally:
         s.close()
     return ip
+
+
+def is_valid_url(url):
+    parsed = urlparse(url)
+    return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+
+
+def extract_allowed_keys(config, section):
+    """
+    Extracts allowed keys from the specified section in the configuration.
+
+    :param config: The configuration dictionary.
+    :param section: The section from which to extract keys.
+    :return: A list of allowed keys.
+    """
+    if section not in config:
+        raise ValueError(f"Section '{section}' not found in configuration.")
+    return [key for key, *_ in config[section]]
+
+
+def extract_kv_pairs(input_text, allowed_keys):
+    """
+    Extracts key-value pairs from the given text where keys match allowed_keys.
+
+    :param input_text: The input text containing key-value pairs.
+    :param allowed_keys: A list of allowed two-letter shorthand keys.
+    :return: A dictionary of extracted key-value pairs.
+    """
+    kv_pattern = re.compile(rf"^({'|'.join(map(re.escape, allowed_keys))})\s*=\s*(.*)$")
+    kv_pairs = {}
+
+    for line in input_text.splitlines():
+        match = kv_pattern.match(line.strip())
+        if match:
+            key, value = match.groups()
+            kv_pairs[key] = value
+
+    return kv_pairs

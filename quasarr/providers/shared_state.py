@@ -4,6 +4,7 @@
 
 import os
 import time
+from urllib import parse
 
 from quasarr.providers.myjd_api import Myjdapi, TokenExpiredException, RequestTimeoutException, MYJDException, Jddevice
 from quasarr.storage.config import Config
@@ -273,3 +274,23 @@ def download_package(links, title, password, package_id):
     if not downloaded:
         print(f"Failed to start download for {title}: Linkgrabber timeout!")
     return downloaded
+
+
+def extract_valid_hostname(url, shorthand):
+    # Check if both characters from the shorthand appear in the url
+    try:
+        if '://' not in url:
+            url = 'http://' + url
+        result = parse.urlparse(url)
+        domain = result.netloc
+
+        # Check if both characters in the shorthand are in the domain
+        if all(char in domain for char in shorthand):
+            print(f"{domain} matches both characters from {shorthand}. Continuing...")
+            return domain
+        else:
+            print(f"Invalid domain {domain}: Does not contain both characters from shorthand {shorthand}")
+            return None
+    except Exception as e:
+        print(f"Error parsing URL {url}: {e}")
+        return None
