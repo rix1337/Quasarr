@@ -261,7 +261,7 @@ def api(shared_state_dict, shared_state_lock):
         for upload in downloads:
             file_content = upload.file.read()
             root = element_tree.fromstring(file_content)
-            title = root.find(".//file").attrib["title"]
+            title = sax_utils.unescape(root.find(".//file").attrib["title"])
             url = root.find(".//file").attrib["url"]
             size_mb = root.find(".//file").attrib["size_mb"]
             password = root.find(".//file").attrib.get("password")
@@ -392,6 +392,7 @@ def api(shared_state_dict, shared_state_lock):
                         releases = get_search_results(shared_state, request_from, search_string=search_param)
 
                     elif mode == 'tvsearch':
+                        # these are currently ignored, Sonarr handles them anyway
                         season = getattr(request.query, 'season', "")
                         episode = getattr(request.query, 'ep', "")
                         # only plain search string and tvrage id is implemented

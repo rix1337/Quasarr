@@ -137,7 +137,7 @@ def get_device():
 
         if attempts % 10 == 0:
             print(
-                f"WARNUNG: {attempts} aufeinanderfolgende JDownloader Verbindungsfehler. Bitte prüfen und ggf. neu starten!")
+                f"WARNING: {attempts} consecutive JDownloader connection errors. Please check your credentials!")
         time.sleep(3)
 
         if connect_device():

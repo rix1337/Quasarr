@@ -248,35 +248,39 @@ def download_package(shared_state, request_from, title, url, size_mb, password):
     else:
         category = "tv"
 
-    package_id = ""
+    package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
 
     dw = shared_state.values["config"]("Hostnames").get("dw")
     nx = shared_state.values["config"]("Hostnames").get("nx")
 
     if nx and nx.lower() in url.lower():
         links = get_nx_download_links(shared_state, url, title)
-        print(f"Decrypted {len(links)} download links for {title}")
-        package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
-
-        added = shared_state.download_package(links, title, password, package_id)
-
-        if not added:
-            print(f"Failed to add {title} to linkgrabber")
+        if links:
+            print(f"Decrypted {len(links)} download links for {title}")
+            send_discord_message(shared_state, title=title, case="unprotected")
+            added = shared_state.download_package(links, title, password, package_id)
+            if not added:
+                print(f"Failed to add {title} to linkgrabber")
+                package_id = None
+        else:
+            print(f"Found 0 links decrypting {title}")
             package_id = None
 
     elif dw and dw.lower() in url.lower():
         links = get_dw_download_links(shared_state, url, title)
         print(f"CAPTCHA-Solution required for {title} - {shared_state.values['external_address']}/captcha")
         send_discord_message(shared_state, title=title, case="captcha")
-        package_id = f"Quasarr_{category}_{str(hash(title + str(links))).replace('-', '')}"
         blob = json.dumps({"title": title, "links": links, "size_mb": size_mb, "password": password})
         shared_state.values["database"]("protected").update_store(package_id, blob)
 
     elif "filecrypt".lower() in url.lower():
         print(f"CAPTCHA-Solution required for {title} - {shared_state.values['external_address']}/captcha")
         send_discord_message(shared_state, title=title, case="captcha")
-        package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
         blob = json.dumps({"title": title, "links": [[url, "filecrypt"]], "size_mb": size_mb, "password": password})
         shared_state.values["database"]("protected").update_store(package_id, blob)
+
+    else:
+        package_id = None
+        print(f"Could not parse URL for {title} - {url}")
 
     return package_id
