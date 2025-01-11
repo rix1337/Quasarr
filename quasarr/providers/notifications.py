@@ -20,13 +20,22 @@ def send_discord_message(shared_state, title, case):
         return False
 
     # Decide the embed content based on the case
-    if case == "captcha":
+    if case == "unprotected":
+        description = 'No CAPTCHA required. Links were added directly!'
+        fields = None
+    elif case == "solved":
+        description = 'CAPTCHA solved by SponsorsHelper!'
+        fields = None
+    elif case == "deleted":
+        description = 'SponsorsHelper failed to solve the CAPTCHA! Package deleted.'
+        fields = None
+    elif case == "captcha":
         if shared_state.values.get("helper_active"):
-            helper_text = f"Thanks for being a Sponsor! The CAPTCHA will be solved automatically asap."
+            helper_text = f"Just wait - SponsorsHelper will solve this CAPTCHA for you shortly."
         else:
-            helper_text = f'[Become a sponsor and let SponsorsHelper decrypt links for you]({f"https://github.com/users/rix1337/sponsorship"})'
+            helper_text = f'[Become a Sponsor and let SponsorsHelper solve CAPTCHAs for you!]({f"https://github.com/users/rix1337/sponsorship"})'
 
-        description = 'Links are protected. Please solve the CAPTCHA to start downloading.'
+        description = 'Links are protected by a CAPTCHA! Chose how to proceed:'
         fields = [
             {
                 'name': 'Automatically',
@@ -34,20 +43,13 @@ def send_discord_message(shared_state, title, case):
             },
             {
                 'name': 'Manually',
-                'value': f'[Solve the CAPTCHA here yourself]({f"{shared_state.values['external_address']}/captcha"})',
+                'value': f'[Solve the CAPTCHA here to start the download.]({f"{shared_state.values['external_address']}/captcha"})',
             }
         ]
-    elif case == "solved":
-        description = 'Links automatically decrypted by SponsorsHelper!'
-        fields = None
-    elif case == "deleted":
-        description = 'SponsorsHelper failed to solve the CAPTCHA! Package deleted.'
-        fields = None
     else:
-        print(f"Unknown case: {case}")
+        print(f"Unknown notification case: {case}")
         return False
 
-    # Construct the data payload
     data = {
         'username': 'Quasarr',
         'avatar_url': 'https://raw.githubusercontent.com/rix1337/Quasarr/main/Quasarr.png',
@@ -57,11 +59,9 @@ def send_discord_message(shared_state, title, case):
         }]
     }
 
-    # Add fields if required
     if fields:
         data['embeds'][0]['fields'] = fields
 
-    # Send the message to Discord webhook
     response = requests.post(shared_state.values["discord"], data=json.dumps(data),
                              headers={"Content-Type": "application/json"})
     if response.status_code != 204:

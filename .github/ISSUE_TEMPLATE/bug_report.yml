@@ -29,7 +29,7 @@ body:
       value: |
         - Quasarr version:
         - Last working version:
-        - Type: [Docker/Windows-Exe/Manuell]
+        - Type: [Docker/Windows-Exe/Manual]
         - OS: [Docker/Windows/Linux/macOS]
       render: markdown
     validations:
