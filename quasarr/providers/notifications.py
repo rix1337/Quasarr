@@ -35,7 +35,7 @@ def send_discord_message(shared_state, title, case):
         else:
             helper_text = f'[Become a Sponsor and let SponsorsHelper solve CAPTCHAs for you!]({f"https://github.com/users/rix1337/sponsorship"})'
 
-        description = 'Links are protected by a CAPTCHA! Chose how to proceed:'
+        description = 'Links are protected by a CAPTCHA! Choose how to proceed below:'
         fields = [
             {
                 'name': 'Automatically',
@@ -43,7 +43,7 @@ def send_discord_message(shared_state, title, case):
             },
             {
                 'name': 'Manually',
-                'value': f'[Solve the CAPTCHA here to start the download.]({f"{shared_state.values['external_address']}/captcha"})',
+                'value': f'Solve the CAPTCHA [here]({f"{shared_state.values['external_address']}/captcha"}) to start the download immediately.',
             }
         ]
     else:

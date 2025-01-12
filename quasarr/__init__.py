@@ -42,6 +42,8 @@ def run():
   https://github.com/rix1337/Quasarr
 └────────────────────────────────────┘""")
 
+        print("\n===== Startup Info =====")
+
         port = int('8080')
 
         config_path = ""
@@ -143,7 +145,7 @@ def run():
             discord_webhook_pattern = r'^https://discord\.com/api/webhooks/\d+/[\w-]+$'
             if re.match(discord_webhook_pattern, arguments.discord):
                 shared_state.update("webhook", arguments.discord)
-                print(f"Using Discord Webhook URL for CAPTCHA notifications")
+                print(f"Using Discord Webhook URL for CAPTCHA notifications.")
                 discord_url = arguments.discord
             else:
                 print(f"Invalid Discord Webhook URL provided: {arguments.discord}")
@@ -155,15 +157,22 @@ def run():
                                               args=(shared_state_dict, shared_state_lock))
         jdownloader.start()
 
-        print(f'\nQuasarr API now running at "{shared_state.values["internal_address"]}"')
-        print('Use this exact URL as "Newznab Indexer" and "SABnzbd Download Client" in Sonarr/Radarr')
+        print("\n===== API Information =====")
+        print(f"Quasarr API now running at: {shared_state.values['internal_address']}")
+        print("Use this exact URL as 'Newznab Indexer' and 'SABnzbd Download Client' in Sonarr/Radarr")
         print("Leave settings at default and use this API key: 'quasarr'")
+
+        print("\n===== Recommended Services =====")
+        print("- For automated CAPTCHA solutions use SponsorsHelper: https://github.com/users/rix1337/sponsorship")
+        print("- For convenient universal premium downloads use: https://linksnappy.com/?ref=397097")
+
+        print("\n===== Quasarr Info Log =====")
 
         protected = shared_state.get_db("protected").retrieve_all_titles()
         if protected:
             package_count = len(protected)
-            print(f"\nCAPTCHA-Solution required for {package_count} package{'s' if package_count > 1 else ''} at "
-                  f'{shared_state.values["external_address"]}/captcha"!\n')
+            print(f"CAPTCHA-Solution required for {package_count} package{'s' if package_count > 1 else ''} at "
+                  f'{shared_state.values["external_address"]}/captcha!')
 
         try:
             api(shared_state_dict, shared_state_lock)

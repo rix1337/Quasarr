@@ -49,7 +49,7 @@ docker run -d \
 * `INTERNAL_ADDRESS` is required so Radarr/Sonarr can reach Quasarr. **Must** include port!
 * `EXTERNAL_ADDRESS` is optional and used in Discord notifications.
 * `DISCORD` is optional and must be a valid Discord Webhook URL.
-* `HOSTNAMES` is optional and allows skipping the Hostname setting on first launch.
+* `HOSTNAMES` is optional and allows skipping the manual hostname step during setup.
     * Must be a publicly available `HTTP` or `HTTPs` link
     * Must be a raw `.ini` / text file (not html or json)
     * Must contain at least one valid Hostname per line `ab = xyz`
@@ -70,9 +70,6 @@ quasarr
   --hostnames=https://pastebin.com/raw/eX4Mpl3
   ```
 
-* `--discord` must be a valid Discord Webhook URL and is optional.
-* `--external_address` is used in Discord notifications and is optional.
-* `--hostnames` is optional and allows skipping the manual hostname step during setup.
-    * Must be a publicly available `HTTP` or `HTTPs` link
-    * Must be a raw `.ini` / text file (not html or json)
-    * Must contain at least one valid Hostname per line `ab = xyz`
+* `--discord` see `DISCORD`docker variable
+* `--external_address` see `EXTERNAL_ADDRESS`docker variable
+* `--hostnames` see `HOSTNAMES`docker variable
