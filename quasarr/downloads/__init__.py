@@ -268,13 +268,13 @@ def download_package(shared_state, request_from, title, url, size_mb, password):
 
     elif dw and dw.lower() in url.lower():
         links = get_dw_download_links(shared_state, url, title)
-        print(f"CAPTCHA-Solution required for {title} - {shared_state.values['external_address']}/captcha")
+        print(f'CAPTCHA-Solution required for "{title}" at: {shared_state.values['external_address']}/captcha')
         send_discord_message(shared_state, title=title, case="captcha")
         blob = json.dumps({"title": title, "links": links, "size_mb": size_mb, "password": password})
         shared_state.values["database"]("protected").update_store(package_id, blob)
 
     elif "filecrypt".lower() in url.lower():
-        print(f"CAPTCHA-Solution required for {title} - {shared_state.values['external_address']}/captcha")
+        print(f'CAPTCHA-Solution required for "{title}" at: {shared_state.values['external_address']}/captcha')
         send_discord_message(shared_state, title=title, case="captcha")
         blob = json.dumps({"title": title, "links": [[url, "filecrypt"]], "size_mb": size_mb, "password": password})
         shared_state.values["database"]("protected").update_store(package_id, blob)

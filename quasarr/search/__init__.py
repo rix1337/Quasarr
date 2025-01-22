@@ -18,6 +18,11 @@ def get_search_results(shared_state, request_from, search_string="", season="", 
 
     functions = []
     if search_string:
+        if season and episode:
+            search_string = f"{search_string} S{int(season):02}E{int(episode):02}"
+        elif season:
+            search_string = f"{search_string} S{int(season):02}"
+
         if dw:
             functions.append(lambda: dw_search(shared_state, request_from, search_string))
         if fx:

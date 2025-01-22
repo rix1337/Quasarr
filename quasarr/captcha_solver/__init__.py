@@ -219,6 +219,9 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
             except:
                 pass
 
+        if episode_number and not episode:
+            print(f"Missing select for episode number {episode_number}! Expect undesired links in the output.")
+
         links = []
 
         mirrors = []
