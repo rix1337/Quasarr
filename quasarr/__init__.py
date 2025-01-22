@@ -102,9 +102,16 @@ def run():
                 hostnames_link = arguments.hostnames
 
                 if is_valid_url(hostnames_link):
+                    print(f"Extracting hostnames from {hostnames_link}...")
                     allowed_keys = extract_allowed_keys(Config._DEFAULT_CONFIG, 'Hostnames')
+                    max_keys = len(allowed_keys)
+                    shorthand_list = ', '.join(
+                        [f'"{key}"' for key in allowed_keys[:-1]]) + ' and ' + f'"{allowed_keys[-1]}"'
+                    print(f'There are up to {max_keys} hostnames currently supported: {shorthand_list}')
                     data = requests.get(hostnames_link).text
                     results = extract_kv_pairs(data, allowed_keys)
+
+                    extracted_hostnames = 0
 
                     if results:
                         hostnames = Config('Hostnames')
@@ -112,7 +119,13 @@ def run():
                             valid_domain = shared_state.extract_valid_hostname(hostname, shorthand)
                             if valid_domain:
                                 hostnames.save(shorthand, hostname)
-                                print(f'Hostname for "{shorthand}" extracted from {hostnames_link}.')
+                                extracted_hostnames += 1
+                                print(f'Hostname for "{shorthand}" successfully set to "{hostname}"')
+                            else:
+                                print(f'Skipping invalid hostname for "{shorthand}" ("{hostname}")')
+                        if extracted_hostnames == max_keys:
+                            print(f'All {max_keys} hostnames successfully extracted!')
+                            print('You can now remove the hostnames link from the command line / environment variable.')
                     else:
                         print(f'No Hostnames found at "{hostnames_link}". '
                               'Ensure to pass a plain hostnames list, not html or json!')
@@ -121,6 +134,7 @@ def run():
         except Exception as e:
             print(f'Error parsing hostnames link: {e}')
 
+        print("\n===== Configuration =====")
         if not get_clean_hostnames(shared_state):
             hostnames_config(shared_state)
             get_clean_hostnames(shared_state)
@@ -266,5 +280,7 @@ def extract_kv_pairs(input_text, allowed_keys):
         if match:
             key, value = match.groups()
             kv_pairs[key] = value
+        else:
+            print(f"Skipping line because it does not contain any supported hostname: {line}")
 
     return kv_pairs
