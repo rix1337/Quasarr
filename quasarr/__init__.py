@@ -173,8 +173,8 @@ def run():
 
         print("\n===== API Information =====")
         print(f"Quasarr API now running at: {shared_state.values['internal_address']}")
-        print("Use this exact URL as 'Newznab Indexer' and 'SABnzbd Download Client' in Sonarr/Radarr")
-        print("Leave settings at default and use this API key: 'quasarr'")
+        print('Use this exact URL as "Newznab Indexer" and "SABnzbd Download Client" in Sonarr/Radarr')
+        print('Leave settings at default and use this API key: "quasarr"')
 
         print("\n===== Recommended Services =====")
         print("- For automated CAPTCHA solutions use SponsorsHelper: https://github.com/users/rix1337/sponsorship")
@@ -185,7 +185,7 @@ def run():
         protected = shared_state.get_db("protected").retrieve_all_titles()
         if protected:
             package_count = len(protected)
-            print(f"CAPTCHA-Solution required for {package_count} package{'s' if package_count > 1 else ''} at "
+            print(f'CAPTCHA-Solution required for {package_count} package{'s' if package_count > 1 else ''} at: '
                   f'{shared_state.values["external_address"]}/captcha!')
 
         try:
