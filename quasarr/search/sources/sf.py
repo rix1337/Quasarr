@@ -215,7 +215,7 @@ def sf_search(shared_state, request_from, search_string):
                         "link": link,
                         "size": size,
                         "date": published,
-                        "source": series_url
+                        "source": f"{series_url}/{season}" if season else series_url
                     },
                     "type": "protected"
                 })

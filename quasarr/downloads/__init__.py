@@ -6,6 +6,7 @@ import json
 
 from quasarr.downloads.sources.dw import get_dw_download_links
 from quasarr.downloads.sources.nx import get_nx_download_links
+from quasarr.downloads.sources.sf import get_release_url, resolve_sf_redirect
 from quasarr.providers.myjd_api import TokenExpiredException, RequestTimeoutException, MYJDException
 from quasarr.providers.notifications import send_discord_message
 
@@ -252,6 +253,7 @@ def download_package(shared_state, request_from, title, url, size_mb, password):
 
     dw = shared_state.values["config"]("Hostnames").get("dw")
     nx = shared_state.values["config"]("Hostnames").get("nx")
+    sf = shared_state.values["config"]("Hostnames").get("sf")
 
     if nx and nx.lower() in url.lower():
         links = get_nx_download_links(shared_state, url, title)
@@ -272,6 +274,21 @@ def download_package(shared_state, request_from, title, url, size_mb, password):
         send_discord_message(shared_state, title=title, case="captcha")
         blob = json.dumps({"title": title, "links": links, "size_mb": size_mb, "password": password})
         shared_state.values["database"]("protected").update_store(package_id, blob)
+
+    elif sf and sf.lower() in url.lower():
+        if f"https://{sf}/external" in url:
+            url = resolve_sf_redirect(url)
+        elif url.startswith(f"https://{sf}/"):
+            url = get_release_url(url, title, shared_state)
+
+        if url:
+            print(f'CAPTCHA-Solution required for "{title}" at: {shared_state.values['external_address']}/captcha')
+            send_discord_message(shared_state, title=title, case="captcha")
+            blob = json.dumps({"title": title, "links": [[url, "filecrypt"]], "size_mb": size_mb, "password": password})
+            shared_state.values["database"]("protected").update_store(package_id, blob)
+        else:
+            print(f"Failed to get download link from SF for {title} - {url}")
+            package_id = None
 
     elif "filecrypt".lower() in url.lower():
         print(f'CAPTCHA-Solution required for "{title}" at: {shared_state.values['external_address']}/captcha')
