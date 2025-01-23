@@ -247,6 +247,10 @@ def check_ip():
 
 
 def is_valid_url(url):
+    if "https://pastebin.com/raw/eX4Mpl3" in url:
+        print("Example URL detected. Please provide a valid URL found on pastebin or another public site!")
+        return False
+
     parsed = urlparse(url)
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
