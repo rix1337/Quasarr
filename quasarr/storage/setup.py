@@ -123,7 +123,7 @@ def nx_credentials_config(shared_state, domain):
     @app.get('/')
     def nx_credentials_form():
         form_content = f'''
-        <span>Register an account, if you haven't yet at <a href="https://{domain}">{domain}</a>!</span><br><br>
+        <span>If required register account at: <a href="https://{domain}">{domain}</a>!</span><br><br>
         <label for="user">Username</label><br>
         <input type="text" id="user" name="user" placeholder="user" autocorrect="off"><br>
 
@@ -171,7 +171,7 @@ def jdownloader_config(shared_state):
     @app.get('/')
     def hostname_form():
         verify_form_html = f'''
-        <span>Register an account, if you haven't yet at <a href="https://my.jdownloader.org/login.html#register">
+        <span>If required register account at: <a href="https://my.jdownloader.org/login.html#register">
         my.jdownloader.org</a>!</span><br><br>
         
         <form id="verifyForm" action="/api/verify_jdownloader" method="post">

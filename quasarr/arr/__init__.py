@@ -238,7 +238,7 @@ def api(shared_state_dict, shared_state_lock):
                 {shared_state.values["internal_address"]}
             </code>
         </p>
-        <p>Use this exact URL as 'Newznab Indexer' and 'SABnzbd Download Client' in Sonarr/Radarr.<br>
+        <p>Use this exact URL as "Newznab Indexer" and "SABnzbd Download Client" in Sonarr/Radarr.<br>
         Leave settings at default and use this API key: "quasarr"</p>
         {captcha_hint}
         """

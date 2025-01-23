@@ -86,8 +86,8 @@ quasarr
     - Existing settings in JDownloader
     - Existing tools from the *arr ecosystem that integrate directly with Radarr/Sonarr
   - There are no additional hostname integrations planned.
-  - If you still have a feature request, reach out in Discord and explain your use case.
+  - If you still have a feature request, reach out on Discord and explain your use case.
 - Pull requests are welcome.
-  - Always check in on Discord before starting work on a new feature.
+  - Always reach out on Discord before starting work on a new feature.
   - Please follow the existing code style and project structure.
-  - Please provide proof in form of screenshots and test cases when submitting your pull request.
+  - Please provide proof of functionality (screenshots/examples) when submitting your pull request.

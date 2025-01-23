@@ -31,10 +31,6 @@ def update(key, value):
         lock.release()
 
 
-def set_sites():
-    update("sites", ["DW", "FX", "NX"])
-
-
 def set_connection_info(internal_address, external_address, port):
     if internal_address.count(":") < 2:
         internal_address = f"{internal_address}:{port}"
@@ -286,10 +282,10 @@ def extract_valid_hostname(url, shorthand):
 
         # Check if both characters in the shorthand are in the domain
         if all(char in domain for char in shorthand):
-            print(f"{domain} matches both characters from {shorthand}. Continuing...")
+            print(f'"{domain}" matches both characters from "{shorthand}". Continuing...')
             return domain
         else:
-            print(f"Invalid domain {domain}: Does not contain both characters from shorthand {shorthand}")
+            print(f'Invalid domain "{domain}": Does not contain both characters from shorthand "{shorthand}"')
             return None
     except Exception as e:
         print(f"Error parsing URL {url}: {e}")
