@@ -33,7 +33,7 @@ def fx_feed(shared_state):
     try:
         request = requests.get(url, headers=headers).content
         feed = BeautifulSoup(request, "html.parser")
-        items = feed.findAll("article")
+        items = feed.find_all("article")
     except Exception as e:
         print(f"Error loading FX feed: {e}")
         return releases
@@ -44,7 +44,7 @@ def fx_feed(shared_state):
                 article = BeautifulSoup(str(item), "html.parser")
                 try:
                     source = article.find('h2', class_='entry-title').a["href"]
-                    titles = article.findAll("a", href=re.compile("(filecrypt|safe." + fx + ")"))
+                    titles = article.find_all("a", href=re.compile("(filecrypt|safe." + fx + ")"))
                 except:
                     continue
                 i = 0
@@ -54,7 +54,7 @@ def fx_feed(shared_state):
                              replace("/", "").replace(" ", ".").strip())
 
                     try:
-                        size_info = article.findAll("strong", text=re.compile(r"(size|größe)", re.IGNORECASE))[
+                        size_info = article.find_all("strong", text=re.compile(r"(size|größe)", re.IGNORECASE))[
                             i].next.next.text.replace("|", "").strip()
                         size_item = extract_size(size_info)
                         mb = shared_state.convert_to_mb(size_item)
@@ -65,7 +65,7 @@ def fx_feed(shared_state):
                         continue
 
                     try:
-                        dates = article.findAll("time")
+                        dates = article.find_all("time")
                         for date in dates:
                             published = date["datetime"]
                     except:
@@ -114,7 +114,7 @@ def fx_search(shared_state, search_string):
             try:
                 request = requests.get(result_source, headers=headers).content
                 feed = BeautifulSoup(request, "html.parser")
-                items = feed.findAll("article")
+                items = feed.find_all("article")
             except Exception as e:
                 print(f"Error loading FX feed: {e}")
                 return releases
@@ -123,7 +123,7 @@ def fx_search(shared_state, search_string):
                 try:
                     article = BeautifulSoup(str(item), "html.parser")
                     try:
-                        titles = article.findAll("a", href=re.compile("(filecrypt|safe." + fx + ")"))
+                        titles = article.find_all("a", href=re.compile("(filecrypt|safe." + fx + ")"))
                     except:
                         continue
                     i = 0
@@ -132,7 +132,7 @@ def fx_search(shared_state, search_string):
                         title = (title.text.encode("ascii", errors="ignore").decode().
                                  replace("/", "").replace(" ", ".").strip())
                         try:
-                            size_info = article.findAll("strong", text=re.compile(r"(size|größe)", re.IGNORECASE))[
+                            size_info = article.find_all("strong", text=re.compile(r"(size|größe)", re.IGNORECASE))[
                                 i].next.next.text.replace("|", "").strip()
                             size_item = extract_size(size_info)
                             mb = shared_state.convert_to_mb(size_item)
@@ -144,7 +144,7 @@ def fx_search(shared_state, search_string):
                             continue
 
                         try:
-                            dates = article.findAll("time")
+                            dates = article.find_all("time")
                             for date in dates:
                                 published = date["datetime"]
                         except:

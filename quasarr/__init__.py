@@ -89,13 +89,13 @@ def run():
         shared_state.set_files(config_path)
         shared_state.update("config", Config)
         shared_state.update("database", DataBase)
+        supported_hostnames = extract_allowed_keys(Config._DEFAULT_CONFIG, 'Hostnames')
+        shared_state.update("sites", [key.upper() for key in supported_hostnames])
         shared_state.update("user_agent",
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36")
         shared_state.update("helper_active", False)
 
         print(f'Config path: "{config_path}"')
-
-        shared_state.set_sites()
 
         try:
             if arguments.hostnames:
@@ -103,7 +103,7 @@ def run():
 
                 if is_valid_url(hostnames_link):
                     print(f"Extracting hostnames from {hostnames_link}...")
-                    allowed_keys = extract_allowed_keys(Config._DEFAULT_CONFIG, 'Hostnames')
+                    allowed_keys = supported_hostnames
                     max_keys = len(allowed_keys)
                     shorthand_list = ', '.join(
                         [f'"{key}"' for key in allowed_keys[:-1]]) + ' and ' + f'"{allowed_keys[-1]}"'
@@ -159,7 +159,7 @@ def run():
             discord_webhook_pattern = r'^https://discord\.com/api/webhooks/\d+/[\w-]+$'
             if re.match(discord_webhook_pattern, arguments.discord):
                 shared_state.update("webhook", arguments.discord)
-                print(f"Using Discord Webhook URL for CAPTCHA notifications.")
+                print(f"Using Discord Webhook URL for notifications.")
                 discord_url = arguments.discord
             else:
                 print(f"Invalid Discord Webhook URL provided: {arguments.discord}")

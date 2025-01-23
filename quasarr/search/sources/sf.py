@@ -1,0 +1,226 @@
+# -*- coding: utf-8 -*-
+# Quasarr
+# Project by https://github.com/rix1337
+
+import html
+import re
+from base64 import urlsafe_b64encode
+from datetime import datetime, timedelta
+
+import requests
+from bs4 import BeautifulSoup
+
+from quasarr.providers.imdb_metadata import get_localized_title
+
+
+def sf_feed(shared_state, request_from):
+    releases = []
+    sf = shared_state.values["config"]("Hostnames").get("sf")
+    password = sf
+
+    if "Radarr" in request_from:
+        return releases
+
+    headers = {
+        'User-Agent': shared_state.values["user_agent"],
+    }
+
+    date = datetime.now()
+    days_to_cover = 2
+
+    while days_to_cover > 0:
+        days_to_cover -= 1
+        formatted_date = date.strftime('%Y-%m-%d')
+        date -= timedelta(days=1)
+
+        try:
+            response = requests.get(f"https://serienfans.org/updates/{formatted_date}#list", headers)
+        except Exception as e:
+            print(f"Error loading SF feed: {e} for {formatted_date}")
+            return releases
+
+        content = BeautifulSoup(response.text, "html.parser")
+        items = content.find_all("div", {"class": "row"}, style=re.compile("order"))
+
+        for item in items:
+            try:
+                a = item.find("a", href=re.compile("/"))
+                title = a.text
+
+                if title:
+                    try:
+                        source = f"https://{sf}{a['href']}"
+                        mb = 0  # size info is missing here
+                        payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode("utf-8")
+                        link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
+                    except:
+                        continue
+
+                    try:
+                        size = mb * 1024 * 1024
+                    except:
+                        continue
+
+                    try:
+                        published_time = item.find("div", {"class": "datime"}).text
+                        published = f"{formatted_date}T{published_time}:00"
+                    except:
+                        continue
+
+                    releases.append({
+                        "details": {
+                            "title": f"[SF] {title}",
+                            "link": link,
+                            "size": size,
+                            "date": published,
+                            "source": source,
+                        },
+                        "type": "protected"
+                    })
+
+            except Exception as e:
+                print(f"Error parsing SF feed: {e}")
+
+    return releases
+
+
+def extract_season_episode(search_string):
+    match = re.search(r'(.*?)(S\d{1,3})(?:E(\d{1,3}))?', search_string, re.IGNORECASE)
+    if match:
+        title = match.group(1).strip()
+        season = int(match.group(2)[1:])
+        episode = int(match.group(3)) if match.group(3) else None
+        return title, season, episode
+    return search_string, None, None
+
+
+def extract_size(text):
+    match = re.match(r"(\d+(\.\d+)?) ([A-Za-z]+)", text)
+    if match:
+        size = match.group(1)
+        unit = match.group(3)
+        return {"size": size, "sizeunit": unit}
+    else:
+        raise ValueError(f"Invalid size format: {text}")
+
+
+def sf_search(shared_state, request_from, search_string):
+    releases = []
+    sf = shared_state.values["config"]("Hostnames").get("sf")
+    password = sf
+
+    title, season, episode = extract_season_episode(search_string)
+
+    if "Radarr" in request_from:
+        return releases
+
+    if re.match(r'^tt\d{7,8}$', search_string):
+        imdb_id = search_string
+        search_string = get_localized_title(shared_state, imdb_id, 'de')
+        if not search_string:
+            print(f"Could not extract title from IMDb-ID {imdb_id}")
+            return releases
+        search_string = html.unescape(search_string)
+
+    one_hour_ago = (datetime.now() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+
+    url = f'https://{sf}/api/v2/search?q={search_string}&ql=DE'
+    headers = {
+        'User-Agent': shared_state.values["user_agent"],
+    }
+
+    try:
+        response = requests.get(url, headers)
+        feed = response.json()
+    except Exception as e:
+        print(f"Error loading SF search: {e}")
+        return releases
+
+    results = feed['result']
+    for result in results:
+        try:
+            try:
+                if not season:
+                    season = "ALL"
+
+                series_url = f"https://{sf}/{result["url_id"]}"
+                series_page = requests.get(series_url, headers).text
+                season_id = re.findall(r"initSeason\('(.+?)\',", series_page)[0]
+                epoch = str(datetime.now().timestamp()).replace('.', '')[:-3]
+                api_url = 'https://' + sf + '/api/v1/' + season_id + f'/season/{season}?lang=ALL&_=' + epoch
+
+                response = requests.get(api_url)
+                data = response.json()["html"]
+                content = BeautifulSoup(data, "html.parser")
+
+                items = content.find_all("h3")
+            except:
+                continue
+
+            for item in items:
+                try:
+                    details = item.parent.parent.parent
+                    name = details.find("small").text.strip()
+                    size_string = item.find("span", {"class": "morespec"}).text.split("|")[1].strip()
+                    size_item = extract_size(size_string)
+                    source = f'https://{sf}{details.find("a")["href"]}'
+                except:
+                    continue
+
+                mb = shared_state.convert_to_mb(size_item)
+
+                if episode:
+                    mb = 0
+                    try:
+                        if not re.search(r'S\d{1,3}E\d{1,3}', name):
+                            name = re.sub(r'(S\d{1,3})', rf'\1E{episode:02d}', name)
+
+                            item_details = details.find("div", {"class": "list simple"})
+                            details_episodes = item_details.find_all("div", {"class": "row"})
+                            episodes_in_release = 0
+
+                            for row in details_episodes:
+                                main_row = row.find_all("div", {"class": "row"})
+                                links_in_row = row.find_all("a", {"class": "dlb row"})
+                                if main_row and links_in_row:
+                                    episodes_in_release += 1
+                                    if episodes_in_release == episode:
+                                        source = f'https://{sf}{links_in_row[0]["href"]}'
+
+                            if episodes_in_release:
+                                mb = shared_state.convert_to_mb({
+                                    "size": float(size_item["size"]) // episodes_in_release,
+                                    "sizeunit": size_item["sizeunit"]
+                                })
+                    except:
+                        continue
+
+                payload = urlsafe_b64encode(f"{name}|{source}|{mb}|{password}".
+                                            encode("utf-8")).decode("utf-8")
+                link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
+
+                try:
+                    size = mb * 1024 * 1024
+                except:
+                    continue
+
+                try:
+                    published = one_hour_ago  # release date is missing here
+                except:
+                    continue
+
+                releases.append({
+                    "details": {
+                        "title": f"[SF] {name}",
+                        "link": link,
+                        "size": size,
+                        "date": published,
+                        "source": f"{series_url}/{season}" if season else series_url
+                    },
+                    "type": "protected"
+                })
+
+        except Exception as e:
+            print(f"Error parsing SF search: {e}")
+
+    return releases
