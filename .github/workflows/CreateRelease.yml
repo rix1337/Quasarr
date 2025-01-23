@@ -84,7 +84,8 @@ jobs:
             ${{ runner.os }}-pip-
       - name: Install requirements
         run: |
-          pip install twine
+          pip install -U twine
+          pip install -U packaging
       - name: Get Version
         run: echo "version=$(python quasarr/providers/version.py)" >>$GITHUB_OUTPUT
         id: version

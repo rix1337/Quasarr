@@ -2,7 +2,7 @@
 
 <img src="https://raw.githubusercontent.com/rix1337/Quasarr/main/Quasarr.png" data-canonical-src="https://raw.githubusercontent.com/rix1337/Quasarr/main/Quasarr.png" width="64" height="64" />
 
-Quasarr is a Bridge to use JDownloader in Radarr and Sonarr.
+Quasarr connects JDownloader with Radarr and Sonarr. It also decrypts links protected by CAPTCHAs.
 
 [![PyPI version](https://badge.fury.io/py/quasarr.svg)](https://badge.fury.io/py/quasarr)
 [![Discord](https://img.shields.io/discord/1075348594225315891)](https://discord.gg/eM4zA2wWQb)
@@ -73,3 +73,21 @@ quasarr
 * `--discord` see `DISCORD`docker variable
 * `--external_address` see `EXTERNAL_ADDRESS`docker variable
 * `--hostnames` see `HOSTNAMES`docker variable
+
+# Roadmap
+- Assume there are zero known issues unless you find one or more open issues in this repository.
+  - Stability improvements and bugfixes require your help.
+  - Report problems by opening a new issue in this repository.
+  - Issues must be reproducible and include logs / screenshots.
+- There are no new features planned.
+  - The feature set is considered complete.
+  - Most feature requests can be satisfied by:
+    - Existing settings in  Radarr/Sonarr
+    - Existing settings in JDownloader
+    - Existing tools from the *arr ecosystem that integrate directly with Radarr/Sonarr
+  - There are no additional hostname integrations planned.
+  - If you still have a feature request, reach out in Discord and explain your use case.
+- Pull requests are welcome.
+  - Always check in on Discord before starting work on a new feature.
+  - Please follow the existing code style and project structure.
+  - Please provide proof in form of screenshots and test cases when submitting your pull request.
