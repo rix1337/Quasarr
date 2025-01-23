@@ -21,7 +21,7 @@ def get_dw_download_links(shared_state, url, title):
     try:
         request = session.get(url, headers=headers)
         content = BeautifulSoup(request.text, "html.parser")
-        download_buttons = content.findAll("button", {"class": "show_link"})
+        download_buttons = content.find_all("button", {"class": "show_link"})
     except:
         print(f"DW site has been updated. Grabbing download links for {title} not possible!")
         return False

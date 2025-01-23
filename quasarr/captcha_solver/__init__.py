@@ -151,7 +151,7 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
 
     url = output.url
     soup = BeautifulSoup(output.text, 'html.parser')
-    if bool(soup.findAll("input", {"id": "p4assw0rt"})):
+    if bool(soup.find_all("input", {"id": "p4assw0rt"})):
         print(f"Password was wrong or missing. Could not get links for {title}")
         return False
 
@@ -159,7 +159,7 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
     if no_captcha_present:
         print("No CAPTCHA present. Skipping token!")
     else:
-        circle_captcha = bool(soup.findAll("div", {"class": "circle_captcha"}))
+        circle_captcha = bool(soup.find_all("div", {"class": "circle_captcha"}))
         i = 0
         while circle_captcha and i < 3:
             random_x = str(random.randint(100, 200))
@@ -169,14 +169,14 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
                                            'Content-Type': 'application/x-www-form-urlencoded'})
             url = output.url
             soup = BeautifulSoup(output.text, 'html.parser')
-            circle_captcha = bool(soup.findAll("div", {"class": "circle_captcha"}))
+            circle_captcha = bool(soup.find_all("div", {"class": "circle_captcha"}))
 
         output = session.post(url, data="cap_token=" + token, headers={'User-Agent': shared_state.values["user_agent"],
                                                                        'Content-Type': 'application/x-www-form-urlencoded'})
     url = output.url
     soup = BeautifulSoup(output.text, 'html.parser')
 
-    solved = bool(soup.findAll("div", {"class": "container"}))
+    solved = bool(soup.find_all("div", {"class": "container"}))
     if not solved:
         print(f"Filecrypt did did not accept the token! Could not get links for {title}")
         return False

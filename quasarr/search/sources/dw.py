@@ -43,7 +43,7 @@ def dw_get_download_links(shared_state, content, title):
             content = BeautifulSoup(content, "html.parser")
         except:
             content = BeautifulSoup(str(content), "html.parser")
-        download_buttons = content.findAll("button", {"class": "show_link"})
+        download_buttons = content.find_all("button", {"class": "show_link"})
     except:
         print("DW hat die Detail-Seite angepasst. Parsen von Download-Links für " + title + " nicht möglich!")
         return False
@@ -97,7 +97,7 @@ def dw_feed(shared_state, request_from):
     try:
         request = requests.get(url, headers=headers).content
         feed = BeautifulSoup(request, "html.parser")
-        articles = feed.findAll('h4')
+        articles = feed.find_all('h4')
 
         for article in articles:
             try:
@@ -150,7 +150,7 @@ def dw_search(shared_state, request_from, search_string):
     try:
         request = requests.get(url, headers=headers).content
         search = BeautifulSoup(request, "html.parser")
-        results = search.findAll('h4')
+        results = search.find_all('h4')
 
     except Exception as e:
         print(f"Error loading DW search feed: {e}")
