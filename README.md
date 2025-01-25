@@ -29,6 +29,8 @@ Quasarr will confidently handle the rest.
 * Set up Quasarr's URL as 'Newznab Indexer' and 'SABnzbd Download Client' in Sonarr/Radarr.
     * Leave settings at default
     * Use this API key: `quasarr`
+* Ensure that JDownloader does automatically extract archives.
+* Ensure that JDownloader does NOT remove packages after download / extraction!
 * As with other download clients, you must ensure the download path used by JDownloader is accessible to *arr.
 
 # Docker
@@ -85,6 +87,8 @@ quasarr
   - Most feature requests can be satisfied by:
     - Existing settings in  Radarr/Sonarr
     - Existing settings in JDownloader
+      - You can set up link filters for undesired mirrors there.
+      - The same applies to filtering out offline links.
     - Existing tools from the *arr ecosystem that integrate directly with Radarr/Sonarr
   - There are no additional hostname integrations planned.
   - If you still have a feature request, reach out on Discord and explain your use case.
