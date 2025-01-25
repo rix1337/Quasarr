@@ -10,7 +10,8 @@ Quasarr connects JDownloader with Radarr and Sonarr. It also decrypts links prot
 
 Quasarr poses as a Newznab Indexer and a SABnzbd client.
 It will thus never work in parallel with a real NZB indexer and download client set up.
-Torrents are unaffected.
+Torrents are unaffected. To still use NZB indexers, you must set fixed download clients in the advanced indexer
+settings for Radarr/Sonarr.
 
 Quasarr includes a solution to quickly and easily decrypt protected links.
 [Active Sponsors get access to SponsorsHelper to do so automatically.](https://github.com/users/rix1337/sponsorship)
