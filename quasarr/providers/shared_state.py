@@ -44,6 +44,13 @@ def set_files(config_path):
     update("dbfile", os.path.join(config_path, "Quasarr.db"))
 
 
+def generate_api_key():
+    api_key = os.urandom(32).hex()
+    Config('API').save("key", api_key)
+    print(f'API key replaced with: "{api_key}!"')
+    return api_key
+
+
 def connect_to_jd(jd, user, password, device_name):
     try:
         jd.connect(user, password)
@@ -180,6 +187,7 @@ def convert_to_mb(item):
     size_mb = size_b / (1024 * 1024)
     return int(size_mb)
 
+
 def debug():
     if os.getenv('DEBUG'):
         return True
@@ -259,22 +267,12 @@ def download_package(links, title, password, package_id):
             if package_uuid not in package_uuids:
                 package_uuids.append(package_uuid)
 
-    downloaded = False
-
     try:
-        for _ in range(30):
-            collecting = device.linkgrabber.is_collecting()
-            if not collecting:
-                device.linkgrabber.move_to_downloadlist(link_ids, package_uuids)
-                downloaded = True
-            time.sleep(1)
+        device.linkgrabber.move_to_downloadlist(link_ids, package_uuids)
     except Exception as e:
         print(f"Failed to start download for {title}: {e}")
         return False
-
-    if not downloaded:
-        print(f"Failed to start download for {title}: Linkgrabber timeout!")
-    return downloaded
+    return True
 
 
 def extract_valid_hostname(url, shorthand):
