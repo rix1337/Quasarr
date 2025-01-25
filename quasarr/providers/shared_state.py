@@ -180,6 +180,11 @@ def convert_to_mb(item):
     size_mb = size_b / (1024 * 1024)
     return int(size_mb)
 
+def debug():
+    if os.getenv('DEBUG'):
+        return True
+    return False
+
 
 def download_package(links, title, password, package_id):
     device = get_device()

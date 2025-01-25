@@ -104,6 +104,28 @@ def extract_size(text):
         raise ValueError(f"Invalid size format: {text}")
 
 
+def sanitize_string(s):
+    s = s.lower()
+
+    # Remove special characters
+    s = re.sub(r'[^a-zA-Z0-9\s]', '', s)
+
+    # Remove season and episode patterns
+    s = re.sub(r'\bs\d{1,3}(e\d{1,3})?\b', '', s)
+
+    # Remove German and English articles
+    articles = r'\b(?:der|die|das|ein|eine|einer|eines|einem|einen|the|a|an)\b'
+    s = re.sub(articles, '', s)
+
+    # Replace obsolete titles
+    s = s.replace('navy cis', 'ncis')
+
+    # Remove extra whitespace
+    s = ' '.join(s.split())
+
+    return s
+
+
 def sf_search(shared_state, request_from, search_string):
     releases = []
     sf = shared_state.values["config"]("Hostnames").get("sf")
@@ -138,89 +160,98 @@ def sf_search(shared_state, request_from, search_string):
 
     results = feed['result']
     for result in results:
-        try:
+        sanitized_search_string = sanitize_string(search_string)
+        sanitized_title = sanitize_string(result["title"])
+
+        # Use word boundaries to ensure full word/phrase match
+        if re.search(rf'\b{re.escape(sanitized_search_string)}\b', sanitized_title):
+            if shared_state.debug():
+                print(f"Matched search string '{search_string}' with result '{result['title']}'")
             try:
-                if not season:
-                    season = "ALL"
-
-                series_url = f"https://{sf}/{result["url_id"]}"
-                series_page = requests.get(series_url, headers).text
-                season_id = re.findall(r"initSeason\('(.+?)\',", series_page)[0]
-                epoch = str(datetime.now().timestamp()).replace('.', '')[:-3]
-                api_url = 'https://' + sf + '/api/v1/' + season_id + f'/season/{season}?lang=ALL&_=' + epoch
-
-                response = requests.get(api_url)
-                data = response.json()["html"]
-                content = BeautifulSoup(data, "html.parser")
-
-                items = content.find_all("h3")
-            except:
-                continue
-
-            for item in items:
                 try:
-                    details = item.parent.parent.parent
-                    name = details.find("small").text.strip()
-                    size_string = item.find("span", {"class": "morespec"}).text.split("|")[1].strip()
-                    size_item = extract_size(size_string)
-                    source = f'https://{sf}{details.find("a")["href"]}'
+                    if not season:
+                        season = "ALL"
+
+                    series_url = f"https://{sf}/{result["url_id"]}"
+                    series_page = requests.get(series_url, headers).text
+                    season_id = re.findall(r"initSeason\('(.+?)\',", series_page)[0]
+                    epoch = str(datetime.now().timestamp()).replace('.', '')[:-3]
+                    api_url = 'https://' + sf + '/api/v1/' + season_id + f'/season/{season}?lang=ALL&_=' + epoch
+
+                    response = requests.get(api_url)
+                    data = response.json()["html"]
+                    content = BeautifulSoup(data, "html.parser")
+
+                    items = content.find_all("h3")
                 except:
                     continue
 
-                mb = shared_state.convert_to_mb(size_item)
-
-                if episode:
-                    mb = 0
+                for item in items:
                     try:
-                        if not re.search(r'S\d{1,3}E\d{1,3}', name):
-                            name = re.sub(r'(S\d{1,3})', rf'\1E{episode:02d}', name)
-
-                            item_details = details.find("div", {"class": "list simple"})
-                            details_episodes = item_details.find_all("div", {"class": "row"})
-                            episodes_in_release = 0
-
-                            for row in details_episodes:
-                                main_row = row.find_all("div", {"class": "row"})
-                                links_in_row = row.find_all("a", {"class": "dlb row"})
-                                if main_row and links_in_row:
-                                    episodes_in_release += 1
-                                    if episodes_in_release == episode:
-                                        source = f'https://{sf}{links_in_row[0]["href"]}'
-
-                            if episodes_in_release:
-                                mb = shared_state.convert_to_mb({
-                                    "size": float(size_item["size"]) // episodes_in_release,
-                                    "sizeunit": size_item["sizeunit"]
-                                })
+                        details = item.parent.parent.parent
+                        name = details.find("small").text.strip()
+                        size_string = item.find("span", {"class": "morespec"}).text.split("|")[1].strip()
+                        size_item = extract_size(size_string)
+                        source = f'https://{sf}{details.find("a")["href"]}'
                     except:
                         continue
 
-                payload = urlsafe_b64encode(f"{name}|{source}|{mb}|{password}".
-                                            encode("utf-8")).decode("utf-8")
-                link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
+                    mb = shared_state.convert_to_mb(size_item)
 
-                try:
-                    size = mb * 1024 * 1024
-                except:
-                    continue
+                    if episode:
+                        mb = 0
+                        try:
+                            if not re.search(r'S\d{1,3}E\d{1,3}', name):
+                                name = re.sub(r'(S\d{1,3})', rf'\1E{episode:02d}', name)
 
-                try:
-                    published = one_hour_ago  # release date is missing here
-                except:
-                    continue
+                                item_details = details.find("div", {"class": "list simple"})
+                                details_episodes = item_details.find_all("div", {"class": "row"})
+                                episodes_in_release = 0
 
-                releases.append({
-                    "details": {
-                        "title": f"[SF] {name}",
-                        "link": link,
-                        "size": size,
-                        "date": published,
-                        "source": f"{series_url}/{season}" if season else series_url
-                    },
-                    "type": "protected"
-                })
+                                for row in details_episodes:
+                                    main_row = row.find_all("div", {"class": "row"})
+                                    links_in_row = row.find_all("a", {"class": "dlb row"})
+                                    if main_row and links_in_row:
+                                        episodes_in_release += 1
+                                        if episodes_in_release == episode:
+                                            source = f'https://{sf}{links_in_row[0]["href"]}'
 
-        except Exception as e:
-            print(f"Error parsing SF search: {e}")
+                                if episodes_in_release:
+                                    mb = shared_state.convert_to_mb({
+                                        "size": float(size_item["size"]) // episodes_in_release,
+                                        "sizeunit": size_item["sizeunit"]
+                                    })
+                        except:
+                            continue
 
+                    payload = urlsafe_b64encode(f"{name}|{source}|{mb}|{password}".
+                                                encode("utf-8")).decode("utf-8")
+                    link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
+
+                    try:
+                        size = mb * 1024 * 1024
+                    except:
+                        continue
+
+                    try:
+                        published = one_hour_ago  # release date is missing here
+                    except:
+                        continue
+
+                    releases.append({
+                        "details": {
+                            "title": f"[SF] {name}",
+                            "link": link,
+                            "size": size,
+                            "date": published,
+                            "source": f"{series_url}/{season}" if season else series_url
+                        },
+                        "type": "protected"
+                    })
+
+            except Exception as e:
+                print(f"Error parsing SF search: {e}")
+        else:
+            if shared_state.debug():
+                print(f"Search string '{search_string}' does not match result '{result['title']}'")
     return releases
