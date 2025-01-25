@@ -10,7 +10,8 @@ Quasarr connects JDownloader with Radarr and Sonarr. It also decrypts links prot
 
 Quasarr poses as a Newznab Indexer and a SABnzbd client.
 It will thus never work in parallel with a real NZB indexer and download client set up.
-Torrents are unaffected.
+Torrents are unaffected. To still use NZB indexers, you must set fixed download clients in the advanced indexer
+settings for Radarr/Sonarr.
 
 Quasarr includes a solution to quickly and easily decrypt protected links.
 [Active Sponsors get access to SponsorsHelper to do so automatically.](https://github.com/users/rix1337/sponsorship)
@@ -28,6 +29,8 @@ Quasarr will confidently handle the rest.
 * Set up Quasarr's URL as 'Newznab Indexer' and 'SABnzbd Download Client' in Sonarr/Radarr.
     * Leave settings at default
     * Use this API key: `quasarr`
+* Ensure that JDownloader does automatically extract archives.
+* Ensure that JDownloader does NOT remove packages after download / extraction!
 * As with other download clients, you must ensure the download path used by JDownloader is accessible to *arr.
 
 # Docker
@@ -84,6 +87,8 @@ quasarr
   - Most feature requests can be satisfied by:
     - Existing settings in  Radarr/Sonarr
     - Existing settings in JDownloader
+      - You can set up link filters for undesired mirrors there.
+      - The same applies to filtering out offline links.
     - Existing tools from the *arr ecosystem that integrate directly with Radarr/Sonarr
   - There are no additional hostname integrations planned.
   - If you still have a feature request, reach out on Discord and explain your use case.

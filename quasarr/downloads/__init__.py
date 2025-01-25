@@ -13,7 +13,7 @@ from quasarr.providers.notifications import send_discord_message
 
 def get_first_matching_comment(package, package_links):
     package_uuid = package.get("uuid")
-    if package_uuid:
+    if package_uuid and package_links:
         for link in package_links:
             if link.get("packageUUID") == package_uuid:
                 return link.get("comment")
