@@ -107,6 +107,12 @@ def extract_size(text):
 def sanitize_string(s):
     s = s.lower()
 
+    # Umlauts
+    s = re.sub(r'ä', 'ae', s)
+    s = re.sub(r'ö', 'oe', s)
+    s = re.sub(r'ü', 'ue', s)
+    s = re.sub(r'ß', 'ss', s)
+
     # Remove special characters
     s = re.sub(r'[^a-zA-Z0-9\s]', '', s)
 
@@ -124,6 +130,17 @@ def sanitize_string(s):
     s = ' '.join(s.split())
 
     return s
+
+
+def get_recently_searched(shared_state, timeout_seconds):
+    recently_searched = shared_state.values.get("recently_searched", {})
+    threshold = datetime.now() - timedelta(seconds=timeout_seconds)
+    keys_to_remove = [key for key, value in recently_searched.items() if value <= threshold]
+    for key in keys_to_remove:
+        if shared_state.debug():
+            print(f"Removing '/{key}' from recently searched memory...")
+        del recently_searched[key]
+    return recently_searched
 
 
 def sf_search(shared_state, request_from, search_string):
@@ -172,7 +189,20 @@ def sf_search(shared_state, request_from, search_string):
                     if not season:
                         season = "ALL"
 
-                    series_url = f"https://{sf}/{result["url_id"]}"
+                    series_id = result["url_id"]
+                    threshold = 15
+                    recently_searched = get_recently_searched(shared_state, threshold)
+                    if series_id in recently_searched:
+                        if recently_searched[series_id] > datetime.now() - timedelta(seconds=threshold):
+                            if shared_state.debug():
+                                print(
+                                    f"'/{series_id}' - requested within the last {threshold} seconds! Skipping...")
+                            continue
+
+                    recently_searched[series_id] = datetime.now()
+                    shared_state.update("recently_searched", recently_searched)
+
+                    series_url = f"https://{sf}/{series_id}"
                     series_page = requests.get(series_url, headers).text
                     season_id = re.findall(r"initSeason\('(.+?)\',", series_page)[0]
                     epoch = str(datetime.now().timestamp()).replace('.', '')[:-3]
