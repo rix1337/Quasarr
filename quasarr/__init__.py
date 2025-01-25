@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from quasarr.arr import api
+from quasarr.api import get_api
 from quasarr.providers import shared_state, version
 from quasarr.storage.config import Config, get_clean_hostnames
 from quasarr.storage.setup import path_config, hostnames_config, nx_credentials_config, jdownloader_config
@@ -135,9 +135,16 @@ def run():
             print(f'Error parsing hostnames link: {e}')
 
         print("\n===== Configuration =====")
-        if not get_clean_hostnames(shared_state):
+        api_key = Config('API').get('key')
+        if not api_key:
+            api_key = shared_state.generate_api_key()
+
+        hostnames = get_clean_hostnames(shared_state)
+        if not hostnames:
             hostnames_config(shared_state)
-            get_clean_hostnames(shared_state)
+            hostnames = get_clean_hostnames(shared_state)
+        print(f"You have [{len(hostnames)} of {len(Config._DEFAULT_CONFIG['Hostnames'])}] supported hostnames set up")
+        print(f"For efficiency it is recommended to set up as few hostnames as needed.\n")
 
         if Config('Hostnames').get('nx'):
             nx = Config('Hostnames').get('nx')
@@ -174,7 +181,7 @@ def run():
         print("\n===== API Information =====")
         print(f"Quasarr API now running at: {shared_state.values['internal_address']}")
         print('Use this exact URL as "Newznab Indexer" and "SABnzbd Download Client" in Sonarr/Radarr')
-        print('Leave settings at default and use this API key: "quasarr"')
+        print(f'Leave settings at default and use this API key: "{api_key}" (without quotes)')
 
         print("\n===== Recommended Services =====")
         print("- For automated CAPTCHA solutions use SponsorsHelper: https://github.com/users/rix1337/sponsorship")
@@ -189,7 +196,7 @@ def run():
                   f'{shared_state.values["external_address"]}/captcha!')
 
         try:
-            api(shared_state_dict, shared_state_lock)
+            get_api(shared_state_dict, shared_state_lock)
         except KeyboardInterrupt:
             sys.exit(0)
 

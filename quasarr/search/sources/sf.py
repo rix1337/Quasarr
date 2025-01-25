@@ -190,7 +190,7 @@ def sf_search(shared_state, request_from, search_string):
                         season = "ALL"
 
                     series_id = result["url_id"]
-                    threshold = 15
+                    threshold = 30
                     recently_searched = get_recently_searched(shared_state, threshold)
                     if series_id in recently_searched:
                         if recently_searched[series_id] > datetime.now() - timedelta(seconds=threshold):
