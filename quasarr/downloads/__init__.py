@@ -244,9 +244,9 @@ def delete_package(shared_state, package_id):
             break
 
     if deleted:
-        print(f"Deleted package {deleted} with ID {package_id}")
+        print(f'Deleted package "{deleted}" with ID "{package_id}"')
     else:
-        print(f"Failed to delete package {package_id}")
+        print(f'Failed to delete package "{package_id}"')
     return deleted
 
 
