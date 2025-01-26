@@ -224,7 +224,13 @@ def delete_package(shared_state, package_id):
                     shared_state.get_device().linkgrabber.remove_links(ids, [package["uuid"]])
                 elif package["type"] == "downloader":
                     ids = get_links_matching_package_uuid(package, shared_state.get_device().downloads.query_links())
-                    shared_state.get_device().downloads.remove_links(ids, [package["uuid"]])
+                    shared_state.get_device().downloads.cleanup(
+                        "DELETE_ALL",
+                        "REMOVE_LINKS_AND_DELETE_FILES",
+                        "ALL",
+                        ids,
+                        [package["uuid"]]
+                    )
                 else:
                     shared_state.get_db("protected").delete(package_id)
                 if package_location == "queue":
