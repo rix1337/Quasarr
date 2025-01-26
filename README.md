@@ -29,6 +29,7 @@ Quasarr will confidently handle the rest.
 * Set up Quasarr's URL as 'Newznab Indexer' and 'SABnzbd Download Client' in Sonarr/Radarr.
     * Leave settings at default
     * Use this API key: `quasarr`
+    * Under **Activity** / **Queue**, enable **Release Title** in **Options** to see detailed progress info
 * Ensure that JDownloader does automatically extract archives.
 * Ensure that JDownloader does NOT remove packages after download / extraction!
 * As with other download clients, you must ensure the download path used by JDownloader is accessible to *arr.
