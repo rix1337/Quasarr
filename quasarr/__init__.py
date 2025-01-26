@@ -42,6 +42,12 @@ def run():
   https://github.com/rix1337/Quasarr
 └────────────────────────────────────┘""")
 
+        print("\n===== Prerequisites =====")
+        print('For Quasarr to work, you must first set the following values in JDownloader:')
+        print('- "Remove finished downloads" to "never" in "Settings" → "General"')
+        print('- "Delete Archive Files after successful extraction?" to "disabled" in "Settings" → "Archive Extractor"'
+              ' → "Miscellaneous"')
+
         print("\n===== Startup Info =====")
 
         port = int('8080')
