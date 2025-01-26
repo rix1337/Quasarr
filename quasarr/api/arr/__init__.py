@@ -224,5 +224,5 @@ def setup_arr_routes(app):
                 print(f"Error loading search results: {e}")
                 print(traceback.format_exc())
 
-            print(f"Unknown request: {request.query}")
+            print(f"Unknown request: {dict(request.query)}")
             return {"error": True}
