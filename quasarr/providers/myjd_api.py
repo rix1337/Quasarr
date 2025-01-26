@@ -208,6 +208,32 @@ class Downloads:
         self.device = device
         self.url = "/downloadsV2"
 
+    def cleanup(self,
+                action,
+                mode,
+                selection_type,
+                link_ids=[],
+                package_ids=[]):
+        """
+        Clean packages and/or links of the linkgrabber list.
+        Requires at least a package_ids or link_ids list, or both.
+
+        :param package_ids: Package UUID's.
+        :type: list of strings.
+        :param link_ids: link UUID's.
+        :type: list of strings
+        :param action: Action to be done. Actions: DELETE_ALL, DELETE_DISABLED, DELETE_FAILED, DELETE_FINISHED, DELETE_OFFLINE, DELETE_DUPE, DELETE_MODE
+        :type: str:
+        :param mode: Mode to use. Modes: REMOVE_LINKS_AND_DELETE_FILES, REMOVE_LINKS_AND_RECYCLE_FILES, REMOVE_LINKS_ONLY
+        :type: str:
+        :param selection_type: Type of selection to use. Types: SELECTED, UNSELECTED, ALL, NONE
+        :type: str:
+        """
+        params = [link_ids, package_ids]
+        params += [action, mode, selection_type]
+        resp = self.device.action(self.url + "/cleanup", params)
+        return resp
+
     def query_links(self,
                     params=[{
                         "bytesTotal": True,

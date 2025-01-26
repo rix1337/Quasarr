@@ -11,7 +11,6 @@ from quasarr.providers import shared_state
 from quasarr.providers.html_templates import render_button, render_centered_html
 from quasarr.providers.web_server import Server
 from quasarr.storage.config import Config
-import os
 
 
 def get_api(shared_state_dict, shared_state_lock):
@@ -56,7 +55,9 @@ def get_api(shared_state_dict, shared_state_lock):
             </code>
         </p>
         <p>
-            {render_button("Regenerate API key", "secondary", {"onclick": "location.href='/regenerate-api-key'"})}
+            {render_button("Regenerate API key",
+                           "secondary",
+                           {"onclick": "if(confirm('Are you sure you want to regenerate the API key?')) { location.href='/regenerate-api-key'; }"})}
         </p>
         <p>
             {captcha_hint}

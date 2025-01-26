@@ -41,7 +41,7 @@ def create_and_persist_session(shared_state):
                 sessiontoken = response_data.get('user').get('sessiontoken')
                 nx_session.cookies.set('sessiontoken', sessiontoken, domain=nx)
         except ValueError:
-            print("Could not parse response.")
+            print("Could not parse NX response on login.")
             error = True
 
         if error:

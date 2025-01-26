@@ -17,7 +17,7 @@ import requests
 from quasarr.api import get_api
 from quasarr.providers import shared_state, version
 from quasarr.storage.config import Config, get_clean_hostnames
-from quasarr.storage.setup import path_config, hostnames_config, nx_credentials_config, jdownloader_config
+from quasarr.storage.setup import path_config, hostnames_config, hostname_credentials_config, jdownloader_config
 from quasarr.storage.sqlite_database import DataBase
 
 
@@ -99,7 +99,7 @@ def run():
 
         try:
             if arguments.hostnames:
-                hostnames_link = arguments.hostnames
+                hostnames_link = make_raw_pastebin_link(arguments.hostnames)
 
                 if is_valid_url(hostnames_link):
                     print(f"Extracting hostnames from {hostnames_link}...")
@@ -146,12 +146,19 @@ def run():
         print(f"You have [{len(hostnames)} of {len(Config._DEFAULT_CONFIG['Hostnames'])}] supported hostnames set up")
         print(f"For efficiency it is recommended to set up as few hostnames as needed.\n")
 
-        if Config('Hostnames').get('nx'):
-            nx = Config('Hostnames').get('nx')
+        dd = Config('Hostnames').get('dd')
+        if dd:
+            user = Config('DD').get('user')
+            password = Config('DD').get('password')
+            if not user or not password:
+                hostname_credentials_config(shared_state, "DD", dd)
+
+        nx = Config('Hostnames').get('nx')
+        if nx:
             user = Config('NX').get('user')
             password = Config('NX').get('password')
             if not user or not password:
-                nx_credentials_config(shared_state, nx)
+                hostname_credentials_config(shared_state, "NX", nx)
 
         config = Config('JDownloader')
         user = config.get('user')
@@ -251,6 +258,25 @@ def check_ip():
     finally:
         s.close()
     return ip
+
+
+def make_raw_pastebin_link(url):
+    """
+    Takes a Pastebin URL and ensures it is a raw link.
+    If it's not a Pastebin URL, it returns the URL unchanged.
+    """
+    # Check if the URL is a Pastebin link
+    pastebin_pattern = r"https?://(?:www\.)?pastebin\.com/(\w+)"
+    match = re.match(pastebin_pattern, url)
+
+    if match:
+        paste_id = match.group(1)
+        # Construct the raw Pastebin link
+        print(f"The link you provided is not a raw Pastebin link. Attempting to convert it to a raw link from {url}...")
+        return f"https://pastebin.com/raw/{paste_id}"
+    else:
+        # Return the URL unchanged if it's not a Pastebin link
+        return url
 
 
 def is_valid_url(url):

@@ -4,6 +4,7 @@
 
 import json
 
+from quasarr.downloads.sources.dd import get_dd_download_links
 from quasarr.downloads.sources.dw import get_dw_download_links
 from quasarr.downloads.sources.nx import get_nx_download_links
 from quasarr.downloads.sources.sf import get_release_url, resolve_sf_redirect
@@ -223,7 +224,13 @@ def delete_package(shared_state, package_id):
                     shared_state.get_device().linkgrabber.remove_links(ids, [package["uuid"]])
                 elif package["type"] == "downloader":
                     ids = get_links_matching_package_uuid(package, shared_state.get_device().downloads.query_links())
-                    shared_state.get_device().downloads.remove_links(ids, [package["uuid"]])
+                    shared_state.get_device().downloads.cleanup(
+                        "DELETE_ALL",
+                        "REMOVE_LINKS_AND_DELETE_FILES",
+                        "ALL",
+                        ids,
+                        [package["uuid"]]
+                    )
                 else:
                     shared_state.get_db("protected").delete(package_id)
                 if package_location == "queue":
@@ -251,16 +258,30 @@ def download_package(shared_state, request_from, title, url, size_mb, password):
 
     package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
 
+    dd = shared_state.values["config"]("Hostnames").get("dd")
     dw = shared_state.values["config"]("Hostnames").get("dw")
     nx = shared_state.values["config"]("Hostnames").get("nx")
     sf = shared_state.values["config"]("Hostnames").get("sf")
 
-    if nx and nx.lower() in url.lower():
+    if dd and dd.lower() in url.lower():
+        links = get_dd_download_links(shared_state, title)
+        if links:
+            print(f"Decrypted {len(links)} download links for {title}")
+            send_discord_message(shared_state, title=title, case="unprotected")
+            added = shared_state.download_package(shared_state, links, title, password, package_id)
+            if not added:
+                print(f"Failed to add {title} to linkgrabber")
+                package_id = None
+        else:
+            print(f"Found 0 links decrypting {title}")
+            package_id = None
+
+    elif nx and nx.lower() in url.lower():
         links = get_nx_download_links(shared_state, url, title)
         if links:
             print(f"Decrypted {len(links)} download links for {title}")
             send_discord_message(shared_state, title=title, case="unprotected")
-            added = shared_state.download_package(links, title, password, package_id)
+            added = shared_state.download_package(shared_state, links, title, password, package_id)
             if not added:
                 print(f"Failed to add {title} to linkgrabber")
                 package_id = None

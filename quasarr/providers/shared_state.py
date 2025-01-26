@@ -194,7 +194,7 @@ def debug():
     return False
 
 
-def download_package(links, title, password, package_id):
+def download_package(shared_state, links, title, password, package_id):
     device = get_device()
     device.linkgrabber.add_links(params=[
         {
@@ -232,8 +232,7 @@ def download_package(links, title, password, package_id):
                     archive = device.extraction.get_archive_info(link_ids=link_ids, package_ids=package_uuids)
                     if archive:
                         archive_id = archive[0].get("archiveId", None)
-                        if archive_id:
-                            break  # Exit the loop as archive_id is found
+                    break
 
         except Exception as e:
             print(f"An error occurred: {e}")
@@ -245,8 +244,10 @@ def download_package(links, title, password, package_id):
         return False
 
     if not archive_id:
-        print(f"Archive ID for {title} not found! Release may not be compressed.")
+        if shared_state.debug():
+            print(f"Archive ID for {title} not found. No need to modify extraction settings.")
     else:
+        print(f"Modifying archive settings for {title}...")
         settings = {
             "autoExtract": True,
             "removeDownloadLinksAfterExtraction": False,
