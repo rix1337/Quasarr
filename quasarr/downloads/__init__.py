@@ -138,6 +138,8 @@ def get_packages(shared_state):
                     mb_left = (int(details["bytesTotal"]) - int(details["bytesLoaded"])) / (1024 * 1024)
                 except KeyError:
                     mb = mb_left = 0
+                if mb_left == 0 and "[Paused]" in name:
+                    name = name.replace("[Paused]", "[Extracting]")
                 try:
                     package_id = package["comment"]
                     if "movies" in package_id:
