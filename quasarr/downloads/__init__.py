@@ -252,7 +252,7 @@ def delete_package(shared_state, package_id):
     return deleted
 
 
-def download_package(shared_state, request_from, title, url, size_mb, password):
+def download(shared_state, request_from, title, url, size_mb, password):
     if "radarr".lower() in request_from.lower():
         category = "movies"
     else:
@@ -270,7 +270,7 @@ def download_package(shared_state, request_from, title, url, size_mb, password):
         if links:
             print(f"Decrypted {len(links)} download links for {title}")
             send_discord_message(shared_state, title=title, case="unprotected")
-            added = shared_state.download_package(shared_state, links, title, password, package_id)
+            added = shared_state.download_package(links, title, password, package_id)
             if not added:
                 print(f"Failed to add {title} to linkgrabber")
                 package_id = None
@@ -283,7 +283,7 @@ def download_package(shared_state, request_from, title, url, size_mb, password):
         if links:
             print(f"Decrypted {len(links)} download links for {title}")
             send_discord_message(shared_state, title=title, case="unprotected")
-            added = shared_state.download_package(shared_state, links, title, password, package_id)
+            added = shared_state.download_package(links, title, password, package_id)
             if not added:
                 print(f"Failed to add {title} to linkgrabber")
                 package_id = None

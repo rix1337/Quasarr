@@ -50,7 +50,7 @@ def setup_sponsors_helper_routes(app):
             print(f"Received {len(download_links)} download links for {title}")
 
             if download_links:
-                downloaded = shared_state.download_package(shared_state, download_links, title, password, package_id)
+                downloaded = shared_state.download_package(download_links, title, password, package_id)
                 if downloaded:
                     shared_state.get_db("protected").delete(package_id)
                     send_discord_message(shared_state, title=title, case="solved")

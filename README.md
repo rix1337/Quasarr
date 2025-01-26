@@ -26,14 +26,19 @@ Quasarr will confidently handle the rest.
         * Always redact hostnames when creating issues in this repo.
         * Quasarr will become available once at least one suitable hostname is set.
     * Provide your [My-JDownloader-Credentials](https://my.jdownloader.org)
+* Critical Settings in JDownloader (so Downloads don't disappear before processed by Sonarr/Radarr):
+  * Settings >> General >> Download Management
+    * Set **Remove finished downlads"** to **never**
+    * Set **If the file already exists** to **Skip File**
+  * Settings >> Archive Extractor >> Miscellaneus
+    * Set **Delete Archive Files after successful extraction?** to **Delete files from Harddisk**
+    * Disable **Delete Archive download links after successful extraction?**
+    * Set **If file exists...** to **Overwrite the file**
 * Set up Quasarr's URL as 'Newznab Indexer' and 'SABnzbd Download Client' in Sonarr/Radarr.
     * Leave settings at default
     * Use the API key from console output (or copy it from the Quasarr web UI)
-    * Under **Activity** / **Queue**, enable **Release Title** in **Options** to see detailed progress info
-* Ensure that JDownloader does automatically extract archives.
-* Ensure that JDownloader does NOT remove packages after download / extraction!
-* As with other download clients, you must ensure the download path used by JDownloader is accessible to *arr.
-
+    * Activity >> Queue >> Options
+      * Enable **Release Title**
 # Docker
 
 It is highly recommended to run the latest docker image with all optional variables set.
@@ -83,17 +88,15 @@ Use this only in case you cant run the docker image.
   - Stability improvements and bugfixes require your help.
   - Report problems by opening a new issue in this repository.
   - Issues must be reproducible and include logs / screenshots.
-- There are no new features planned.
-  - The feature set is considered complete.
+- The feature set is considered complete. Don't expect feature upgrades.
   - Most feature requests can be satisfied by:
     - Existing settings in  Radarr/Sonarr
     - Existing settings in JDownloader
       - You can set up link filters for undesired mirrors there.
       - The same applies to filtering out offline links.
     - Existing tools from the *arr ecosystem that integrate directly with Radarr/Sonarr
-  - There are no additional hostname integrations planned.
-  - If you still have a feature request, reach out on Discord and explain your use case.
-- Pull requests are welcome.
+  - There are no hostname integrations in active development.
+- Pull requests are welcome. Especially for new and popular hostnames.
   - Always reach out on Discord before starting work on a new feature.
   - Please follow the existing code style and project structure.
   - Please provide proof of functionality (screenshots/examples) when submitting your pull request.

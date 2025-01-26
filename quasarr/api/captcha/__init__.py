@@ -197,7 +197,7 @@ def setup_captcha_routes(app):
 
                 print(f"Decrypted {len(download_links)} download links for {title}")
 
-                shared_state.download_package(shared_state, download_links, title, password, package_id)
+                shared_state.download_package(download_links, title, password, package_id)
 
                 shared_state.get_db("protected").delete(package_id)
 

@@ -40,19 +40,30 @@ def get_api(shared_state_dict, shared_state_lock):
             <p>{render_button(button_text, "primary", {"onclick": "location.href='/captcha'"})}</p>
             '''
 
+        small = 'small style="background-color: #f0f0f0; padding: 5px; border-radius: 3px;"'
+
         info = f"""
         <h1>Quasarr</h1>
         <p>
-            <code id="current-url" style="background-color: #f0f0f0; padding: 5px; border-radius: 3px;">
+            <h2>JDownloader</h2>
+            Ensure that <{small}>Remove finished downloads</small>
+            is set to <{small}>never</small> in <{small}>Settings</small> &rarr;
+            <{small}>General</small> and<br>
+            <{small}>Delete Archive Files after successful extraction?</small>
+            is <{small}>disabled</small> in <{small}>Settings</small> &rarr;
+            <{small}>Archive Extractor</small> &rarr;
+            <{small}>Miscellaneous"</small>
+        </p>
+        <p>
+            <h2>Sonarr/Radarr</h2>
+            Use this exact URL as <{small}>Newznab Indexer</small> and <{small}>SABnzbd Download Client</small>:<br><br>
+            <code style="background-color: #f0f0f0; padding: 5px; border-radius: 3px;">
                 {shared_state.values["internal_address"]}
             </code>
         </p>
-        <p>Use this exact URL as "Newznab Indexer" and "SABnzbd Download Client" in Sonarr/Radarr.<br>
-        Leave settings at default and use this API key:</p>
         <p>
-            <code id="current-url" style="background-color: #f0f0f0; padding: 5px; border-radius: 3px;">
-                {api_key}
-            </code>
+            Leave settings at default and use this API key:<br><br>
+            <{small}>{api_key}</small>
         </p>
         <p>
             {render_button("Regenerate API key",

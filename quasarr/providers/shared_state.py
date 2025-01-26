@@ -51,6 +51,26 @@ def generate_api_key():
     return api_key
 
 
+def extract_valid_hostname(url, shorthand):
+    # Check if both characters from the shorthand appear in the url
+    try:
+        if '://' not in url:
+            url = 'http://' + url
+        result = parse.urlparse(url)
+        domain = result.netloc
+
+        # Check if both characters in the shorthand are in the domain
+        if all(char in domain for char in shorthand):
+            print(f'"{domain}" matches both characters from "{shorthand}". Continuing...')
+            return domain
+        else:
+            print(f'Invalid domain "{domain}": Does not contain both characters from shorthand "{shorthand}"')
+            return None
+    except Exception as e:
+        print(f"Error parsing URL {url}: {e}")
+        return None
+
+
 def connect_to_jd(jd, user, password, device_name):
     try:
         jd.connect(user, password)
@@ -194,7 +214,7 @@ def debug():
     return False
 
 
-def download_package(shared_state, links, title, password, package_id):
+def download_package(links, title, password, package_id):
     device = get_device()
     device.linkgrabber.add_links(params=[
         {
@@ -212,7 +232,6 @@ def download_package(shared_state, links, title, password, package_id):
 
     package_uuids = []
     link_ids = []
-    archive_id = None
 
     for _ in range(30):
         try:
@@ -229,9 +248,6 @@ def download_package(shared_state, links, title, password, package_id):
                             package_uuids.append(package_uuid)
 
                 if link_ids and package_uuids:
-                    archive = device.extraction.get_archive_info(link_ids=link_ids, package_ids=package_uuids)
-                    if archive:
-                        archive_id = archive[0].get("archiveId", None)
                     break
 
         except Exception as e:
@@ -242,20 +258,6 @@ def download_package(shared_state, links, title, password, package_id):
     if not link_ids and not package_uuids:
         print(f"No links or packages found within 30 seconds! Adding {title} package failed.")
         return False
-
-    if not archive_id:
-        if shared_state.debug():
-            print(f"Archive ID for {title} not found. No need to modify extraction settings.")
-    else:
-        print(f"Modifying archive settings for {title}...")
-        settings = {
-            "autoExtract": True,
-            "removeDownloadLinksAfterExtraction": False,
-            "removeFilesAfterExtraction": True
-        }
-        settings_set = device.extraction.set_archive_settings(archive_id, archive_settings=settings)
-        if not settings_set:
-            print(f"Failed to set archive settings for {title}!")
 
     time.sleep(3)
     links = device.linkgrabber.query_links()
@@ -274,23 +276,3 @@ def download_package(shared_state, links, title, password, package_id):
         print(f"Failed to start download for {title}: {e}")
         return False
     return True
-
-
-def extract_valid_hostname(url, shorthand):
-    # Check if both characters from the shorthand appear in the url
-    try:
-        if '://' not in url:
-            url = 'http://' + url
-        result = parse.urlparse(url)
-        domain = result.netloc
-
-        # Check if both characters in the shorthand are in the domain
-        if all(char in domain for char in shorthand):
-            print(f'"{domain}" matches both characters from "{shorthand}". Continuing...')
-            return domain
-        else:
-            print(f'Invalid domain "{domain}": Does not contain both characters from shorthand "{shorthand}"')
-            return None
-    except Exception as e:
-        print(f"Error parsing URL {url}: {e}")
-        return None
