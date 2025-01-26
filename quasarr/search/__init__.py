@@ -4,6 +4,7 @@
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from quasarr.search.sources.dd import dd_search
 from quasarr.search.sources.dw import dw_feed, dw_search
 from quasarr.search.sources.fx import fx_feed, fx_search
 from quasarr.search.sources.nx import nx_feed, nx_search
@@ -13,6 +14,7 @@ from quasarr.search.sources.sf import sf_feed, sf_search
 def get_search_results(shared_state, request_from, search_string="", season="", episode=""):
     results = []
 
+    dd = shared_state.values["config"]("Hostnames").get("dd")
     dw = shared_state.values["config"]("Hostnames").get("dw")
     fx = shared_state.values["config"]("Hostnames").get("fx")
     nx = shared_state.values["config"]("Hostnames").get("nx")
@@ -25,6 +27,8 @@ def get_search_results(shared_state, request_from, search_string="", season="", 
         elif season:
             search_string = f"{search_string} S{int(season):02}"
 
+        if dd:
+            functions.append(lambda: dd_search(shared_state, search_string))
         if dw:
             functions.append(lambda: dw_search(shared_state, request_from, search_string))
         if fx:
@@ -34,6 +38,8 @@ def get_search_results(shared_state, request_from, search_string="", season="", 
         if sf:
             functions.append(lambda: sf_search(shared_state, request_from, search_string))
     else:
+        if dd:
+            functions.append(lambda: dd_search(shared_state))
         if dw:
             functions.append(lambda: dw_feed(shared_state, request_from))
         if fx:

@@ -26,10 +26,15 @@ class Config(object):
             ("device", "str", ""),
         ],
         'Hostnames': [
-            ("fx", "secret", ""),
+            ("dd", "secret", ""),
             ("dw", "secret", ""),
+            ("fx", "secret", ""),
             ("nx", "secret", ""),
             ("sf", "secret", "")
+        ],
+        'DD': [
+            ("user", "secret", ""),
+            ("password", "secret", "")
         ],
         'NX': [
             ("user", "secret", ""),

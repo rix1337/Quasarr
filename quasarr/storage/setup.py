@@ -8,6 +8,8 @@ import sys
 from bottle import Bottle, request
 
 import quasarr
+import quasarr.downloads.sources.dd
+from quasarr.downloads.sources import dd
 from quasarr.downloads.sources import nx
 from quasarr.providers.html_templates import render_button, render_form, render_success, render_fail
 from quasarr.providers.shared_state import extract_valid_hostname
@@ -117,11 +119,13 @@ def hostnames_config(shared_state):
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
 
 
-def nx_credentials_config(shared_state, domain):
+def hostname_credentials_config(shared_state, shorthand, domain):
     app = Bottle()
 
+    shorthand = shorthand.upper()
+
     @app.get('/')
-    def nx_credentials_form():
+    def credentials_form():
         form_content = f'''
         <span>If required register account at: <a href="https://{domain}">{domain}</a>!</span><br><br>
         <label for="user">Username</label><br>
@@ -132,36 +136,42 @@ def nx_credentials_config(shared_state, domain):
         '''
 
         form_html = f'''
-        <form action="/api/nx_credentials" method="post">
+        <form action="/api/credentials/{shorthand}" method="post">
             {form_content}
             {render_button("Save", "primary", {"type": "submit"})}
         </form>
         '''
 
-        return render_form("Set User and Password for NX", form_html)
+        return render_form(f"Set User and Password for {shorthand}", form_html)
 
-    @app.post("/api/nx_credentials")
-    def set_nx_credentials():
+    @app.post("/api/credentials/<sh>")
+    def set_nx_credentials(sh):
         user = request.forms.get('user')
         password = request.forms.get('password')
-        nx_config = Config("NX")
+        config = Config(shorthand)
 
         if user and password:
-            nx_config.save("user", user)
-            nx_config.save("password", password)
+            config.save("user", user)
+            config.save("password", password)
 
-            if nx.create_and_persist_session(shared_state):
-                quasarr.providers.web_server.temp_server_success = True
-                return render_success("NX credentials set successfully", 5)
+            if sh.lower() == "dd":
+                if dd.create_and_persist_session(shared_state):
+                    quasarr.providers.web_server.temp_server_success = True
+                    return render_success(f"{sh} credentials set successfully", 5)
+            if sh.lower() == "nx":
+                if nx.create_and_persist_session(shared_state):
+                    quasarr.providers.web_server.temp_server_success = True
+                    return render_success(f"{sh} credentials set successfully", 5)
 
-        nx_config.save("user", "")
-        nx_config.save("password", "")
+        config.save("user", "")
+        config.save("password", "")
         return render_fail("User and Password wrong or empty!")
 
     print(
-        f'NX credentials required to decrypt download links. '
+        f'"{shorthand.lower()}" credentials required to access download links. '
         f'Starting web server for config at: "{shared_state.values['internal_address']}".')
-    print(f"Please set your credentials there! If needed register here: 'https://{domain}'")
+    print(f"If needed register here: 'https://{domain}'")
+    print("Please set your credentials now, to allow Quasarr to launch!")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
 
 
@@ -275,5 +285,6 @@ def jdownloader_config(shared_state):
     print(
         f'My-JDownloader-Credentials not set. '
         f'Starting web server for config at: "{shared_state.values['internal_address']}".')
-    print(f"Please set your credentials there!  If needed register here: 'https://my.jdownloader.org/login.html#register'")
+    print("If needed register here: 'https://my.jdownloader.org/login.html#register'")
+    print("Please set your credentials now, to allow Quasarr to launch!")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
