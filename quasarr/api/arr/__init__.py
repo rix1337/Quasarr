@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 
 from bottle import abort, request
 
-from quasarr.downloads import download_package, delete_package, get_packages
+from quasarr.downloads import download, delete_package, get_packages
 from quasarr.providers import shared_state
 from quasarr.providers.tvmaze_metadata import get_title_from_tvrage_id
 from quasarr.search import get_search_results
@@ -58,7 +58,7 @@ def setup_arr_routes(app):
 
             request_from = request.headers.get('User-Agent')
 
-            nzo_id = download_package(shared_state, request_from, title, url, size_mb, password)
+            nzo_id = download(shared_state, request_from, title, url, size_mb, password)
             if nzo_id:
                 print(f"{title} added successfully!")
                 nzo_ids.append(nzo_id)
