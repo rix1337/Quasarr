@@ -1,4 +1,4 @@
-# Quasarr
+# 
 
 <img src="https://raw.githubusercontent.com/rix1337/Quasarr/main/Quasarr.png" data-canonical-src="https://raw.githubusercontent.com/rix1337/Quasarr/main/Quasarr.png" width="64" height="64" />
 
@@ -28,7 +28,7 @@ Quasarr will confidently handle the rest.
     * Provide your [My-JDownloader-Credentials](https://my.jdownloader.org)
 * Set up Quasarr's URL as 'Newznab Indexer' and 'SABnzbd Download Client' in Sonarr/Radarr.
     * Leave settings at default
-    * Use this API key: `quasarr`
+    * Use the API key from console output (or copy it from the Quasarr web UI)
     * Under **Activity** / **Queue**, enable **Release Title** in **Options** to see detailed progress info
 * Ensure that JDownloader does automatically extract archives.
 * Ensure that JDownloader does NOT remove packages after download / extraction!
@@ -62,12 +62,12 @@ docker run -d \
 
 Use this only in case you cant run the docker image.
 
-`pip install quasarr`
+`pip install `
 
 * Requires Python 3.12 or later
 
 ```
-quasarr
+
   --port=8080
   --discord=https://discord.com/api/webhooks/1234567890/ABCDEFGHIJKLMN
   --external_address=https://foo.bar/
