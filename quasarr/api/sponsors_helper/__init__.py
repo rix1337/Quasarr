@@ -72,7 +72,7 @@ def setup_sponsors_helper_routes(app):
             deleted = delete_package(shared_state, package_id)
             if deleted:
                 send_discord_message(shared_state, title=deleted, case="deleted")
-                return f"Deleted package {deleted} with id {package_id}"
+                return f'Deleted package "{deleted}" with ID "{package_id}"'
 
         except Exception as e:
             print(f"Error deleting: {e}")
