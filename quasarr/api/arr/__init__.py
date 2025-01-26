@@ -158,7 +158,7 @@ def setup_arr_routes(app):
                                           </category>
                                       </categories>
                                     </caps>'''
-                elif mode in ['movie', 'tvsearch']:
+                elif mode in ['movie', 'tvsearch', 'search']:
                     request_from = request.headers.get('User-Agent')
 
                     releases = []
@@ -169,6 +169,10 @@ def setup_arr_routes(app):
                             if getattr(request.query, 'imdbid', '') else ""
 
                         releases = get_search_results(shared_state, request_from, search_string=search_param)
+
+                    elif mode == 'search':
+                        if shared_state.debug:
+                            print(f'Search in Anime-Order is not supported. Ignoring request: {dict(request.query)}')
 
                     elif mode == 'tvsearch':
                         # these are currently ignored, Sonarr handles them anyway
@@ -188,6 +192,9 @@ def setup_arr_routes(app):
                                                           season=season,
                                                           episode=episode
                                                           )
+                        else:
+                            if shared_state.debug:
+                                print(f'Offset higher than 0 is not supported. Ignoring request: {dict(request.query)}')
 
                     items = ""
                     if not releases:
