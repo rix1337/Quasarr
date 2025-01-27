@@ -85,6 +85,7 @@ def get_packages(shared_state):
             comment = get_first_matching_comment(package, shared_state.get_device().downloads.query_links())
             status = package.get("status", "")
 
+            # todo finished seems to be True sometimes while still extracting on one or all links in package
             if any(ex_str in status.lower() for ex_str in ["entpacken", "extracting"]) and "ok:" not in status.lower():
                 finished = False
             else:
@@ -229,7 +230,7 @@ def delete_package(shared_state, package_id):
                     shared_state.get_device().downloads.cleanup(
                         "DELETE_ALL",
                         "REMOVE_LINKS_AND_DELETE_FILES",
-                        "ALL",
+                        "SELECTED",
                         ids,
                         [package["uuid"]]
                     )
