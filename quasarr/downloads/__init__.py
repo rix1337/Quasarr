@@ -12,13 +12,24 @@ from quasarr.providers.myjd_api import TokenExpiredException, RequestTimeoutExce
 from quasarr.providers.notifications import send_discord_message
 
 
-def get_first_matching_comment(package, package_links):
+def get_links_comment(package, package_links):
     package_uuid = package.get("uuid")
     if package_uuid and package_links:
         for link in package_links:
             if link.get("packageUUID") == package_uuid:
                 return link.get("comment")
     return None
+
+
+def get_links_finished_status(package, package_links):
+    links_in_package = []
+    package_uuid = package.get("uuid")
+    if package_uuid and package_links:
+        for link in package_links:
+            if link.get("packageUUID") == package_uuid:
+                links_in_package.append(link)
+
+    return all(link.get('finished', False) for link in links_in_package)
 
 
 def get_links_matching_package_uuid(package, package_links):
@@ -70,7 +81,7 @@ def get_packages(shared_state):
 
     if linkgrabber_packages:
         for package in linkgrabber_packages:
-            comment = get_first_matching_comment(package, shared_state.get_device().linkgrabber.query_links())
+            comment = get_links_comment(package, shared_state.get_device().linkgrabber.query_links())
             packages.append({
                 "details": package,
                 "location": "queue",
@@ -80,18 +91,15 @@ def get_packages(shared_state):
             })
     try:
         downloader_packages = shared_state.get_device().downloads.query_packages()
+        downloader_links = shared_state.get_device().downloads.query_links()
     except (TokenExpiredException, RequestTimeoutException, MYJDException):
         downloader_packages = []
+        downloader_links = []
 
-    if downloader_packages:
+    if downloader_packages and downloader_links:
         for package in downloader_packages:
-            comment = get_first_matching_comment(package, shared_state.get_device().downloads.query_links())
-            status = package.get("status", "")
-
-            if any(ex_str in status.lower() for ex_str in ["entpacken", "extracting"]) and "ok:" not in status.lower():
-                finished = False
-            else:
-                finished = package.get("finished", False)
+            comment = get_links_comment(package, downloader_links)
+            finished = get_links_finished_status(package, downloader_links)
 
             packages.append({
                 "details": package,
