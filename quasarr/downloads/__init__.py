@@ -29,7 +29,18 @@ def get_links_finished_status(package, package_links):
             if link.get("packageUUID") == package_uuid:
                 links_in_package.append(link)
 
-    return all(link.get('finished', False) for link in links_in_package)
+    all_finished = True
+    eta = None
+
+    for link in links_in_package:
+        if not link.get('finished', False):
+            all_finished = False
+        elif link.get('extractionStatus') != 'SUCCESSFUL':
+            if link.get('extractionStatus') == 'RUNNING' and 'eta' in link:
+                eta = link['eta']
+            all_finished = False
+
+    return {"all_finished": all_finished, "eta": eta}
 
 
 def get_links_matching_package_uuid(package, package_links):
@@ -99,7 +110,10 @@ def get_packages(shared_state):
     if downloader_packages and downloader_links:
         for package in downloader_packages:
             comment = get_links_comment(package, downloader_links)
-            finished = get_links_finished_status(package, downloader_links)
+            all_finished = get_links_finished_status(package, downloader_links)
+            finished = all_finished["all_finished"]
+            if not finished and all_finished["eta"]:
+                package["eta"] = all_finished["eta"]
 
             packages.append({
                 "details": package,
