@@ -174,11 +174,15 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
         output = session.post(url, data="cap_token=" + token, headers={'User-Agent': shared_state.values["user_agent"],
                                                                        'Content-Type': 'application/x-www-form-urlencoded'})
     url = output.url
+
+    if "/404.html" in url:
+        print("Filecrypt returned 404 - current IP is likely banned or the link is offline.")
+
     soup = BeautifulSoup(output.text, 'html.parser')
 
     solved = bool(soup.find_all("div", {"class": "container"}))
     if not solved:
-        print(f"Filecrypt did did not accept the token! Could not get links for {title}")
+        print("Token rejected by Filecrypt! Try another CAPTCHA to proceed...")
         return False
     else:
         season_number = ""

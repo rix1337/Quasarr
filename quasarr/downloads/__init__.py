@@ -32,10 +32,13 @@ def get_links_matching_package_uuid(package, package_links):
 
 
 def format_eta(seconds):
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    seconds = seconds % 60
-    return f"{hours:02}:{minutes:02}:{seconds:02}"
+    if seconds < 0:
+        return "23:59:59"
+    else:
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        seconds = seconds % 60
+        return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 
 def get_packages(shared_state):
@@ -85,7 +88,6 @@ def get_packages(shared_state):
             comment = get_first_matching_comment(package, shared_state.get_device().downloads.query_links())
             status = package.get("status", "")
 
-            # todo finished seems to be True sometimes while still extracting on one or all links in package
             if any(ex_str in status.lower() for ex_str in ["entpacken", "extracting"]) and "ok:" not in status.lower():
                 finished = False
             else:
@@ -108,7 +110,7 @@ def get_packages(shared_state):
         history_index = 0
 
         if package["location"] == "queue":
-            time_left = "2376:00:00"  # yields "99d" to signify that its not running
+            time_left = "23:59:59"
             if package["type"] == "linkgrabber":
                 details = package["details"]
                 name = f"[Linkgrabber] {details["name"]}"

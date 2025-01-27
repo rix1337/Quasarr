@@ -3,6 +3,7 @@
 # Project by https://github.com/rix1337
 
 import os
+import re
 import time
 from urllib import parse
 
@@ -212,6 +213,52 @@ def debug():
     if os.getenv('DEBUG'):
         return True
     return False
+
+
+def sanitize_string(s):
+    s = s.lower()
+
+    # Remove dots
+    s = s.replace('.', ' ')
+
+    # Umlauts
+    s = re.sub(r'ä', 'ae', s)
+    s = re.sub(r'ö', 'oe', s)
+    s = re.sub(r'ü', 'ue', s)
+    s = re.sub(r'ß', 'ss', s)
+
+    # Remove special characters
+    s = re.sub(r'[^a-zA-Z0-9\s]', '', s)
+
+    # Remove season and episode patterns
+    s = re.sub(r'\bs\d{1,3}(e\d{1,3})?\b', '', s)
+
+    # Remove German and English articles
+    articles = r'\b(?:der|die|das|ein|eine|einer|eines|einem|einen|the|a|an)\b'
+    s = re.sub(articles, '', s)
+
+    # Replace obsolete titles
+    s = s.replace('navy cis', 'ncis')
+
+    # Remove extra whitespace
+    s = ' '.join(s.split())
+
+    return s
+
+
+def search_string_in_sanitized_title(search_string, title):
+    sanitized_search_string = sanitize_string(search_string)
+    sanitized_title = sanitize_string(title)
+
+    # Use word boundaries to ensure full word/phrase match
+    if re.search(rf'\b{re.escape(sanitized_search_string)}\b', sanitized_title):
+        if debug():
+            print(f"Matched search string: {sanitized_search_string} with title: {sanitized_title}")
+        return True
+    else:
+        if debug():
+            print(f"Skipping {title} as it doesn't match search string: {sanitized_search_string}")
+        return False
 
 
 def download_package(links, title, password, package_id):

@@ -171,7 +171,7 @@ def setup_arr_routes(app):
                         releases = get_search_results(shared_state, request_from, search_string=search_param)
 
                     elif mode == 'search':
-                        if shared_state.debug:
+                        if shared_state.debug():
                             print(f'Search in Anime-Order is not supported. Ignoring request: {dict(request.query)}')
 
                     elif mode == 'tvsearch':
@@ -193,7 +193,7 @@ def setup_arr_routes(app):
                                                           episode=episode
                                                           )
                         else:
-                            if shared_state.debug:
+                            if shared_state.debug():
                                 print(f'Offset higher than 0 is not supported. Ignoring request: {dict(request.query)}')
 
                     items = ""

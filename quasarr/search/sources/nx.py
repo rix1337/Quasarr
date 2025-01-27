@@ -109,6 +109,9 @@ def nx_search(shared_state, request_from, search_string):
             if item['type'] == valid_type:
                 title = item['name']
                 if title:
+                    if not shared_state.search_string_in_sanitized_title(search_string, title):
+                        continue
+
                     try:
                         source = f"https://{nx}/release/{item['slug']}"
                         mb = shared_state.convert_to_mb(item)

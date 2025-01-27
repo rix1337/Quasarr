@@ -105,7 +105,8 @@ def dw_feed(shared_state, request_from):
                 title = article.a.text.strip()
                 size_info = article.find("span").text.strip()
                 size_item = extract_size(size_info)
-                mb = shared_state.convert_to_mb(size_item) * 1024 * 1024
+                mb = shared_state.convert_to_mb(size_item)
+                size = mb * 1024 * 1024
                 date = article.parent.parent.find("span", {"class": "date updated"}).text.strip()
                 published = convert_to_rss_date(date)
                 payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode(
@@ -119,7 +120,7 @@ def dw_feed(shared_state, request_from):
                 "details": {
                     "title": f"[DW] {title}",
                     "link": link,
-                    "size": mb,
+                    "size": size,
                     "date": published,
                     "source": source
                 },
@@ -159,11 +160,16 @@ def dw_search(shared_state, request_from, search_string):
     if results:
         for result in results:
             try:
-                source = result.a["href"]
                 title = result.a.text.strip()
+
+                if not shared_state.search_string_in_sanitized_title(search_string, title):
+                    continue
+
+                source = result.a["href"]
                 size_info = result.find("span").text.strip()
                 size_item = extract_size(size_info)
-                mb = shared_state.convert_to_mb(size_item) * 1024 * 1024
+                mb = shared_state.convert_to_mb(size_item)
+                size = mb * 1024 * 1024
                 date = result.parent.parent.find("span", {"class": "date updated"}).text.strip()
                 published = convert_to_rss_date(date)
                 payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode(
@@ -177,7 +183,7 @@ def dw_search(shared_state, request_from, search_string):
                 "details": {
                     "title": f"[DW] {title}",
                     "link": link,
-                    "size": mb,
+                    "size": size,
                     "date": published,
                     "source": source
                 },
