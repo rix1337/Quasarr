@@ -52,7 +52,7 @@ def get_api(shared_state_dict, shared_state_lock):
             <{small}>Delete Archive Files after successful extraction?</small>
             is <{small}>disabled</small> in <{small}>Settings</small> &rarr;
             <{small}>Archive Extractor</small> &rarr;
-            <{small}>Miscellaneous"</small>
+            <{small}>Miscellaneous</small>
         </p>
         <p>
             <h2>Sonarr/Radarr</h2>

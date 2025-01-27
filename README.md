@@ -28,7 +28,7 @@ Quasarr will confidently handle the rest.
     * Provide your [My-JDownloader-Credentials](https://my.jdownloader.org)
 * Critical Settings in JDownloader (so Downloads don't disappear before processed by Sonarr/Radarr):
   * Settings >> General >> Download Management
-    * Set **Remove finished downlads"** to **never**
+    * Set **Remove finished downlads** to **never**
     * Set **If the file already exists** to **Skip File**
   * Settings >> Archive Extractor >> Miscellaneus
     * Set **Delete Archive Files after successful extraction?** to **Delete files from Harddisk**
