@@ -104,34 +104,6 @@ def extract_size(text):
         raise ValueError(f"Invalid size format: {text}")
 
 
-def sanitize_string(s):
-    s = s.lower()
-
-    # Umlauts
-    s = re.sub(r'ä', 'ae', s)
-    s = re.sub(r'ö', 'oe', s)
-    s = re.sub(r'ü', 'ue', s)
-    s = re.sub(r'ß', 'ss', s)
-
-    # Remove special characters
-    s = re.sub(r'[^a-zA-Z0-9\s]', '', s)
-
-    # Remove season and episode patterns
-    s = re.sub(r'\bs\d{1,3}(e\d{1,3})?\b', '', s)
-
-    # Remove German and English articles
-    articles = r'\b(?:der|die|das|ein|eine|einer|eines|einem|einen|the|a|an)\b'
-    s = re.sub(articles, '', s)
-
-    # Replace obsolete titles
-    s = s.replace('navy cis', 'ncis')
-
-    # Remove extra whitespace
-    s = ' '.join(s.split())
-
-    return s
-
-
 def get_recently_searched(shared_state, timeout_seconds):
     recently_searched = shared_state.values.get("recently_searched", {})
     threshold = datetime.now() - timedelta(seconds=timeout_seconds)
@@ -177,8 +149,8 @@ def sf_search(shared_state, request_from, search_string):
 
     results = feed['result']
     for result in results:
-        sanitized_search_string = sanitize_string(search_string)
-        sanitized_title = sanitize_string(result["title"])
+        sanitized_search_string = shared_state.sanitize_string(search_string)
+        sanitized_title = shared_state.sanitize_string(result["title"])
 
         # Use word boundaries to ensure full word/phrase match
         if re.search(rf'\b{re.escape(sanitized_search_string)}\b', sanitized_title):
@@ -220,6 +192,10 @@ def sf_search(shared_state, request_from, search_string):
                     try:
                         details = item.parent.parent.parent
                         name = details.find("small").text.strip()
+
+                        if not shared_state.search_string_in_sanitized_title(search_string, name):
+                            continue
+
                         size_string = item.find("span", {"class": "morespec"}).text.split("|")[1].strip()
                         size_item = extract_size(size_string)
                         source = f'https://{sf}{details.find("a")["href"]}'

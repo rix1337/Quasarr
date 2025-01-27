@@ -131,6 +131,10 @@ def fx_search(shared_state, search_string):
                         link = title["href"]
                         title = (title.text.encode("ascii", errors="ignore").decode().
                                  replace("/", "").replace(" ", ".").strip())
+
+                        if not shared_state.search_string_in_sanitized_title(search_string, title):
+                            continue
+
                         try:
                             size_info = article.find_all("strong", text=re.compile(r"(size|größe)", re.IGNORECASE))[
                                 i].next.next.text.replace("|", "").strip()

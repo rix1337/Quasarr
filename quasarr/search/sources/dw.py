@@ -160,8 +160,12 @@ def dw_search(shared_state, request_from, search_string):
     if results:
         for result in results:
             try:
-                source = result.a["href"]
                 title = result.a.text.strip()
+
+                if not shared_state.search_string_in_sanitized_title(search_string, title):
+                    continue
+
+                source = result.a["href"]
                 size_info = result.find("span").text.strip()
                 size_item = extract_size(size_info)
                 mb = shared_state.convert_to_mb(size_item)

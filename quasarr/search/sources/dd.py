@@ -63,8 +63,12 @@ def dd_search(shared_state, search_string=""):
                         create_and_persist_session(shared_state)
                         return []
                 else:
-                    source = f"https://{dd}/"
                     title = release.get("release")
+
+                    if not shared_state.search_string_in_sanitized_title(search_string, title):
+                        continue
+
+                    source = f"https://{dd}/"
                     size_item = extract_size(release.get("size"))
                     mb = shared_state.convert_to_mb(size_item) * 1024 * 1024
                     published = convert_to_rss_date(release.get("when"))
