@@ -113,7 +113,7 @@ def get_dd_download_links(shared_state, search_string):
         for release in release_list:
             try:
                 if release.get("fake"):
-                    if shared_state.debug:
+                    if shared_state.debug():
                         print(f"Release {release.get('release')} marked as fake. Invalidating DD session...")
                         create_and_persist_session(shared_state)
                         return []
@@ -126,7 +126,7 @@ def get_dd_download_links(shared_state, search_string):
                                 link["url"].endswith(".mkv")
                                 for existing_link in filtered_links
                         ):
-                            if shared_state.debug:
+                            if shared_state.debug():
                                 print(f"Skipping duplicate `.mkv` link from {link['hostname']}")
                             continue  # Skip adding duplicate `.mkv` links from the same hostname
                         filtered_links.append(link)

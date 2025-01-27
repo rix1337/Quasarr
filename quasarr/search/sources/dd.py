@@ -58,7 +58,7 @@ def dd_search(shared_state, search_string=""):
         for release in release_list:
             try:
                 if release.get("fake"):
-                    if shared_state.debug:
+                    if shared_state.debug():
                         print(f"Release {release.get('release')} marked as fake. Invalidating DD session...")
                         create_and_persist_session(shared_state)
                         return []
