@@ -184,6 +184,70 @@ def get_devices(user, password):
         return []
 
 
+def set_device_settings():
+    device = get_device()
+
+    settings_to_enforce = {
+        ('org.jdownloader.settings.GeneralSettings', 'null', 'AutoStartDownloadOption'): "ALWAYS",
+        ('org.jdownloader.settings.GeneralSettings', 'null', 'IfFileExistsAction'): "SKIP_FILE",
+        ('org.jdownloader.settings.GeneralSettings', 'null', 'CleanupAfterDownloadAction'): "NEVER",
+        ('org.jdownloader.settings.GraphicalUserInterfaceSettings', 'null', 'DonateButtonState'): "CUSTOM_HIDDEN",
+        ('org.jdownloader.extensions.extraction.ExtractionConfig',
+         "cfg/org.jdownloader.extensions.extraction.ExtractionExtension", 'IfFileExistsAction'): "OVERWRITE_FILE",
+        ('org.jdownloader.extensions.extraction.ExtractionConfig',
+         "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
+         'DeleteArchiveDownloadlinksAfterExtraction'): False,
+    }
+
+    for (namespace, storage, setting), expected_value in settings_to_enforce.items():
+        current_value = device.config.get(namespace, storage, setting)
+        if current_value != expected_value:
+            success = device.config.set(namespace, storage, setting, expected_value)
+            if success:
+                print(f'Updated {setting} in {namespace}/{storage} to "{expected_value}"')
+            else:
+                print(f'Failed to update {setting} in {namespace}/{storage} to "{expected_value}"')
+
+    # Optional Settings to also enforce
+    # - org.jdownloader.extensions.extraction.ExtractionConfig/DeleteArchiveFilesAfterExtractionAction
+    #   -> "DELETE"
+    # - org.jdownloader.extensions.extraction.ExtractionConfig/BlacklistPatterns
+    #   -> ['.*sample/.*', '.*Sample/.*', '.*\\.jpe?g', '.*\\.idx', '.*\\.sub', '.*\\.srt','.*\\.nfo', '.*\\.sfv']
+    # - org.jdownloader.controlling.filter.LinkFilterSettings/FilterList
+    # [{'conditionFilter': {'conditions': [], 'enabled': False, 'matchType': 'IS_TRUE'}, 'created': 0,
+    #              'enabled': True,
+    #              'filenameFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+    #              'filesizeFilter': {'enabled': False, 'from': 0, 'matchType': 'BETWEEN', 'to': 0},
+    #              'filetypeFilter': {'archivesEnabled': False, 'audioFilesEnabled': False, 'customs': None,
+    #                                 'docFilesEnabled': False, 'enabled': False, 'exeFilesEnabled': False,
+    #                                 'hashEnabled': False, 'imagesEnabled': False, 'matchType': 'IS',
+    #                                 'subFilesEnabled': False, 'useRegex': False, 'videoFilesEnabled': False},
+    #              'hosterURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+    #              'matchAlwaysFilter': {'enabled': False}, 'name': 'Quasarr_Block_Offline',
+    #              'onlineStatusFilter': {'enabled': True, 'matchType': 'IS', 'onlineStatus': 'OFFLINE'},
+    #              'originFilter': {'enabled': False, 'matchType': 'IS', 'origins': []},
+    #              'packagenameFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+    #              'pluginStatusFilter': {'enabled': False, 'matchType': 'IS', 'pluginStatus': 'PREMIUM'},
+    #              'sourceURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+    #              'testUrl': ''},
+    #             {'conditionFilter': {'conditions': [], 'enabled': False, 'matchType': 'IS_TRUE'}, 'created': 0,
+    #              'enabled': True,
+    #              'filenameFilter': {'enabled': True, 'matchType': 'CONTAINS', 'regex': '*.sfv', 'useRegex': False},
+    #              'filesizeFilter': {'enabled': False, 'from': 0, 'matchType': 'BETWEEN', 'to': 0},
+    #              'filetypeFilter': {'archivesEnabled': False, 'audioFilesEnabled': False, 'customs': None,
+    #                                 'docFilesEnabled': False, 'enabled': False, 'exeFilesEnabled': False,
+    #                                 'hashEnabled': False, 'imagesEnabled': False, 'matchType': 'IS',
+    #                                 'subFilesEnabled': False, 'useRegex': False, 'videoFilesEnabled': False},
+    #              'hosterURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+    #              'matchAlwaysFilter': {'enabled': False}, 'name': 'Quasarr_Block_SFV',
+    #              'onlineStatusFilter': {'enabled': False, 'matchType': 'IS', 'onlineStatus': 'OFFLINE'},
+    #              'originFilter': {'enabled': False, 'matchType': 'IS', 'origins': []},
+    #              'packagenameFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+    #              'pluginStatusFilter': {'enabled': False, 'matchType': 'IS', 'pluginStatus': 'PREMIUM'},
+    #              'sourceURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+    #              'testUrl': ''}]
+
+
 def get_db(table):
     return DataBase(table)
 

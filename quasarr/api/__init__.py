@@ -30,32 +30,27 @@ def get_api(shared_state_dict, shared_state_lock):
         captcha_hint = ""
         if protected:
             package_count = len(protected)
-            package_text = f"Package{'s' if package_count > 1 else ''} waiting for CAPTCHA"
+            package_text = f"Package{'s' if package_count > 1 else ''} protected by CAPTCHA"
             amount_info = f": {package_count}" if package_count > 1 else ""
-            button_text = f"Solve CAPTCHA{'s' if package_count > 1 else ''} here to decrypt links!"
+            button_text = f"Solve CAPTCHA{'s' if package_count > 1 else ''} manually to decrypt links!"
 
             captcha_hint = f'''
-            <h2>Links protected by CAPTCHA</h2>
+            <h2>Protected links</h2>
             <p>{package_text}{amount_info}</p>
             <p>{render_button(button_text, "primary", {"onclick": "location.href='/captcha'"})}</p>
+            <a href="https://github.com/users/rix1337/sponsorship" target="_blank">
+                For automated CAPTCHA Solutions use SponsorsHelper!
+            </a>
             '''
 
         small = 'small style="background-color: #f0f0f0; padding: 5px; border-radius: 3px;"'
 
         info = f"""
         <h1>Quasarr</h1>
+        {captcha_hint}
+        <h2>Setup Instructions</h2>
         <p>
-            <h2>JDownloader</h2>
-            Ensure that <{small}>Remove finished downloads</small>
-            is set to <{small}>never</small> in <{small}>Settings</small> &rarr;
-            <{small}>General</small> and<br>
-            <{small}>Delete Archive Files after successful extraction?</small>
-            is <{small}>disabled</small> in <{small}>Settings</small> &rarr;
-            <{small}>Archive Extractor</small> &rarr;
-            <{small}>Miscellaneous</small>
-        </p>
-        <p>
-            <h2>Sonarr/Radarr</h2>
+            <h3>Sonarr/Radarr</h3>
             Use this exact URL as <{small}>Newznab Indexer</small> and <{small}>SABnzbd Download Client</small>:<br><br>
             <code style="background-color: #f0f0f0; padding: 5px; border-radius: 3px;">
                 {shared_state.values["internal_address"]}
@@ -70,9 +65,7 @@ def get_api(shared_state_dict, shared_state_lock):
                            "secondary",
                            {"onclick": "if(confirm('Are you sure you want to regenerate the API key?')) { location.href='/regenerate-api-key'; }"})}
         </p>
-        <p>
-            {captcha_hint}
-        </p>
+        <p>Some JDownloader settings will be enforced by Quasarr on startup.</p>
         """
         return render_centered_html(info)
 

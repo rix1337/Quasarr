@@ -60,6 +60,44 @@ def unpad(s):
     return s[0:-s[-1]]
 
 
+class Config:
+    """
+    Class that represents the Config of a Device
+    """
+
+    def __init__(self, device):
+        self.device = device
+        self.url = '/config'
+
+    def get(self, interface_name, storage, key):
+        """
+        :param interfaceName: a valid interface name from List<AdvancedConfigAPIEntry>
+        :type: str:
+        :param storage: 'null' to use default or 'cfg/' + interfaceName
+        :type: str:
+        :param key: a valid key from from List<AdvancedConfigAPIEntry>
+        :type: str:
+        """
+        params = [interface_name, storage, key]
+        resp = self.device.action(self.url + "/get", params)
+        return resp
+
+    def set(self, interface_name, storage, key, value):
+        """
+        :param interfaceName:  a valid interface name from List<AdvancedConfigAPIEntry>
+        :type: str:
+        :param storage: 'null' to use default or 'cfg/' + interfaceName
+        :type: str:
+        :param key: a valid key from from List<AdvancedConfigAPIEntry>
+        :type: str:
+        :param value: a valid value for the given key (see type value from List<AdvancedConfigAPIEntry>)
+        :type: Object:
+        """
+        params = [interface_name, storage, key, value]
+        resp = self.device.action(self.url + "/set", params)
+        return resp
+
+
 class DownloadController:
     """
     Class that represents the downloads-controller of a Device
@@ -300,6 +338,7 @@ class Jddevice:
         self.device_id = device_dict["id"]
         self.device_type = device_dict["type"]
         self.myjd = jd
+        self.config = Config(self)
         self.linkgrabber = Linkgrabber(self)
         self.downloads = Downloads(self)
         self.downloadcontroller = DownloadController(self)

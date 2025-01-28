@@ -20,25 +20,18 @@ Quasarr will confidently handle the rest.
 
 # Instructions
 
-* Follow instructions to :
-    * Set up at least one hostname for Quasarr to use
-        * Chose your own or use the `HOSTNAMES` variable to provide a list of hostnames.
-        * Always redact hostnames when creating issues in this repo.
-        * Quasarr will become available once at least one suitable hostname is set.
-    * Provide your [My-JDownloader-Credentials](https://my.jdownloader.org)
-* Critical Settings in JDownloader (so Downloads don't disappear before processed by Sonarr/Radarr):
-  * Settings >> General >> Download Management
-    * Set **Remove finished downlads** to **never**
-    * Set **If the file already exists** to **Skip File**
-  * Settings >> Archive Extractor >> Miscellaneus
-    * Set **Delete Archive Files after successful extraction?** to **Delete files from Harddisk**
-    * Disable **Delete Archive download links after successful extraction?**
-    * Set **If file exists...** to **Overwrite the file**
+* Set up at least one hostname for Quasarr to use
+    * Chose your own or use the `HOSTNAMES` variable to provide a list of hostnames.
+    * Always redact hostnames when creating issues in this repo.
+    * Quasarr will become available once at least one suitable hostname is set.
+* Provide your [My-JDownloader-Credentials](https://my.jdownloader.org)
 * Set up Quasarr's URL as 'Newznab Indexer' and 'SABnzbd Download Client' in Sonarr/Radarr.
     * Leave settings at default
     * Use the API key from console output (or copy it from the Quasarr web UI)
     * Activity >> Queue >> Options
       * Enable **Release Title**
+* Note: Some JDownloader settings will be enforced by Quasarr on startup.
+
 # Docker
 
 It is highly recommended to run the latest docker image with all optional variables set.

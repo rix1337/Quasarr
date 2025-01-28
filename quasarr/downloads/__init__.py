@@ -21,11 +21,11 @@ def get_links_comment(package, package_links):
     return None
 
 
-def get_links_finished_status(package, package_links):
+def get_links_finished_status(package, all_links):
     links_in_package = []
     package_uuid = package.get("uuid")
-    if package_uuid and package_links:
-        for link in package_links:
+    if package_uuid and all_links:
+        for link in all_links:
             if link.get("packageUUID") == package_uuid:
                 links_in_package.append(link)
 
@@ -33,11 +33,14 @@ def get_links_finished_status(package, package_links):
     eta = None
 
     for link in links_in_package:
-        if not link.get('finished', False):
+        link_finished = link.get('finished', False)
+        link_extraction_status = link.get('extractionStatus', '').lower()
+        link_eta = link.get('eta', 0)
+        if not link_finished:
             all_finished = False
-        elif link.get('extractionStatus') != 'SUCCESSFUL':
-            if link.get('extractionStatus') == 'RUNNING' and 'eta' in link:
-                eta = link['eta']
+        elif link_extraction_status and link_extraction_status != 'successful':
+            if link_extraction_status == 'running' and link_eta > 0:
+                eta = link_eta
             all_finished = False
 
     return {"all_finished": all_finished, "eta": eta}
