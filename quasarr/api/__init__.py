@@ -50,19 +50,6 @@ def get_api(shared_state_dict, shared_state_lock):
         {captcha_hint}
         <h2>Setup Instructions</h2>
         <p>
-            <h3>JDownloader</h3>
-            Ensure that <{small}>Remove finished downloads</small>
-            is set to <{small}>never</small> in <{small}>Settings</small> &rarr;
-            <{small}>General</small> and<br>
-            <{small}>Delete Archive Files after successful extraction?</small>
-            is <{small}>disabled</small> in <{small}>Settings</small> &rarr;
-            <{small}>Archive Extractor</small> &rarr;
-            <{small}>Miscellaneous</small><br>
-            <a href="https://linksnappy.com/?ref=397097" target="_blank">
-                For convenient universal premium downloads follow this link!
-            </a>
-        </p>
-        <p>
             <h3>Sonarr/Radarr</h3>
             Use this exact URL as <{small}>Newznab Indexer</small> and <{small}>SABnzbd Download Client</small>:<br><br>
             <code style="background-color: #f0f0f0; padding: 5px; border-radius: 3px;">
@@ -78,6 +65,7 @@ def get_api(shared_state_dict, shared_state_lock):
                            "secondary",
                            {"onclick": "if(confirm('Are you sure you want to regenerate the API key?')) { location.href='/regenerate-api-key'; }"})}
         </p>
+        <p>Some JDownloader settings will be enforced by Quasarr on startup.</p>
         """
         return render_centered_html(info)
 

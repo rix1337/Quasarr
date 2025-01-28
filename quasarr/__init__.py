@@ -233,9 +233,14 @@ def jdownloader_connection(shared_state_dict, shared_state_lock):
 
     try:
         print(f'Connection to JDownloader successful. Device name: "{shared_state.get_device().name}"')
-    except:
-        print('Error connecting to JDownloader! Stopping Quasarr!')
+    except Exception as e:
+        print(f'Error connecting to JDownloader: {e}! Stopping Quasarr!')
         sys.exit(1)
+
+    try:
+        shared_state.set_device_settings()
+    except Exception as e:
+        print(f"Error checking settings: {e}")
 
 
 class Unbuffered(object):
