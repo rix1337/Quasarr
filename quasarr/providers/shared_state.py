@@ -2,6 +2,7 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+import json
 import os
 import re
 import time
@@ -247,44 +248,86 @@ def set_device_settings():
             status = "Updated" if success else "Failed to update"
             print(f'{status} "{name}" in "{location}" to "{expected_value}".')
 
-    # Optional Settings to also enforce
-    # - org.jdownloader.extensions.extraction.ExtractionConfig/DeleteArchiveFilesAfterExtractionAction
-    #   -> "DELETE"
-    # - org.jdownloader.extensions.extraction.ExtractionConfig/BlacklistPatterns
-    #   -> ['.*sample/.*', '.*Sample/.*', '.*\\.jpe?g', '.*\\.idx', '.*\\.sub', '.*\\.srt','.*\\.nfo', '.*\\.sfv']
-    # - org.jdownloader.controlling.filter.LinkFilterSettings/FilterList
-    # [{'conditionFilter': {'conditions': [], 'enabled': False, 'matchType': 'IS_TRUE'}, 'created': 0,
-    #              'enabled': True,
-    #              'filenameFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
-    #              'filesizeFilter': {'enabled': False, 'from': 0, 'matchType': 'BETWEEN', 'to': 0},
-    #              'filetypeFilter': {'archivesEnabled': False, 'audioFilesEnabled': False, 'customs': None,
-    #                                 'docFilesEnabled': False, 'enabled': False, 'exeFilesEnabled': False,
-    #                                 'hashEnabled': False, 'imagesEnabled': False, 'matchType': 'IS',
-    #                                 'subFilesEnabled': False, 'useRegex': False, 'videoFilesEnabled': False},
-    #              'hosterURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
-    #              'matchAlwaysFilter': {'enabled': False}, 'name': 'Quasarr_Block_Offline',
-    #              'onlineStatusFilter': {'enabled': True, 'matchType': 'IS', 'onlineStatus': 'OFFLINE'},
-    #              'originFilter': {'enabled': False, 'matchType': 'IS', 'origins': []},
-    #              'packagenameFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
-    #              'pluginStatusFilter': {'enabled': False, 'matchType': 'IS', 'pluginStatus': 'PREMIUM'},
-    #              'sourceURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
-    #              'testUrl': ''},
-    #             {'conditionFilter': {'conditions': [], 'enabled': False, 'matchType': 'IS_TRUE'}, 'created': 0,
-    #              'enabled': True,
-    #              'filenameFilter': {'enabled': True, 'matchType': 'CONTAINS', 'regex': '*.sfv', 'useRegex': False},
-    #              'filesizeFilter': {'enabled': False, 'from': 0, 'matchType': 'BETWEEN', 'to': 0},
-    #              'filetypeFilter': {'archivesEnabled': False, 'audioFilesEnabled': False, 'customs': None,
-    #                                 'docFilesEnabled': False, 'enabled': False, 'exeFilesEnabled': False,
-    #                                 'hashEnabled': False, 'imagesEnabled': False, 'matchType': 'IS',
-    #                                 'subFilesEnabled': False, 'useRegex': False, 'videoFilesEnabled': False},
-    #              'hosterURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
-    #              'matchAlwaysFilter': {'enabled': False}, 'name': 'Quasarr_Block_SFV',
-    #              'onlineStatusFilter': {'enabled': False, 'matchType': 'IS', 'onlineStatus': 'OFFLINE'},
-    #              'originFilter': {'enabled': False, 'matchType': 'IS', 'origins': []},
-    #              'packagenameFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
-    #              'pluginStatusFilter': {'enabled': False, 'matchType': 'IS', 'pluginStatus': 'PREMIUM'},
-    #              'sourceURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
-    #              'testUrl': ''}]
+    settings_to_add = [
+        {
+            "namespace": "org.jdownloader.extensions.extraction.ExtractionConfig",
+            "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
+            "setting": "BlacklistPatterns",
+            "items": [
+                '.*sample/.*',
+                '.*Sample/.*',
+                '.*\\.jpe?g',
+                '.*\\.idx',
+                '.*\\.sub',
+                '.*\\.srt',
+                '.*\\.nfo',
+                '.*\\.sfv'
+            ]
+        },
+        {
+            "namespace": "org.jdownloader.controlling.filter.LinkFilterSettings",
+            "storage": "null",
+            "setting": "FilterList",
+            "items": [
+                {
+                    'conditionFilter':
+                        {'conditions': [], 'enabled': False, 'matchType': 'IS_TRUE'},
+                    'created': 0,
+                    'enabled': True,
+                    'filenameFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+                    'filesizeFilter': {'enabled': False, 'from': 0, 'matchType': 'BETWEEN', 'to': 0},
+                    'filetypeFilter': {'archivesEnabled': False, 'audioFilesEnabled': False, 'customs': None,
+                                       'docFilesEnabled': False, 'enabled': False, 'exeFilesEnabled': False,
+                                       'hashEnabled': False, 'imagesEnabled': False, 'matchType': 'IS',
+                                       'subFilesEnabled': False, 'useRegex': False, 'videoFilesEnabled': False},
+                    'hosterURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+                    'matchAlwaysFilter': {'enabled': False}, 'name': 'Quasarr_Block_Offline',
+                    'onlineStatusFilter': {'enabled': True, 'matchType': 'IS', 'onlineStatus': 'OFFLINE'},
+                    'originFilter': {'enabled': False, 'matchType': 'IS', 'origins': []},
+                    'packagenameFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+                    'pluginStatusFilter': {'enabled': False, 'matchType': 'IS', 'pluginStatus': 'PREMIUM'},
+                    'sourceURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+                    'testUrl': ''},
+                {'conditionFilter':
+                     {'conditions': [], 'enabled': False, 'matchType': 'IS_TRUE'}, 'created': 0,
+                 'enabled': True,
+                 'filenameFilter': {'enabled': True, 'matchType': 'CONTAINS', 'regex': '*.sfv',
+                                    'useRegex': False},
+                 'filesizeFilter': {'enabled': False, 'from': 0, 'matchType': 'BETWEEN', 'to': 0},
+                 'filetypeFilter': {'archivesEnabled': False, 'audioFilesEnabled': False, 'customs': None,
+                                    'docFilesEnabled': False, 'enabled': False, 'exeFilesEnabled': False,
+                                    'hashEnabled': False, 'imagesEnabled': False, 'matchType': 'IS',
+                                    'subFilesEnabled': False, 'useRegex': False, 'videoFilesEnabled': False},
+                 'hosterURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+                 'matchAlwaysFilter': {'enabled': False}, 'name': 'Quasarr_Block_SFV',
+                 'onlineStatusFilter': {'enabled': False, 'matchType': 'IS', 'onlineStatus': 'OFFLINE'},
+                 'originFilter': {'enabled': False, 'matchType': 'IS', 'origins': []},
+                 'packagenameFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+                 'pluginStatusFilter': {'enabled': False, 'matchType': 'IS', 'pluginStatus': 'PREMIUM'},
+                 'sourceURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
+                 'testUrl': ''}]
+        },
+    ]
+
+    for setting in settings_to_add:
+        namespace = setting["namespace"]
+        storage = setting["storage"] or "null"
+        name = setting["setting"]
+        items_to_add = setting["items"]
+
+        added_items = 0
+        settings = device.config.get(namespace, storage, name)
+        for item in items_to_add:
+            if item not in settings:
+                settings.append(item)
+                added_items += 1
+
+        if added_items:
+            success = device.config.set(namespace, storage, name, json.dumps(settings))
+
+            location = f"{namespace}/{storage}" if storage != "null" else namespace
+            status = "Added" if success else "Failed to add"
+            print(f'{status} {added_items} items to "{name}" in "{location}".')
 
 
 def get_db(table):
@@ -369,7 +412,7 @@ def download_package(links, title, password, package_id):
     device.linkgrabber.add_links(params=[
         {
             "autostart": False,
-            "links": str(links).replace(" ", ""),
+            "links": json.dumps(links),
             "packageName": title,
             "extractPassword": password,
             "priority": "DEFAULT",

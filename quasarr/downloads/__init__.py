@@ -211,7 +211,8 @@ def get_packages(shared_state):
                     "uuid": package_uuid
                 })
             except:
-                print(f"Parameters missing for {package}")
+                if shared_state.debug():
+                    print(f"Parameters missing for {package}")
             queue_index += 1
         elif package["location"] == "history":
             details = package["details"]
