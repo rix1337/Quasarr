@@ -35,12 +35,13 @@ def get_links_finished_status(package, all_links):
     for link in links_in_package:
         link_finished = link.get('finished', False)
         link_extraction_status = link.get('extractionStatus', '').lower()
-        link_eta = link.get('eta', 0)
+        link_eta = link.get('eta', 0) // 1000
         if not link_finished:
             all_finished = False
         elif link_extraction_status and link_extraction_status != 'successful':
             if link_extraction_status == 'running' and link_eta > 0:
-                eta = link_eta
+                if eta and link_eta > eta or not eta:
+                    eta = link_eta
             all_finished = False
 
     return {"all_finished": all_finished, "eta": eta}
@@ -155,19 +156,21 @@ def get_packages(shared_state):
                 package_uuid = package["uuid"]
             elif package["type"] == "downloader":
                 details = package["details"]
-                name = f"[Downloading] {details["name"]}"
-                try:
-                    if details["eta"]:
-                        time_left = format_eta(int(details["eta"]))
-                except KeyError:
-                    name = name.replace("[Downloading]", "[Paused]")
-                try:
-                    mb = int(details["bytesTotal"]) / (1024 * 1024)
-                    mb_left = (int(details["bytesTotal"]) - int(details["bytesLoaded"])) / (1024 * 1024)
-                except KeyError:
-                    mb = mb_left = 0
-                if mb_left == 0 and "[Paused]" in name:
-                    name = name.replace("[Paused]", "[Extracting]")
+                status = "Downloading"
+                eta = details.get("eta")
+                bytes_total = int(details.get("bytesTotal", 0))
+                bytes_loaded = int(details.get("bytesLoaded", 0))
+
+                if eta is None:
+                    status = "Paused"
+                else:
+                    time_left = format_eta(int(eta))
+                    mb_left = (bytes_total - bytes_loaded) / (1024 * 1024) if bytes_total else 0
+                    if mb_left == 0:
+                        status = "Extracting"
+
+                name = f"[{status}] {details['name']}"
+
                 try:
                     package_id = package["comment"]
                     if "movies" in package_id:
@@ -208,7 +211,8 @@ def get_packages(shared_state):
                     "uuid": package_uuid
                 })
             except:
-                print(f"Parameters missing for {package}")
+                if shared_state.debug():
+                    print(f"Parameters missing for {package}")
             queue_index += 1
         elif package["location"] == "history":
             details = package["details"]
