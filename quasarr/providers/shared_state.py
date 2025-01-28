@@ -187,26 +187,65 @@ def get_devices(user, password):
 def set_device_settings():
     device = get_device()
 
-    settings_to_enforce = {
-        ('org.jdownloader.settings.GeneralSettings', 'null', 'AutoStartDownloadOption'): "ALWAYS",
-        ('org.jdownloader.settings.GeneralSettings', 'null', 'IfFileExistsAction'): "SKIP_FILE",
-        ('org.jdownloader.settings.GeneralSettings', 'null', 'CleanupAfterDownloadAction'): "NEVER",
-        ('org.jdownloader.settings.GraphicalUserInterfaceSettings', 'null', 'DonateButtonState'): "CUSTOM_HIDDEN",
-        ('org.jdownloader.extensions.extraction.ExtractionConfig',
-         "cfg/org.jdownloader.extensions.extraction.ExtractionExtension", 'IfFileExistsAction'): "OVERWRITE_FILE",
-        ('org.jdownloader.extensions.extraction.ExtractionConfig',
-         "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
-         'DeleteArchiveDownloadlinksAfterExtraction'): False,
-    }
+    settings_to_enforce = [
+        {
+            "namespace": "org.jdownloader.settings.GeneralSettings",
+            "storage": None,
+            "setting": "AutoStartDownloadOption",
+            "expected_value": "ALWAYS",
+        },
+        {
+            "namespace": "org.jdownloader.settings.GeneralSettings",
+            "storage": None,
+            "setting": "IfFileExistsAction",
+            "expected_value": "SKIP_FILE",
+        },
+        {
+            "namespace": "org.jdownloader.settings.GeneralSettings",
+            "storage": None,
+            "setting": "CleanupAfterDownloadAction",
+            "expected_value": "NEVER",
+        },
+        {
+            "namespace": "org.jdownloader.settings.GraphicalUserInterfaceSettings",
+            "storage": None,
+            "setting": "BannerEnabled",
+            "expected_value": False,
+        },
+        {
+            "namespace": "org.jdownloader.settings.GraphicalUserInterfaceSettings",
+            "storage": None,
+            "setting": "DonateButtonState",
+            "expected_value": "CUSTOM_HIDDEN",
+        },
+        {
+            "namespace": "org.jdownloader.extensions.extraction.ExtractionConfig",
+            "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
+            "setting": "IfFileExistsAction",
+            "expected_value": "OVERWRITE_FILE",
+        },
+        {
+            "namespace": "org.jdownloader.extensions.extraction.ExtractionConfig",
+            "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
+            "setting": "DeleteArchiveDownloadlinksAfterExtraction",
+            "expected_value": False,
+        },
+    ]
 
-    for (namespace, storage, setting), expected_value in settings_to_enforce.items():
-        current_value = device.config.get(namespace, storage, setting)
+    for setting in settings_to_enforce:
+        namespace = setting["namespace"]
+        storage = setting["storage"] or "null"
+        name = setting["setting"]
+        expected_value = setting["expected_value"]
+
+        current_value = device.config.get(namespace, storage, name)
+
         if current_value != expected_value:
-            success = device.config.set(namespace, storage, setting, expected_value)
-            if success:
-                print(f'Updated {setting} in {namespace}/{storage} to "{expected_value}"')
-            else:
-                print(f'Failed to update {setting} in {namespace}/{storage} to "{expected_value}"')
+            success = device.config.set(namespace, storage, name, expected_value)
+
+            location = f"{namespace}/{storage}" if storage != "null" else namespace
+            status = "Updated" if success else "Failed to update"
+            print(f'{status} "{name}" in "{location}" to "{expected_value}".')
 
     # Optional Settings to also enforce
     # - org.jdownloader.extensions.extraction.ExtractionConfig/DeleteArchiveFilesAfterExtractionAction

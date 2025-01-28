@@ -25,12 +25,14 @@ Quasarr will confidently handle the rest.
     * Always redact hostnames when creating issues in this repo.
     * Quasarr will become available once at least one suitable hostname is set.
 * Provide your [My-JDownloader-Credentials](https://my.jdownloader.org)
-* Set up Quasarr's URL as 'Newznab Indexer' and 'SABnzbd Download Client' in Sonarr/Radarr.
-    * Leave settings at default
+* Set up Quasarr as `Newznab Indexer` and `SABnzbd Download Client` in Sonarr/Radarr
     * Use the API key from console output (or copy it from the Quasarr web UI)
-    * Activity >> Queue >> Options
-      * Enable **Release Title**
-* Note: Some JDownloader settings will be enforced by Quasarr on startup.
+    * Leave all other settings at default!
+* To see download status messages
+  * Open `Activity` → `Queue` → `Options` in Sonarr/Radarr
+  * Enable `Release Title`
+* To prevent downloads from being removed before processed by Sonarr/Radarr, Quasarr automatically changes some
+  JDownloader settings at launch.
 
 # Docker
 
