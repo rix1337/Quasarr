@@ -135,6 +135,8 @@ def get_packages(shared_state):
         queue_index = 0
         history_index = 0
 
+        package_id = None
+
         if package["location"] == "queue":
             time_left = "23:59:59"
             if package["type"] == "linkgrabber":
@@ -161,11 +163,13 @@ def get_packages(shared_state):
                 bytes_total = int(details.get("bytesTotal", 0))
                 bytes_loaded = int(details.get("bytesLoaded", 0))
 
+                mb = bytes_total / (1024 * 1024)
+                mb_left = (bytes_total - bytes_loaded) / (1024 * 1024) if bytes_total else 0
+
                 if eta is None:
                     status = "Paused"
                 else:
                     time_left = format_eta(int(eta))
-                    mb_left = (bytes_total - bytes_loaded) / (1024 * 1024) if bytes_total else 0
                     if mb_left == 0:
                         status = "Extracting"
 
@@ -197,19 +201,20 @@ def get_packages(shared_state):
                 package_uuid = None
 
             try:
-                downloads["queue"].append({
-                    "index": queue_index,
-                    "nzo_id": package_id,
-                    "priority": "Normal",
-                    "filename": name,
-                    "cat": category,
-                    "mbleft": int(mb_left),
-                    "mb": int(mb),
-                    "status": "Downloading",
-                    "timeleft": time_left,
-                    "type": package_type,
-                    "uuid": package_uuid
-                })
+                if package_id:
+                    downloads["queue"].append({
+                        "index": queue_index,
+                        "nzo_id": package_id,
+                        "priority": "Normal",
+                        "filename": name,
+                        "cat": category,
+                        "mbleft": int(mb_left),
+                        "mb": int(mb),
+                        "status": "Downloading",
+                        "timeleft": time_left,
+                        "type": package_type,
+                        "uuid": package_uuid
+                    })
             except:
                 if shared_state.debug():
                     print(f"Parameters missing for {package}")
