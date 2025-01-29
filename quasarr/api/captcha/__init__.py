@@ -197,9 +197,14 @@ def setup_captcha_routes(app):
 
                 print(f"Decrypted {len(download_links)} download links for {title}")
 
-                shared_state.download_package(download_links, title, password, package_id)
-
-                shared_state.get_db("protected").delete(package_id)
+                if download_links:
+                    downloaded = shared_state.download_package(download_links, title, password, package_id)
+                    if downloaded:
+                        shared_state.get_db("protected").delete(package_id)
+                    else:
+                        raise RuntimeError("Submitting Download to JDownloader failed")
+                else:
+                    raise ValueError("No download links found")
 
         except Exception as e:
             print(f"Error decrypting: {e}")

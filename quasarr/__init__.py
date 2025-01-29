@@ -42,11 +42,9 @@ def run():
   https://github.com/rix1337/Quasarr
 └────────────────────────────────────┘""")
 
-        print("\n===== Prerequisites =====")
-        print('For Quasarr to work, you must first set the following values in JDownloader:')
-        print('- "Remove finished downloads" to "never" in "Settings" → "General"')
-        print('- "Delete Archive Files after successful extraction?" to "disabled" in "Settings" → "Archive Extractor"'
-              ' → "Miscellaneous"')
+        print("\n===== Recommended Services =====")
+        print("- For automated CAPTCHA solutions use SponsorsHelper: https://github.com/users/rix1337/sponsorship")
+        print("- For convenient universal premium downloads use: https://linksnappy.com/?ref=397097")
 
         print("\n===== Startup Info =====")
 
@@ -195,10 +193,6 @@ def run():
         print(f"Quasarr API now running at: {shared_state.values['internal_address']}")
         print('Use this exact URL as "Newznab Indexer" and "SABnzbd Download Client" in Sonarr/Radarr')
         print(f'Leave settings at default and use this API key: "{api_key}" (without quotes)')
-
-        print("\n===== Recommended Services =====")
-        print("- For automated CAPTCHA solutions use SponsorsHelper: https://github.com/users/rix1337/sponsorship")
-        print("- For convenient universal premium downloads use: https://linksnappy.com/?ref=397097")
 
         print("\n===== Quasarr Info Log =====")
 

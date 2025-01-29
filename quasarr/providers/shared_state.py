@@ -222,6 +222,12 @@ def set_device_settings():
         {
             "namespace": "org.jdownloader.extensions.extraction.ExtractionConfig",
             "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
+            "setting": "DeleteArchiveFilesAfterExtractionAction",
+            "expected_value": "NULL",
+        },
+        {
+            "namespace": "org.jdownloader.extensions.extraction.ExtractionConfig",
+            "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
             "setting": "IfFileExistsAction",
             "expected_value": "OVERWRITE_FILE",
         },
@@ -239,9 +245,9 @@ def set_device_settings():
         name = setting["setting"]
         expected_value = setting["expected_value"]
 
-        current_value = device.config.get(namespace, storage, name)
+        settings = device.config.get(namespace, storage, name)
 
-        if current_value != expected_value:
+        if settings != expected_value:
             success = device.config.set(namespace, storage, name, expected_value)
 
             location = f"{namespace}/{storage}" if storage != "null" else namespace
@@ -253,7 +259,7 @@ def set_device_settings():
             "namespace": "org.jdownloader.extensions.extraction.ExtractionConfig",
             "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
             "setting": "BlacklistPatterns",
-            "items": [
+            "expected_values": [
                 '.*sample/.*',
                 '.*Sample/.*',
                 '.*\\.jpe?g',
@@ -268,7 +274,7 @@ def set_device_settings():
             "namespace": "org.jdownloader.controlling.filter.LinkFilterSettings",
             "storage": "null",
             "setting": "FilterList",
-            "items": [
+            "expected_values": [
                 {
                     'conditionFilter':
                         {'conditions': [], 'enabled': False, 'matchType': 'IS_TRUE'},
@@ -313,11 +319,11 @@ def set_device_settings():
         namespace = setting["namespace"]
         storage = setting["storage"] or "null"
         name = setting["setting"]
-        items_to_add = setting["items"]
+        expected_values = setting["expected_values"]
 
         added_items = 0
         settings = device.config.get(namespace, storage, name)
-        for item in items_to_add:
+        for item in expected_values:
             if item not in settings:
                 settings.append(item)
                 added_items += 1
@@ -409,9 +415,9 @@ def search_string_in_sanitized_title(search_string, title):
 
 def download_package(links, title, password, package_id):
     device = get_device()
-    device.linkgrabber.add_links(params=[
+    downloaded = device.linkgrabber.add_links(params=[
         {
-            "autostart": False,
+            "autostart": True,
             "links": json.dumps(links),
             "packageName": title,
             "extractPassword": password,
@@ -422,50 +428,4 @@ def download_package(links, title, password, package_id):
             "overwritePackagizerRules": True
         }
     ])
-
-    package_uuids = []
-    link_ids = []
-
-    for _ in range(30):
-        try:
-            collecting = device.linkgrabber.is_collecting()
-            if not collecting:
-                links = device.linkgrabber.query_links()
-                for link in links:
-                    if link["comment"] == package_id:
-                        link_id = link["uuid"]
-                        if link_id not in link_ids:
-                            link_ids.append(link_id)
-                        package_uuid = link["packageUUID"]
-                        if package_uuid not in package_uuids:
-                            package_uuids.append(package_uuid)
-
-                if link_ids and package_uuids:
-                    break
-
-        except Exception as e:
-            print(f"An error occurred: {e}")
-
-        time.sleep(1)
-
-    if not link_ids and not package_uuids:
-        print(f"No links or packages found within 30 seconds! Adding {title} package failed.")
-        return False
-
-    time.sleep(3)
-    links = device.linkgrabber.query_links()
-    for link in links:
-        if link["comment"] == package_id:
-            link_id = link["uuid"]
-            if link_id not in link_ids:
-                link_ids.append(link_id)
-            package_uuid = link["packageUUID"]
-            if package_uuid not in package_uuids:
-                package_uuids.append(package_uuid)
-
-    try:
-        device.linkgrabber.move_to_downloadlist(link_ids, package_uuids)
-    except Exception as e:
-        print(f"Failed to start download for {title}: {e}")
-        return False
-    return True
+    return downloaded
