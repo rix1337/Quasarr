@@ -222,6 +222,12 @@ def set_device_settings():
         {
             "namespace": "org.jdownloader.extensions.extraction.ExtractionConfig",
             "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
+            "setting": "DeleteArchiveFilesAfterExtractionAction",
+            "expected_value": "NULL",
+        },
+        {
+            "namespace": "org.jdownloader.extensions.extraction.ExtractionConfig",
+            "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
             "setting": "IfFileExistsAction",
             "expected_value": "OVERWRITE_FILE",
         },
@@ -239,9 +245,9 @@ def set_device_settings():
         name = setting["setting"]
         expected_value = setting["expected_value"]
 
-        current_value = device.config.get(namespace, storage, name)
+        settings = device.config.get(namespace, storage, name)
 
-        if current_value != expected_value:
+        if settings != expected_value:
             success = device.config.set(namespace, storage, name, expected_value)
 
             location = f"{namespace}/{storage}" if storage != "null" else namespace
@@ -253,7 +259,7 @@ def set_device_settings():
             "namespace": "org.jdownloader.extensions.extraction.ExtractionConfig",
             "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
             "setting": "BlacklistPatterns",
-            "items": [
+            "expected_values": [
                 '.*sample/.*',
                 '.*Sample/.*',
                 '.*\\.jpe?g',
@@ -268,7 +274,7 @@ def set_device_settings():
             "namespace": "org.jdownloader.controlling.filter.LinkFilterSettings",
             "storage": "null",
             "setting": "FilterList",
-            "items": [
+            "expected_values": [
                 {
                     'conditionFilter':
                         {'conditions': [], 'enabled': False, 'matchType': 'IS_TRUE'},
@@ -313,11 +319,11 @@ def set_device_settings():
         namespace = setting["namespace"]
         storage = setting["storage"] or "null"
         name = setting["setting"]
-        items_to_add = setting["items"]
+        expected_values = setting["expected_values"]
 
         added_items = 0
         settings = device.config.get(namespace, storage, name)
-        for item in items_to_add:
+        for item in expected_values:
             if item not in settings:
                 settings.append(item)
                 added_items += 1
