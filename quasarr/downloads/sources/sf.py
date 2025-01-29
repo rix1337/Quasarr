@@ -42,7 +42,14 @@ def get_release_url(url, title, shared_state):
         api_url = 'https://' + sf + '/api/v1/' + season_id + f'/season/{season}?lang=ALL&_=' + epoch
 
         response = requests.get(api_url)
-        data = response.json()["html"]
+        try:
+            data = response.json()["html"]
+        except ValueError:
+            epoch = str(datetime.now().timestamp()).replace('.', '')[:-3]
+            api_url = 'https://' + sf + '/api/v1/' + season_id + f'/season/ALL?lang=ALL&_=' + epoch
+            response = requests.get(api_url)
+            data = response.json()["html"]
+
         content = BeautifulSoup(data, "html.parser")
 
         items = content.find_all("h3")
@@ -53,7 +60,9 @@ def get_release_url(url, title, shared_state):
                 name = details.find("small").text.strip()
 
                 result_pattern = re.compile(
-                    r'^(?P<name>.+?)\.S(?P<season>\d+)\..*?(?P<resolution>\d+p)\..+?[-/](?P<group>\w+)(?:[-/]\w+)?$')
+                    r'^(?P<name>.+?)\.S(?P<season>\d+)(?:E\d+)?\..*?(?P<resolution>\d+p)\..+?-(?P<group>[\w/-]+)$',
+                    re.IGNORECASE
+                )
                 result_match = result_pattern.match(name)
 
                 if not result_match:
@@ -61,10 +70,17 @@ def get_release_url(url, title, shared_state):
 
                 result_parts = result_match.groupdict()
 
-                if (release_parts['name'] == result_parts['name'] and
-                        release_parts['season'] == result_parts['season'] and
-                        release_parts['resolution'] == result_parts['resolution'] and
-                        release_parts['group'] == result_parts['group']):
+                # Normalize all relevant fields for case-insensitive comparison
+                name_match = release_parts['name'].lower() == result_parts['name'].lower()
+                season_match = release_parts['season'] == result_parts['season']  # Numbers are case-insensitive
+                resolution_match = release_parts['resolution'].lower() == result_parts['resolution'].lower()
+
+                # Handle multiple groups and case-insensitive matching
+                result_groups = {g.lower() for g in result_parts['group'].split('/')}
+                release_groups = {g.lower() for g in release_parts['group'].split('/')}
+                group_match = not result_groups.isdisjoint(release_groups)  # Checks if any group matches
+
+                if name_match and season_match and resolution_match and group_match:
                     print(f'Release "{name}" found on SF at: {url}')
                     release_url = f'https://{sf}{details.find("a")["href"]}'
                     real_url = resolve_sf_redirect(release_url)
