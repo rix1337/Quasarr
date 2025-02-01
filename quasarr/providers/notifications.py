@@ -6,18 +6,29 @@ import json
 
 import requests
 
+from quasarr.providers.imdb_metadata import get_poster_link
 
-def send_discord_message(shared_state, title, case):
+
+def send_discord_message(shared_state, title, case, imdb_id=None):
     """
     Sends a Discord message to the webhook provided in the shared state, based on the specified case.
 
     :param shared_state: Shared state object containing configuration.
     :param title: Title of the embed to be sent.
     :param case: A string representing the scenario (e.g., 'captcha', 'captcha_solved', 'package_deleted').
+    :param imdb_id: A string starting with "tt" followed by at least 7 digits, representing an object on IMDb
     :return: True if the message was sent successfully, False otherwise.
     """
     if not shared_state.values.get("discord"):
         return False
+
+    poster_object = None
+    if imdb_id:
+        poster_link = get_poster_link(shared_state, imdb_id)
+        if poster_link:
+            poster_object = {
+                'url': poster_link
+            }
 
     # Decide the embed content based on the case
     if case == "unprotected":
@@ -35,15 +46,15 @@ def send_discord_message(shared_state, title, case):
         else:
             helper_text = f'[Become a Sponsor and let SponsorsHelper solve CAPTCHAs for you!]({f"https://github.com/users/rix1337/sponsorship"})'
 
-        description = 'Links are protected by a CAPTCHA! Choose how to proceed below:'
+        description = 'Links are protected by a CAPTCHA! Options to proceed:'
         fields = [
             {
-                'name': 'Automatically',
+                'name': 'SponsorsHelper',
                 'value': helper_text,
             },
             {
-                'name': 'Manually',
-                'value': f'Solve the CAPTCHA [here]({f"{shared_state.values['external_address']}/captcha"}) to start the download immediately.',
+                'name': 'Solve CAPTCHA manually',
+                'value': f'Open [this link]({f"{shared_state.values['external_address']}/captcha"}) to solve the CAPTCHA.',
             }
         ]
     else:
@@ -61,6 +72,10 @@ def send_discord_message(shared_state, title, case):
 
     if fields:
         data['embeds'][0]['fields'] = fields
+
+    if poster_object:
+        data['embeds'][0]['thumbnail'] = poster_object
+        data['embeds'][0]['image'] = poster_object
 
     response = requests.post(shared_state.values["discord"], data=json.dumps(data),
                              headers={"Content-Type": "application/json"})
