@@ -42,7 +42,7 @@ def nx_feed(shared_state, request_from):
                     source = f"https://{nx}/release/{item['slug']}"
                     imdb_id = item.get('_media', {}).get('imdbid', None)
                     mb = shared_state.convert_to_mb(item)
-                    payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode("utf-8")
+                    payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
                     link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                 except:
                     continue
@@ -123,7 +123,7 @@ def nx_search(shared_state, request_from, search_string):
                                 imdb_id = get_imdb_id_from_title(shared_state, title, request_from)
 
                         mb = shared_state.convert_to_mb(item)
-                        payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".
+                        payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".
                                                     encode("utf-8")).decode("utf-8")
                         link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                     except:

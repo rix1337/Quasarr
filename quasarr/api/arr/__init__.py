@@ -40,7 +40,8 @@ def setup_arr_routes(app):
         url = decoded_payload[1]
         size_mb = decoded_payload[2]
         password = decoded_payload[3]
-        return f'<nzb><file title="{title}" url="{url}" size_mb="{size_mb}" password="{password}"/></nzb>'
+        imdb_id = decoded_payload[4]
+        return f'<nzb><file title="{title}" url="{url}" size_mb="{size_mb}" password="{password}" imdb_id="{imdb_id}"/></nzb>'
 
     @app.post('/api')
     @require_api_key
@@ -54,11 +55,12 @@ def setup_arr_routes(app):
             url = root.find(".//file").attrib["url"]
             size_mb = root.find(".//file").attrib["size_mb"]
             password = root.find(".//file").attrib.get("password")
+            imdb_id = root.find(".//file").attrib.get("imdb_id")
             print(f"Attempting download for {title}")
 
             request_from = request.headers.get('User-Agent')
 
-            nzo_id = download(shared_state, request_from, title, url, size_mb, password)
+            nzo_id = download(shared_state, request_from, title, url, size_mb, password, imdb_id)
             if nzo_id:
                 print(f"{title} added successfully!")
                 nzo_ids.append(nzo_id)

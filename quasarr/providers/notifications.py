@@ -41,22 +41,18 @@ def send_discord_message(shared_state, title, case, imdb_id=None):
         description = 'SponsorsHelper failed to solve the CAPTCHA! Package deleted.'
         fields = None
     elif case == "captcha":
-        if shared_state.values.get("helper_active"):
-            helper_text = f"Just wait - SponsorsHelper will solve this CAPTCHA for you shortly."
-        else:
-            helper_text = f'[Become a Sponsor and let SponsorsHelper solve CAPTCHAs for you!]({f"https://github.com/users/rix1337/sponsorship"})'
-
-        description = 'Links are protected by a CAPTCHA! Options to proceed:'
+        description = 'Download will proceed, once the CAPTCHA has been solved.'
         fields = [
             {
-                'name': 'SponsorsHelper',
-                'value': helper_text,
-            },
-            {
-                'name': 'Solve CAPTCHA manually',
+                'name': 'Solve CAPTCHA',
                 'value': f'Open [this link]({f"{shared_state.values['external_address']}/captcha"}) to solve the CAPTCHA.',
             }
         ]
+        if not shared_state.values.get("helper_active"):
+            fields.append({
+                'name': 'SponsorsHelper',
+                'value': f'[Become a Sponsor and let SponsorsHelper solve CAPTCHAs for you!]({f"https://github.com/users/rix1337/sponsorship"})',
+            }, )
     else:
         print(f"Unknown notification case: {case}")
         return False

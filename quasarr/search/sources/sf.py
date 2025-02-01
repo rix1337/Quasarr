@@ -53,7 +53,8 @@ def sf_feed(shared_state, request_from):
                         mb = 0  # size info is missing here
                         imdb_id = get_imdb_id_from_title(shared_state, title, request_from)  # this takes a long time
 
-                        payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode("utf-8")
+                        payload = urlsafe_b64encode(
+                            f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
                         link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                     except:
                         continue
@@ -230,7 +231,7 @@ def sf_search(shared_state, request_from, search_string):
                         except:
                             continue
 
-                    payload = urlsafe_b64encode(f"{name}|{source}|{mb}|{password}".
+                    payload = urlsafe_b64encode(f"{name}|{source}|{mb}|{password}|{imdb_id}".
                                                 encode("utf-8")).decode("utf-8")
                     link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
 

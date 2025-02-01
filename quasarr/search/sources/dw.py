@@ -115,7 +115,7 @@ def dw_feed(shared_state, request_from):
                 size = mb * 1024 * 1024
                 date = article.parent.parent.find("span", {"class": "date updated"}).text.strip()
                 published = convert_to_rss_date(date)
-                payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode(
+                payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode(
                     "utf-8")
                 link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
             except Exception as e:
@@ -187,7 +187,7 @@ def dw_search(shared_state, request_from, search_string):
                 size = mb * 1024 * 1024
                 date = result.parent.parent.find("span", {"class": "date updated"}).text.strip()
                 published = convert_to_rss_date(date)
-                payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode(
+                payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode(
                     "utf-8")
                 link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
             except Exception as e:

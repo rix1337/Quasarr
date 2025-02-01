@@ -65,7 +65,8 @@ def fx_feed(shared_state):
                         size_item = extract_size(size_info)
                         mb = shared_state.convert_to_mb(size_item)
                         size = mb * 1024 * 1024
-                        payload = urlsafe_b64encode(f"{title}|{link}|{mb}|{password}".encode("utf-8")).decode("utf-8")
+                        payload = urlsafe_b64encode(f"{title}|{link}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode(
+                            "utf-8")
                         link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                     except:
                         continue
@@ -157,8 +158,8 @@ def fx_search(shared_state, search_string):
                             size_item = extract_size(size_info)
                             mb = shared_state.convert_to_mb(size_item)
                             size = mb * 1024 * 1024
-                            payload = urlsafe_b64encode(f"{title}|{link}|{mb}|{password}".encode("utf-8")).decode(
-                                "utf-8")
+                            payload = urlsafe_b64encode(
+                                f"{title}|{link}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
                             link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                         except:
                             continue

@@ -50,8 +50,8 @@ def get_search_results(shared_state, request_from, search_string="", season="", 
         if sf:
             functions.append(lambda: sf_feed(shared_state, request_from))
 
-    stype = f"search phrase \"{search_string}\"" if search_string else "release feed"
-    print(f'Starting {len(functions)} search functions for "{stype}"... This may take some time.')
+    stype = f'search phrase "{search_string}"' if search_string else "feed search"
+    print(f'Starting {len(functions)} search functions for {stype}... This may take some time.')
     start_time = time.time()
 
     with ThreadPoolExecutor() as executor:
