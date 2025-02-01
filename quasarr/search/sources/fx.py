@@ -132,7 +132,8 @@ def fx_search(shared_state, search_string):
                         title = (title.text.encode("ascii", errors="ignore").decode().
                                  replace("/", "").replace(" ", ".").strip())
 
-                        if not shared_state.search_string_in_sanitized_title(search_string, title):
+                        if (not shared_state.is_imdb_id(search_string) and
+                                shared_state.search_string_in_sanitized_title(search_string, title)):
                             continue
 
                         try:

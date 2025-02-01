@@ -162,7 +162,8 @@ def dw_search(shared_state, request_from, search_string):
             try:
                 title = result.a.text.strip()
 
-                if not shared_state.search_string_in_sanitized_title(search_string, title):
+                if (not shared_state.is_imdb_id(search_string) and
+                        shared_state.search_string_in_sanitized_title(search_string, title)):
                     continue
 
                 source = result.a["href"]
