@@ -50,7 +50,7 @@ def get_api(shared_state_dict, shared_state_lock):
         {captcha_hint}
         <h2>Setup Instructions</h2>
         <p>
-            <h3>Sonarr/Radarr</h3>
+            <h3>Radarr/Sonarr</h3>
             Use this exact URL as <{small}>Newznab Indexer</small> and <{small}>SABnzbd Download Client</small>:<br><br>
             <code style="background-color: #f0f0f0; padding: 5px; border-radius: 3px;">
                 {shared_state.values["internal_address"]}

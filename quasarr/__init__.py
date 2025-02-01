@@ -191,7 +191,7 @@ def run():
 
         print("\n===== API Information =====")
         print(f"Quasarr API now running at: {shared_state.values['internal_address']}")
-        print('Use this exact URL as "Newznab Indexer" and "SABnzbd Download Client" in Sonarr/Radarr')
+        print('Use this exact URL as "Newznab Indexer" and "SABnzbd Download Client" in Radarr/Sonarr')
         print(f'Leave settings at default and use this API key: "{api_key}" (without quotes)')
 
         print("\n===== Quasarr Info Log =====")
