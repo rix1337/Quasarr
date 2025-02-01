@@ -71,6 +71,8 @@ def run():
         else:
             external_address = internal_address
 
+        # ToDo quit hard in case adresses are garbled (missing protocol or duplicate port info)
+
         shared_state.set_connection_info(internal_address, external_address, port)
 
         if not config_path:

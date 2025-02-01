@@ -31,7 +31,7 @@ def fx_feed(shared_state):
     }
 
     try:
-        request = requests.get(url, headers=headers).content
+        request = requests.get(url, headers=headers, timeout=10).content
         feed = BeautifulSoup(request, "html.parser")
         items = feed.find_all("article")
     except Exception as e:
@@ -93,6 +93,9 @@ def fx_feed(shared_state):
             except Exception as e:
                 print(f"Error parsing FX feed: {e}")
 
+    if shared_state.debug():
+        print(f'"fx" search done.')
+
     return releases
 
 
@@ -108,7 +111,7 @@ def fx_search(shared_state, search_string):
     }
 
     try:
-        request = requests.get(url, headers=headers).content
+        request = requests.get(url, headers=headers, timeout=10).content
         search = BeautifulSoup(request, "html.parser")
         results = search.find('h2', class_='entry-title')
 
@@ -122,7 +125,7 @@ def fx_search(shared_state, search_string):
         for result in results:
             try:
                 result_source = result["href"]
-                request = requests.get(result_source, headers=headers).content
+                request = requests.get(result_source, headers=headers, timeout=10).content
                 feed = BeautifulSoup(request, "html.parser")
                 items = feed.find_all("article")
             except Exception as e:
@@ -185,5 +188,8 @@ def fx_search(shared_state, search_string):
 
                 except Exception as e:
                     print(f"Error parsing FX search: {e}")
+
+    if shared_state.debug():
+        print(f'"fx" search done.')
 
     return releases

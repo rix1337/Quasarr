@@ -60,7 +60,7 @@ def dw_get_download_links(shared_state, content, title):
                 'User-Agent': shared_state.values["user_agent"],
             }
 
-            response = requests.post(ajax_url, payload, headers=headers).json()
+            response = requests.post(ajax_url, payload, headers=headers, timeout=10).json()
             if response["success"]:
                 link = response["data"].split(",")[0]
 
@@ -95,7 +95,7 @@ def dw_feed(shared_state, request_from):
     }
 
     try:
-        request = requests.get(url, headers=headers).content
+        request = requests.get(url, headers=headers, timeout=10).content
         feed = BeautifulSoup(request, "html.parser")
         articles = feed.find_all('h4')
 
@@ -137,6 +137,9 @@ def dw_feed(shared_state, request_from):
     except Exception as e:
         print(f"Error loading DW feed: {e}")
 
+    if shared_state.debug():
+        print(f'"dw" search done.')
+
     return releases
 
 
@@ -156,7 +159,7 @@ def dw_search(shared_state, request_from, search_string):
     }
 
     try:
-        request = requests.get(url, headers=headers).content
+        request = requests.get(url, headers=headers, timeout=10).content
         search = BeautifulSoup(request, "html.parser")
         results = search.find_all('h4')
 
@@ -205,5 +208,8 @@ def dw_search(shared_state, request_from, search_string):
                 },
                 "type": "protected"
             })
+
+    if shared_state.debug():
+        print(f'"dw" search done.')
 
     return releases

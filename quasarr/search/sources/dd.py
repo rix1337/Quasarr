@@ -51,7 +51,7 @@ def dd_search(shared_state, search_string=""):
         for page in range(0, 100, 20):
             url = f'https://{dd}/index/search/keyword/{search_string}/qualities/{','.join(qualities)}/from/{page}/search'
 
-            releases_on_page = dd_session.get(url, headers=headers).json()
+            releases_on_page = dd_session.get(url, headers=headers, timeout=10).json()
             if releases_on_page:
                 release_list.extend(releases_on_page)
 
@@ -95,5 +95,9 @@ def dd_search(shared_state, search_string=""):
 
     except Exception as e:
         print(f"Error loading DD feed: {e}")
+
+
+    if shared_state.debug():
+        print(f'"dd" search done.')
 
     return releases

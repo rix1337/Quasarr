@@ -26,7 +26,7 @@ def nx_feed(shared_state, request_from):
     }
 
     try:
-        response = requests.get(url, headers)
+        response = requests.get(url, headers, timeout=10)
         feed = response.json()
     except Exception as e:
         print(f"Error loading NX feed: {e}")
@@ -72,6 +72,9 @@ def nx_feed(shared_state, request_from):
         except Exception as e:
             print(f"Error parsing NX feed: {e}")
 
+    if shared_state.debug():
+        print(f'"nx" search done.')
+
     return releases
 
 
@@ -100,7 +103,7 @@ def nx_search(shared_state, request_from, search_string):
     }
 
     try:
-        response = requests.get(url, headers)
+        response = requests.get(url, headers, timeout=10)
         feed = response.json()
     except Exception as e:
         print(f"Error loading NX search: {e}")
@@ -153,5 +156,8 @@ def nx_search(shared_state, request_from, search_string):
 
         except Exception as e:
             print(f"Error parsing NX search: {e}")
+
+    if shared_state.debug():
+        print(f'"nx" search done.')
 
     return releases
