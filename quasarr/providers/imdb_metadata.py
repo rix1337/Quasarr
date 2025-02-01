@@ -75,13 +75,13 @@ def get_clean_title(title):
     return clean_title
 
 
-def get_imdb_id_from_title(shared_state, title, request_from, language="de"):
+def get_imdb_id_from_title(shared_state, title, language="de"):
     imdb_id = None
 
-    if "Radarr" in request_from:
-        ttype = "ft"
-    else:
+    if re.search(r"S\d{1,3}(E\d{1,3})?", title, re.IGNORECASE):
         ttype = "tv"
+    else:
+        ttype = "ft"
 
     title = get_clean_title(title)
 

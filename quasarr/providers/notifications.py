@@ -6,6 +6,7 @@ import json
 
 import requests
 
+from quasarr.providers.imdb_metadata import get_imdb_id_from_title
 from quasarr.providers.imdb_metadata import get_poster_link
 
 
@@ -23,6 +24,8 @@ def send_discord_message(shared_state, title, case, imdb_id=None):
         return False
 
     poster_object = None
+    if not imdb_id:
+        imdb_id = get_imdb_id_from_title(shared_state, title)
     if imdb_id:
         poster_link = get_poster_link(shared_state, imdb_id)
         if poster_link:
