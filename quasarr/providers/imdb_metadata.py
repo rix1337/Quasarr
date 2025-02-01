@@ -122,7 +122,7 @@ def get_imdb_id_from_title(shared_state, title, request_from, language="de"):
     }
     shared_state.update(context, recently_searched)
 
-    if not imdb_id and not shared_state.debug():
+    if not imdb_id and shared_state.debug():
         print(f"No IMDb-ID found for {title}")
 
     return imdb_id

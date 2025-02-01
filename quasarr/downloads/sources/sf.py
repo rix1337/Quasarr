@@ -18,7 +18,7 @@ def is_last_section_integer(url):
 
 def get_release_url(url, title, shared_state):
     release_pattern = re.compile(
-        r'^(?P<name>.+?)\.S(?P<season>\d+)(?:E\d+)?\..*?\.(?P<resolution>\d+p)\..+?-(?P<group>\w+)$')
+        r'^(?P<name>.+?)\.S(?P<season>\d+)(?:E\d+)?\..*?\.(?P<resolution>\d+p)\..+?-(?P<group>\w+)$', re.IGNORECASE)
     release_match = release_pattern.match(title)
 
     if not release_match:
