@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.imdb_metadata import get_localized_title, get_imdb_id_from_title
+from quasarr.providers.imdb_metadata import get_localized_title
 
 
 def sf_feed(shared_state, start_time, request_from):
@@ -55,7 +55,7 @@ def sf_feed(shared_state, start_time, request_from):
                     try:
                         source = f"https://{sf}{a['href']}"
                         mb = 0  # size info is missing here
-                        imdb_id = get_imdb_id_from_title(shared_state, title, request_from)  # this takes a long time
+                        imdb_id = None  # imdb info is missing here
 
                         payload = urlsafe_b64encode(
                             f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")

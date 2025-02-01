@@ -8,7 +8,7 @@ from base64 import urlsafe_b64encode
 
 import requests
 
-from quasarr.providers.imdb_metadata import get_localized_title, get_imdb_id_from_title
+from quasarr.providers.imdb_metadata import get_localized_title
 
 
 def nx_feed(shared_state, start_time, request_from):
@@ -125,8 +125,6 @@ def nx_search(shared_state, start_time, request_from, search_string):
                         source = f"https://{nx}/release/{item['slug']}"
                         if not imdb_id:
                             imdb_id = item.get('_media', {}).get('imdbid', None)
-                            if not imdb_id:
-                                imdb_id = get_imdb_id_from_title(shared_state, title, request_from)
 
                         mb = shared_state.convert_to_mb(item)
                         payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".
