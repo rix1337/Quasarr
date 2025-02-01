@@ -65,8 +65,10 @@ def dd_search(shared_state, search_string=""):
                 else:
                     title = release.get("release")
 
-                    if not shared_state.search_string_in_sanitized_title(search_string, title):
+                    if search_string and not shared_state.search_string_in_sanitized_title(search_string, title):
                         continue
+
+                    imdb_id = release.get("imdbid", None)
 
                     source = f"https://{dd}/"
                     size_item = extract_size(release.get("size"))
@@ -79,6 +81,7 @@ def dd_search(shared_state, search_string=""):
                     releases.append({
                         "details": {
                             "title": f"[DD] {title}",
+                            "imdb_id": imdb_id,
                             "link": link,
                             "size": mb,
                             "date": published,

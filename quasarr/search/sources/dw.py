@@ -103,6 +103,12 @@ def dw_feed(shared_state, request_from):
             try:
                 source = article.a["href"]
                 title = article.a.text.strip()
+
+                try:
+                    imdb_id = re.search(r'tt\d+', str(article)).group()
+                except:
+                    imdb_id = None
+
                 size_info = article.find("span").text.strip()
                 size_item = extract_size(size_info)
                 mb = shared_state.convert_to_mb(size_item)
@@ -119,6 +125,7 @@ def dw_feed(shared_state, request_from):
             releases.append({
                 "details": {
                     "title": f"[DW] {title}",
+                    "imdb_id": imdb_id,
                     "link": link,
                     "size": size,
                     "date": published,
@@ -157,14 +164,21 @@ def dw_search(shared_state, request_from, search_string):
         print(f"Error loading DW search feed: {e}")
         return releases
 
+    imdb_id = shared_state.is_imdb_id(search_string)
+
     if results:
         for result in results:
             try:
                 title = result.a.text.strip()
 
-                if (not shared_state.is_imdb_id(search_string) and not
-                        shared_state.search_string_in_sanitized_title(search_string, title)):
+                if not imdb_id and not shared_state.search_string_in_sanitized_title(search_string, title):
                     continue
+
+                if not imdb_id:
+                    try:
+                        imdb_id = re.search(r'tt\d+', str(result)).group()
+                    except:
+                        imdb_id = None
 
                 source = result.a["href"]
                 size_info = result.find("span").text.strip()
@@ -183,6 +197,7 @@ def dw_search(shared_state, request_from, search_string):
             releases.append({
                 "details": {
                     "title": f"[DW] {title}",
+                    "imdb_id": imdb_id,
                     "link": link,
                     "size": size,
                     "date": published,
