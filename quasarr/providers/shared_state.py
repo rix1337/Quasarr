@@ -398,6 +398,10 @@ def sanitize_string(s):
     return s
 
 
+def is_imdb_id(search_string):
+    return bool(re.fullmatch(r"tt\d{7,}", search_string))
+
+
 def search_string_in_sanitized_title(search_string, title):
     sanitized_search_string = sanitize_string(search_string)
     sanitized_title = sanitize_string(title)
