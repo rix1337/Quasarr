@@ -6,6 +6,7 @@ import json
 import os
 import re
 import time
+from datetime import datetime, timedelta
 from urllib import parse
 
 from quasarr.providers.myjd_api import Myjdapi, TokenExpiredException, RequestTimeoutException, MYJDException, Jddevice
@@ -370,8 +371,9 @@ def debug():
 def sanitize_string(s):
     s = s.lower()
 
-    # Remove dots
+    # Remove dots / pluses
     s = s.replace('.', ' ')
+    s = s.replace('+', ' ')
 
     # Umlauts
     s = re.sub(r'ä', 'ae', s)
@@ -386,8 +388,8 @@ def sanitize_string(s):
     s = re.sub(r'\bs\d{1,3}(e\d{1,3})?\b', '', s)
 
     # Remove German and English articles
-    articles = r'\b(?:der|die|das|ein|eine|einer|eines|einem|einen|the|a|an)\b'
-    s = re.sub(articles, '', s)
+    articles = r'\b(?:der|die|das|ein|eine|einer|eines|einem|einen|the|a|an|and)\b'
+    s = re.sub(articles, '', s, re.IGNORECASE)
 
     # Replace obsolete titles
     s = s.replace('navy cis', 'ncis')
@@ -399,7 +401,10 @@ def sanitize_string(s):
 
 
 def is_imdb_id(search_string):
-    return bool(re.fullmatch(r"tt\d{7,}", search_string))
+    if bool(re.fullmatch(r"tt\d{7,}", search_string)):
+        return search_string
+    else:
+        return None
 
 
 def search_string_in_sanitized_title(search_string, title):
@@ -415,6 +420,17 @@ def search_string_in_sanitized_title(search_string, title):
         if debug():
             print(f"Skipping {title} as it doesn't match search string: {sanitized_search_string}")
         return False
+
+
+def get_recently_searched(shared_state, context, timeout_seconds):
+    recently_searched = shared_state.values.get(context, {})
+    threshold = datetime.now() - timedelta(seconds=timeout_seconds)
+    keys_to_remove = [key for key, value in recently_searched.items() if value["timestamp"] <= threshold]
+    for key in keys_to_remove:
+        if shared_state.debug():
+            print(f"Removing '/{key}' from recently searched memory ({context})...")
+        del recently_searched[key]
+    return recently_searched
 
 
 def download_package(links, title, password, package_id):

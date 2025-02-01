@@ -54,12 +54,19 @@ def fx_feed(shared_state):
                              replace("/", "").replace(" ", ".").strip())
 
                     try:
+                        imdb_link = article.find("a", href=re.compile(r"imdb\.com"))
+                        imdb_id = re.search(r'tt\d+', str(imdb_link)).group()
+                    except:
+                        imdb_id = None
+
+                    try:
                         size_info = article.find_all("strong", text=re.compile(r"(size|größe)", re.IGNORECASE))[
                             i].next.next.text.replace("|", "").strip()
                         size_item = extract_size(size_info)
                         mb = shared_state.convert_to_mb(size_item)
                         size = mb * 1024 * 1024
-                        payload = urlsafe_b64encode(f"{title}|{link}|{mb}|{password}".encode("utf-8")).decode("utf-8")
+                        payload = urlsafe_b64encode(f"{title}|{link}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode(
+                            "utf-8")
                         link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                     except:
                         continue
@@ -74,6 +81,7 @@ def fx_feed(shared_state):
                     releases.append({
                         "details": {
                             "title": f"[FX] {title}",
+                            "imdb_id": imdb_id,
                             "link": link,
                             "size": size,
                             "date": published,
@@ -108,10 +116,12 @@ def fx_search(shared_state, search_string):
         print(f"Error loading FX feed: {e}")
         return releases
 
+    imdb_id = shared_state.is_imdb_id(search_string)
+
     if results:
         for result in results:
-            result_source = result["href"]
             try:
+                result_source = result["href"]
                 request = requests.get(result_source, headers=headers).content
                 feed = BeautifulSoup(request, "html.parser")
                 items = feed.find_all("article")
@@ -123,7 +133,7 @@ def fx_search(shared_state, search_string):
                 try:
                     article = BeautifulSoup(str(item), "html.parser")
                     try:
-                        titles = article.find_all("a", href=re.compile("(filecrypt|safe." + fx + ")"))
+                        titles = article.find_all("a", href=re.compile(r"filecrypt\."))
                     except:
                         continue
                     i = 0
@@ -132,9 +142,15 @@ def fx_search(shared_state, search_string):
                         title = (title.text.encode("ascii", errors="ignore").decode().
                                  replace("/", "").replace(" ", ".").strip())
 
-                        if (not shared_state.is_imdb_id(search_string) and not
-                                shared_state.search_string_in_sanitized_title(search_string, title)):
+                        if not imdb_id and not shared_state.search_string_in_sanitized_title(search_string, title):
                             continue
+
+                        if not imdb_id:
+                            try:
+                                imdb_link = article.find("a", href=re.compile(r"imdb\.com"))
+                                imdb_id = re.search(r'tt\d+', str(imdb_link)).group()
+                            except:
+                                imdb_id = None
 
                         try:
                             size_info = article.find_all("strong", text=re.compile(r"(size|größe)", re.IGNORECASE))[
@@ -142,8 +158,8 @@ def fx_search(shared_state, search_string):
                             size_item = extract_size(size_info)
                             mb = shared_state.convert_to_mb(size_item)
                             size = mb * 1024 * 1024
-                            payload = urlsafe_b64encode(f"{title}|{link}|{mb}|{password}".encode("utf-8")).decode(
-                                "utf-8")
+                            payload = urlsafe_b64encode(
+                                f"{title}|{link}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
                             link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                         except:
                             continue
@@ -158,6 +174,7 @@ def fx_search(shared_state, search_string):
                         releases.append({
                             "details": {
                                 "title": f"[FX] {title}",
+                                "imdb_id": imdb_id,
                                 "link": link,
                                 "size": size,
                                 "date": published,

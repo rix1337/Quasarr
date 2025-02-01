@@ -289,13 +289,16 @@ def delete_package(shared_state, package_id):
     return deleted
 
 
-def download(shared_state, request_from, title, url, size_mb, password):
+def download(shared_state, request_from, title, url, size_mb, password, imdb_id=None):
     if "radarr".lower() in request_from.lower():
         category = "movies"
     else:
         category = "tv"
 
     package_id = f"Quasarr_{category}_{str(hash(title + url)).replace('-', '')}"
+
+    if imdb_id is not None and imdb_id.lower() == "none":
+        imdb_id = None
 
     dd = shared_state.values["config"]("Hostnames").get("dd")
     dw = shared_state.values["config"]("Hostnames").get("dw")
@@ -306,7 +309,7 @@ def download(shared_state, request_from, title, url, size_mb, password):
         links = get_dd_download_links(shared_state, title)
         if links:
             print(f"Decrypted {len(links)} download links for {title}")
-            send_discord_message(shared_state, title=title, case="unprotected")
+            send_discord_message(shared_state, title=title, case="unprotected", imdb_id=imdb_id)
             added = shared_state.download_package(links, title, password, package_id)
             if not added:
                 print(f"Failed to add {title} to linkgrabber")
@@ -319,7 +322,7 @@ def download(shared_state, request_from, title, url, size_mb, password):
         links = get_nx_download_links(shared_state, url, title)
         if links:
             print(f"Decrypted {len(links)} download links for {title}")
-            send_discord_message(shared_state, title=title, case="unprotected")
+            send_discord_message(shared_state, title=title, case="unprotected", imdb_id=imdb_id)
             added = shared_state.download_package(links, title, password, package_id)
             if not added:
                 print(f"Failed to add {title} to linkgrabber")
@@ -331,7 +334,7 @@ def download(shared_state, request_from, title, url, size_mb, password):
     elif dw and dw.lower() in url.lower():
         links = get_dw_download_links(shared_state, url, title)
         print(f'CAPTCHA-Solution required for "{title}" at: {shared_state.values['external_address']}/captcha')
-        send_discord_message(shared_state, title=title, case="captcha")
+        send_discord_message(shared_state, title=title, case="captcha", imdb_id=imdb_id)
         blob = json.dumps({"title": title, "links": links, "size_mb": size_mb, "password": password})
         shared_state.values["database"]("protected").update_store(package_id, blob)
 
@@ -343,7 +346,7 @@ def download(shared_state, request_from, title, url, size_mb, password):
 
         if url:
             print(f'CAPTCHA-Solution required for "{title}" at: {shared_state.values['external_address']}/captcha')
-            send_discord_message(shared_state, title=title, case="captcha")
+            send_discord_message(shared_state, title=title, case="captcha", imdb_id=imdb_id)
             blob = json.dumps({"title": title, "links": [[url, "filecrypt"]], "size_mb": size_mb, "password": password})
             shared_state.values["database"]("protected").update_store(package_id, blob)
         else:
@@ -352,7 +355,7 @@ def download(shared_state, request_from, title, url, size_mb, password):
 
     elif "filecrypt".lower() in url.lower():
         print(f'CAPTCHA-Solution required for "{title}" at: {shared_state.values['external_address']}/captcha')
-        send_discord_message(shared_state, title=title, case="captcha")
+        send_discord_message(shared_state, title=title, case="captcha", imdb_id=imdb_id)
         blob = json.dumps({"title": title, "links": [[url, "filecrypt"]], "size_mb": size_mb, "password": password})
         shared_state.values["database"]("protected").update_store(package_id, blob)
 

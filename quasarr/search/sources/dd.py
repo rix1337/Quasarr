@@ -65,20 +65,23 @@ def dd_search(shared_state, search_string=""):
                 else:
                     title = release.get("release")
 
-                    if not shared_state.search_string_in_sanitized_title(search_string, title):
+                    if search_string and not shared_state.search_string_in_sanitized_title(search_string, title):
                         continue
+
+                    imdb_id = release.get("imdbid", None)
 
                     source = f"https://{dd}/"
                     size_item = extract_size(release.get("size"))
                     mb = shared_state.convert_to_mb(size_item) * 1024 * 1024
                     published = convert_to_rss_date(release.get("when"))
-                    payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode(
+                    payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode(
                         "utf-8")
                     link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
 
                     releases.append({
                         "details": {
                             "title": f"[DD] {title}",
+                            "imdb_id": imdb_id,
                             "link": link,
                             "size": mb,
                             "date": published,

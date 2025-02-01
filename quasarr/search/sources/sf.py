@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.imdb_metadata import get_localized_title
+from quasarr.providers.imdb_metadata import get_localized_title, get_imdb_id_from_title
 
 
 def sf_feed(shared_state, request_from):
@@ -51,7 +51,10 @@ def sf_feed(shared_state, request_from):
                     try:
                         source = f"https://{sf}{a['href']}"
                         mb = 0  # size info is missing here
-                        payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode("utf-8")
+                        imdb_id = get_imdb_id_from_title(shared_state, title, request_from)  # this takes a long time
+
+                        payload = urlsafe_b64encode(
+                            f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
                         link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                     except:
                         continue
@@ -70,6 +73,7 @@ def sf_feed(shared_state, request_from):
                     releases.append({
                         "details": {
                             "title": f"[SF] {title}",
+                            "imdb_id": imdb_id,
                             "link": link,
                             "size": size,
                             "date": published,
@@ -102,17 +106,6 @@ def extract_size(text):
         return {"size": size, "sizeunit": unit}
     else:
         raise ValueError(f"Invalid size format: {text}")
-
-
-def get_recently_searched(shared_state, timeout_seconds):
-    recently_searched = shared_state.values.get("recently_searched", {})
-    threshold = datetime.now() - timedelta(seconds=timeout_seconds)
-    keys_to_remove = [key for key, value in recently_searched.items() if value <= threshold]
-    for key in keys_to_remove:
-        if shared_state.debug():
-            print(f"Removing '/{key}' from recently searched memory...")
-        del recently_searched[key]
-    return recently_searched
 
 
 def sf_search(shared_state, request_from, search_string):
@@ -163,19 +156,27 @@ def sf_search(shared_state, request_from, search_string):
 
                     series_id = result["url_id"]
                     threshold = 30
-                    recently_searched = get_recently_searched(shared_state, threshold)
+                    context = "recents_sf"
+                    recently_searched = shared_state.get_recently_searched(shared_state, context, threshold)
                     if series_id in recently_searched:
-                        if recently_searched[series_id] > datetime.now() - timedelta(seconds=threshold):
+                        if recently_searched[series_id]["timestamp"] > datetime.now() - timedelta(seconds=threshold):
                             if shared_state.debug():
                                 print(
                                     f"'/{series_id}' - requested within the last {threshold} seconds! Skipping...")
                             continue
 
-                    recently_searched[series_id] = datetime.now()
-                    shared_state.update("recently_searched", recently_searched)
+                    recently_searched[series_id] = {"timestamp": datetime.now()}
+                    shared_state.update(context, recently_searched)
 
                     series_url = f"https://{sf}/{series_id}"
                     series_page = requests.get(series_url, headers).text
+                    try:
+                        imdb_link = (BeautifulSoup(series_page, "html.parser").
+                                     find("a", href=re.compile(r"imdb\.com")))
+                        imdb_id = re.search(r'tt\d+', str(imdb_link)).group()
+                    except:
+                        imdb_id = None
+
                     season_id = re.findall(r"initSeason\('(.+?)\',", series_page)[0]
                     epoch = str(datetime.now().timestamp()).replace('.', '')[:-3]
                     api_url = 'https://' + sf + '/api/v1/' + season_id + f'/season/{season}?lang=ALL&_=' + epoch
@@ -230,7 +231,7 @@ def sf_search(shared_state, request_from, search_string):
                         except:
                             continue
 
-                    payload = urlsafe_b64encode(f"{name}|{source}|{mb}|{password}".
+                    payload = urlsafe_b64encode(f"{name}|{source}|{mb}|{password}|{imdb_id}".
                                                 encode("utf-8")).decode("utf-8")
                     link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
 
@@ -247,6 +248,7 @@ def sf_search(shared_state, request_from, search_string):
                     releases.append({
                         "details": {
                             "title": f"[SF] {name}",
+                            "imdb_id": imdb_id,
                             "link": link,
                             "size": size,
                             "date": published,

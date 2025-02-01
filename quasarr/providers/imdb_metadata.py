@@ -3,8 +3,33 @@
 # Project by https://github.com/rix1337
 
 import re
+from datetime import datetime, timedelta
+from json import loads
+from urllib.parse import quote
 
 import requests
+from bs4 import BeautifulSoup
+
+
+def get_poster_link(shared_state, imdb_id):
+    poster_link = None
+    if imdb_id:
+        headers = {'User-Agent': shared_state.values["user_agent"]}
+        request = requests.get(f"https://www.imdb.com/title/{imdb_id}/", headers=headers).text
+        soup = BeautifulSoup(request, "html.parser")
+        try:
+            poster_set = soup.find('div', class_='ipc-poster').div.img[
+                "srcset"]  # contains links to posters in ascending resolution
+            poster_links = [x for x in poster_set.split(" ") if
+                            len(x) > 10]  # extract all poster links ignoring resolution info
+            poster_link = poster_links[-1]  # get the highest resolution poster
+        except:
+            pass
+
+    if not poster_link and shared_state.debug():
+        print(f"Could not get poster title for {imdb_id} from IMDb")
+
+    return poster_link
 
 
 def get_localized_title(shared_state, imdb_id, language='de'):
@@ -31,7 +56,73 @@ def get_localized_title(shared_state, imdb_id, language='de'):
         except:
             pass
 
-    if not localized_title:
+    if not localized_title and shared_state.debug():
         print(f"Could not get localized title for {imdb_id} in {language} from IMDb")
 
     return localized_title
+
+
+def get_clean_title(title):
+    try:
+        extracted_title = re.findall(r"(.*?)(?:.(?!19|20)\d{2}|\.German|.GERMAN|\.\d{3,4}p|\.S(?:\d{1,3}))", title)[0]
+        leftover_tags_removed = re.sub(
+            r'(|.UNRATED.*|.Unrated.*|.Uncut.*|.UNCUT.*)(|.Directors.Cut.*|.Final.Cut.*|.DC.*|.REMASTERED.*|.EXTENDED.*|.Extended.*|.Theatrical.*|.THEATRICAL.*)',
+            "", extracted_title)
+        clean_title = leftover_tags_removed.replace(".", " ").strip().replace(" ", "+")
+
+    except:
+        clean_title = title
+    return clean_title
+
+
+def get_imdb_id_from_title(shared_state, title, request_from, language="de"):
+    imdb_id = None
+
+    if "Radarr" in request_from:
+        ttype = "ft"
+    else:
+        ttype = "tv"
+
+    title = get_clean_title(title)
+
+    threshold = 60 * 60 * 48  # 48 hours
+    context = "recents_imdb"
+    recently_searched = shared_state.get_recently_searched(shared_state, context, threshold)
+    if title in recently_searched:
+        title_item = recently_searched[title]
+        if title_item["timestamp"] > datetime.now() - timedelta(seconds=threshold):
+            return title_item["imdb_id"]
+
+    headers = {
+        'Accept-Language': language,
+        'User-Agent': shared_state.values["user_agent"]
+    }
+
+    results = requests.get(f"https://www.imdb.com/find/?q={quote(title)}&s=tt&ttype={ttype}&ref_=fn_{ttype}",
+                           headers=headers)
+
+    if results.status_code == 200:
+        soup = BeautifulSoup(results.text, "html.parser")
+        props = soup.find("script", text=re.compile("props"))
+        details = loads(props.string)
+        search_results = details['props']['pageProps']['titleResults']['results']
+
+        if len(search_results) > 0:
+            for result in search_results:
+                if shared_state.search_string_in_sanitized_title(title, f"{result['titleNameText']}"):
+                    imdb_id = result['id']
+                    break
+    else:
+        if shared_state.debug():
+            print(f"Request on IMDb failed: {results.status_code}")
+
+    recently_searched[title] = {
+        "imdb_id": imdb_id,
+        "timestamp": datetime.now()
+    }
+    shared_state.update(context, recently_searched)
+
+    if not imdb_id and not shared_state.debug():
+        print(f"No IMDb-ID found for {title}")
+
+    return imdb_id

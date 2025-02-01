@@ -3,12 +3,11 @@
 # Project by https://github.com/rix1337
 
 import html
-import re
 from base64 import urlsafe_b64encode
 
 import requests
 
-from quasarr.providers.imdb_metadata import get_localized_title
+from quasarr.providers.imdb_metadata import get_localized_title, get_imdb_id_from_title
 
 
 def nx_feed(shared_state, request_from):
@@ -37,11 +36,13 @@ def nx_feed(shared_state, request_from):
     for item in items:
         try:
             title = item['name']
+
             if title:
                 try:
                     source = f"https://{nx}/release/{item['slug']}"
+                    imdb_id = item.get('_media', {}).get('imdbid', None)
                     mb = shared_state.convert_to_mb(item)
-                    payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".encode("utf-8")).decode("utf-8")
+                    payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
                     link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                 except:
                     continue
@@ -59,6 +60,7 @@ def nx_feed(shared_state, request_from):
                 releases.append({
                     "details": {
                         "title": f"[NX] {title}",
+                        "imdb_id": imdb_id,
                         "link": link,
                         "size": size,
                         "date": published,
@@ -83,8 +85,9 @@ def nx_search(shared_state, request_from, search_string):
     else:
         valid_type = "episode"
 
-    if re.match(r'^tt\d{7,8}$', search_string):
-        imdb_id = search_string
+    imdb_id = shared_state.is_imdb_id(search_string)
+
+    if imdb_id:
         search_string = get_localized_title(shared_state, imdb_id, 'de')
         if not search_string:
             print(f"Could not extract title from IMDb-ID {imdb_id}")
@@ -114,8 +117,13 @@ def nx_search(shared_state, request_from, search_string):
 
                     try:
                         source = f"https://{nx}/release/{item['slug']}"
+                        if not imdb_id:
+                            imdb_id = item.get('_media', {}).get('imdbid', None)
+                            if not imdb_id:
+                                imdb_id = get_imdb_id_from_title(shared_state, title, request_from)
+
                         mb = shared_state.convert_to_mb(item)
-                        payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}".
+                        payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".
                                                     encode("utf-8")).decode("utf-8")
                         link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                     except:
@@ -134,6 +142,7 @@ def nx_search(shared_state, request_from, search_string):
                     releases.append({
                         "details": {
                             "title": f"[NX] {title}",
+                            "imdb_id": imdb_id,
                             "link": link,
                             "size": size,
                             "date": published,
