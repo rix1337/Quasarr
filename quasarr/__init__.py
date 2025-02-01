@@ -71,7 +71,8 @@ def run():
         else:
             external_address = internal_address
 
-        # ToDo quit hard in case adresses are garbled (missing protocol or duplicate port info)
+        validate_address(internal_address, "--internal_address")
+        validate_address(external_address, "--external_address")
 
         shared_state.set_connection_info(internal_address, external_address, port)
 
@@ -293,6 +294,16 @@ def is_valid_url(url):
 
     parsed = urlparse(url)
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+
+
+def validate_address(address, name):
+    if not address.startswith("http"):
+        sys.exit(f"Error: {name} '{address}' is invalid. It must start with 'http'.")
+
+    colon_count = address.count(":")
+    if colon_count < 1 or colon_count > 2:
+        sys.exit(
+            f"Error: {name} '{address}' is invalid. It must contain 1 or 2 colons, but it has {colon_count}.")
 
 
 def extract_allowed_keys(config, section):
