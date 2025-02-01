@@ -4,6 +4,7 @@
 
 import datetime
 import re
+import time
 from base64 import urlsafe_b64encode
 
 import requests
@@ -79,7 +80,7 @@ def dw_get_download_links(shared_state, content, title):
     return download_links
 
 
-def dw_feed(shared_state, request_from):
+def dw_feed(shared_state, start_time, request_from):
     releases = []
     dw = shared_state.values["config"]("Hostnames").get("dw")
     password = dw
@@ -138,12 +139,13 @@ def dw_feed(shared_state, request_from):
         print(f"Error loading DW feed: {e}")
 
     if shared_state.debug():
-        print(f'"dw" search done.')
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (dw)")
 
     return releases
 
 
-def dw_search(shared_state, request_from, search_string):
+def dw_search(shared_state, start_time, request_from, search_string):
     releases = []
     dw = shared_state.values["config"]("Hostnames").get("dw")
     password = dw
@@ -210,6 +212,7 @@ def dw_search(shared_state, request_from, search_string):
             })
 
     if shared_state.debug():
-        print(f'"dw" search done.')
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (dw)")
 
     return releases

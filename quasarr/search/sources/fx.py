@@ -3,6 +3,7 @@
 # Project by https://github.com/rix1337
 
 import re
+import time
 from base64 import urlsafe_b64encode
 
 import requests
@@ -19,7 +20,7 @@ def extract_size(text):
         raise ValueError(f"Invalid size format: {text}")
 
 
-def fx_feed(shared_state):
+def fx_feed(shared_state, start_time):
     releases = []
 
     fx = shared_state.values["config"]("Hostnames").get("fx")
@@ -94,12 +95,13 @@ def fx_feed(shared_state):
                 print(f"Error parsing FX feed: {e}")
 
     if shared_state.debug():
-        print(f'"fx" search done.')
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (fx)")
 
     return releases
 
 
-def fx_search(shared_state, search_string):
+def fx_search(shared_state, start_time, search_string):
     releases = []
 
     fx = shared_state.values["config"]("Hostnames").get("fx")
@@ -190,6 +192,7 @@ def fx_search(shared_state, search_string):
                     print(f"Error parsing FX search: {e}")
 
     if shared_state.debug():
-        print(f'"fx" search done.')
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (fx)")
 
     return releases

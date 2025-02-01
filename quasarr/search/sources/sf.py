@@ -4,6 +4,7 @@
 
 import html
 import re
+import time
 from base64 import urlsafe_b64encode
 from datetime import datetime, timedelta
 
@@ -13,14 +14,15 @@ from bs4 import BeautifulSoup
 from quasarr.providers.imdb_metadata import get_localized_title, get_imdb_id_from_title
 
 
-def sf_feed(shared_state, request_from):
+def sf_feed(shared_state, start_time, request_from):
     releases = []
     sf = shared_state.values["config"]("Hostnames").get("sf")
     password = sf
 
     if "Radarr" in request_from:
         if shared_state.debug():
-            print(f'"sf" search done.')
+            elapsed_time = time.time() - start_time
+            print(f"Time taken: {elapsed_time:.2f} seconds (sf)")
         return releases
 
     headers = {
@@ -88,7 +90,8 @@ def sf_feed(shared_state, request_from):
                 print(f"Error parsing SF feed: {e}")
 
     if shared_state.debug():
-        print(f'"sf" search done.')
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (sf)")
 
     return releases
 
@@ -113,7 +116,7 @@ def extract_size(text):
         raise ValueError(f"Invalid size format: {text}")
 
 
-def sf_search(shared_state, request_from, search_string):
+def sf_search(shared_state, start_time, request_from, search_string):
     releases = []
     sf = shared_state.values["config"]("Hostnames").get("sf")
     password = sf
@@ -122,7 +125,8 @@ def sf_search(shared_state, request_from, search_string):
 
     if "Radarr" in request_from:
         if shared_state.debug():
-            print(f'"sf" search done.')
+            elapsed_time = time.time() - start_time
+            print(f"Time taken: {elapsed_time:.2f} seconds (sf)")
         return releases
 
     if re.match(r'^tt\d{7,8}$', search_string):
@@ -271,6 +275,7 @@ def sf_search(shared_state, request_from, search_string):
                 print(f"Search string '{search_string}' does not match result '{result['title']}'")
 
     if shared_state.debug():
-        print(f'"sf" search done.')
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (sf)")
 
     return releases
