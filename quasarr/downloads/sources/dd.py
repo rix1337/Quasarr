@@ -25,7 +25,8 @@ def create_and_persist_session(shared_state):
         'Login': 'true',
     }
 
-    dd_response = dd_session.post(f'https://{dd}/index/index', cookies=cookies, headers=headers, data=data)
+    dd_response = dd_session.post(f'https://{dd}/index/index',
+                                  cookies=cookies, headers=headers, data=data, timeout=10)
 
     error = False
     if dd_response.status_code == 200:
@@ -106,7 +107,7 @@ def get_dd_download_links(shared_state, search_string):
         for page in range(0, 100, 20):
             url = f'https://{dd}/index/search/keyword/{search_string}/qualities/{','.join(qualities)}/from/{page}/search'
 
-            releases_on_page = dd_session.get(url, headers=headers).json()
+            releases_on_page = dd_session.get(url, headers=headers, timeout=10).json()
             if releases_on_page:
                 release_list.extend(releases_on_page)
 

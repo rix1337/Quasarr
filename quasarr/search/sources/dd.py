@@ -2,6 +2,7 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+import time
 from base64 import urlsafe_b64encode
 from datetime import datetime, timezone
 
@@ -19,7 +20,7 @@ def extract_size(size_in_bytes):
     return {"size": size_in_bytes, "sizeunit": "B"}
 
 
-def dd_search(shared_state, search_string=""):
+def dd_search(shared_state, start_time, search_string=""):
     dd = shared_state.values["config"]("Hostnames").get("dd")
 
     dd_session = retrieve_and_validate_session(shared_state)
@@ -51,7 +52,7 @@ def dd_search(shared_state, search_string=""):
         for page in range(0, 100, 20):
             url = f'https://{dd}/index/search/keyword/{search_string}/qualities/{','.join(qualities)}/from/{page}/search'
 
-            releases_on_page = dd_session.get(url, headers=headers).json()
+            releases_on_page = dd_session.get(url, headers=headers, timeout=10).json()
             if releases_on_page:
                 release_list.extend(releases_on_page)
 
@@ -95,5 +96,9 @@ def dd_search(shared_state, search_string=""):
 
     except Exception as e:
         print(f"Error loading DD feed: {e}")
+
+    if shared_state.debug():
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (dd)")
 
     return releases

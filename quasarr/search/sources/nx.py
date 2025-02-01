@@ -3,6 +3,7 @@
 # Project by https://github.com/rix1337
 
 import html
+import time
 from base64 import urlsafe_b64encode
 
 import requests
@@ -10,7 +11,7 @@ import requests
 from quasarr.providers.imdb_metadata import get_localized_title, get_imdb_id_from_title
 
 
-def nx_feed(shared_state, request_from):
+def nx_feed(shared_state, start_time, request_from):
     releases = []
     nx = shared_state.values["config"]("Hostnames").get("nx")
     password = nx
@@ -26,7 +27,7 @@ def nx_feed(shared_state, request_from):
     }
 
     try:
-        response = requests.get(url, headers)
+        response = requests.get(url, headers, timeout=10)
         feed = response.json()
     except Exception as e:
         print(f"Error loading NX feed: {e}")
@@ -42,7 +43,8 @@ def nx_feed(shared_state, request_from):
                     source = f"https://{nx}/release/{item['slug']}"
                     imdb_id = item.get('_media', {}).get('imdbid', None)
                     mb = shared_state.convert_to_mb(item)
-                    payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
+                    payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode(
+                        "utf-8")
                     link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                 except:
                     continue
@@ -72,10 +74,14 @@ def nx_feed(shared_state, request_from):
         except Exception as e:
             print(f"Error parsing NX feed: {e}")
 
+    if shared_state.debug():
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (nx)")
+
     return releases
 
 
-def nx_search(shared_state, request_from, search_string):
+def nx_search(shared_state, start_time, request_from, search_string):
     releases = []
     nx = shared_state.values["config"]("Hostnames").get("nx")
     password = nx
@@ -100,7 +106,7 @@ def nx_search(shared_state, request_from, search_string):
     }
 
     try:
-        response = requests.get(url, headers)
+        response = requests.get(url, headers, timeout=10)
         feed = response.json()
     except Exception as e:
         print(f"Error loading NX search: {e}")
@@ -153,5 +159,9 @@ def nx_search(shared_state, request_from, search_string):
 
         except Exception as e:
             print(f"Error parsing NX search: {e}")
+
+    if shared_state.debug():
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (nx)")
 
     return releases

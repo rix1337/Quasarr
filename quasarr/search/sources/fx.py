@@ -3,6 +3,7 @@
 # Project by https://github.com/rix1337
 
 import re
+import time
 from base64 import urlsafe_b64encode
 
 import requests
@@ -19,7 +20,7 @@ def extract_size(text):
         raise ValueError(f"Invalid size format: {text}")
 
 
-def fx_feed(shared_state):
+def fx_feed(shared_state, start_time):
     releases = []
 
     fx = shared_state.values["config"]("Hostnames").get("fx")
@@ -31,7 +32,7 @@ def fx_feed(shared_state):
     }
 
     try:
-        request = requests.get(url, headers=headers).content
+        request = requests.get(url, headers=headers, timeout=10).content
         feed = BeautifulSoup(request, "html.parser")
         items = feed.find_all("article")
     except Exception as e:
@@ -93,10 +94,14 @@ def fx_feed(shared_state):
             except Exception as e:
                 print(f"Error parsing FX feed: {e}")
 
+    if shared_state.debug():
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (fx)")
+
     return releases
 
 
-def fx_search(shared_state, search_string):
+def fx_search(shared_state, start_time, search_string):
     releases = []
 
     fx = shared_state.values["config"]("Hostnames").get("fx")
@@ -108,7 +113,7 @@ def fx_search(shared_state, search_string):
     }
 
     try:
-        request = requests.get(url, headers=headers).content
+        request = requests.get(url, headers=headers, timeout=10).content
         search = BeautifulSoup(request, "html.parser")
         results = search.find('h2', class_='entry-title')
 
@@ -122,7 +127,7 @@ def fx_search(shared_state, search_string):
         for result in results:
             try:
                 result_source = result["href"]
-                request = requests.get(result_source, headers=headers).content
+                request = requests.get(result_source, headers=headers, timeout=10).content
                 feed = BeautifulSoup(request, "html.parser")
                 items = feed.find_all("article")
             except Exception as e:
@@ -185,5 +190,9 @@ def fx_search(shared_state, search_string):
 
                 except Exception as e:
                     print(f"Error parsing FX search: {e}")
+
+    if shared_state.debug():
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (fx)")
 
     return releases

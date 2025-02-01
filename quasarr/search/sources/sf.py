@@ -4,6 +4,7 @@
 
 import html
 import re
+import time
 from base64 import urlsafe_b64encode
 from datetime import datetime, timedelta
 
@@ -13,12 +14,15 @@ from bs4 import BeautifulSoup
 from quasarr.providers.imdb_metadata import get_localized_title, get_imdb_id_from_title
 
 
-def sf_feed(shared_state, request_from):
+def sf_feed(shared_state, start_time, request_from):
     releases = []
     sf = shared_state.values["config"]("Hostnames").get("sf")
     password = sf
 
     if "Radarr" in request_from:
+        if shared_state.debug():
+            elapsed_time = time.time() - start_time
+            print(f"Time taken: {elapsed_time:.2f} seconds (sf)")
         return releases
 
     headers = {
@@ -34,7 +38,7 @@ def sf_feed(shared_state, request_from):
         date -= timedelta(days=1)
 
         try:
-            response = requests.get(f"https://serienfans.org/updates/{formatted_date}#list", headers)
+            response = requests.get(f"https://serienfans.org/updates/{formatted_date}#list", headers, timeout=10)
         except Exception as e:
             print(f"Error loading SF feed: {e} for {formatted_date}")
             return releases
@@ -85,6 +89,10 @@ def sf_feed(shared_state, request_from):
             except Exception as e:
                 print(f"Error parsing SF feed: {e}")
 
+    if shared_state.debug():
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (sf)")
+
     return releases
 
 
@@ -108,7 +116,7 @@ def extract_size(text):
         raise ValueError(f"Invalid size format: {text}")
 
 
-def sf_search(shared_state, request_from, search_string):
+def sf_search(shared_state, start_time, request_from, search_string):
     releases = []
     sf = shared_state.values["config"]("Hostnames").get("sf")
     password = sf
@@ -116,6 +124,9 @@ def sf_search(shared_state, request_from, search_string):
     title, season, episode = extract_season_episode(search_string)
 
     if "Radarr" in request_from:
+        if shared_state.debug():
+            elapsed_time = time.time() - start_time
+            print(f"Time taken: {elapsed_time:.2f} seconds (sf)")
         return releases
 
     if re.match(r'^tt\d{7,8}$', search_string):
@@ -134,7 +145,7 @@ def sf_search(shared_state, request_from, search_string):
     }
 
     try:
-        response = requests.get(url, headers)
+        response = requests.get(url, headers, timeout=10)
         feed = response.json()
     except Exception as e:
         print(f"Error loading SF search: {e}")
@@ -169,7 +180,7 @@ def sf_search(shared_state, request_from, search_string):
                     shared_state.update(context, recently_searched)
 
                     series_url = f"https://{sf}/{series_id}"
-                    series_page = requests.get(series_url, headers).text
+                    series_page = requests.get(series_url, headers, timeout=10).text
                     try:
                         imdb_link = (BeautifulSoup(series_page, "html.parser").
                                      find("a", href=re.compile(r"imdb\.com")))
@@ -181,7 +192,7 @@ def sf_search(shared_state, request_from, search_string):
                     epoch = str(datetime.now().timestamp()).replace('.', '')[:-3]
                     api_url = 'https://' + sf + '/api/v1/' + season_id + f'/season/{season}?lang=ALL&_=' + epoch
 
-                    response = requests.get(api_url)
+                    response = requests.get(api_url, headers=headers, timeout=10)
                     data = response.json()["html"]
                     content = BeautifulSoup(data, "html.parser")
 
@@ -262,4 +273,9 @@ def sf_search(shared_state, request_from, search_string):
         else:
             if shared_state.debug():
                 print(f"Search string '{search_string}' does not match result '{result['title']}'")
+
+    if shared_state.debug():
+        elapsed_time = time.time() - start_time
+        print(f"Time taken: {elapsed_time:.2f} seconds (sf)")
+
     return releases

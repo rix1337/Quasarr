@@ -64,8 +64,9 @@ class CNL:
 
 
 class DLC:
-    def __init__(self, dlc_file):
+    def __init__(self, shared_state, dlc_file):
         global user_agent
+        self.shared_state = shared_state
         self.data = dlc_file
         self.KEY = b"cb99b5cbc24db398"
         self.IV = b"9bc24cb995cb8db3"
@@ -99,7 +100,10 @@ class DLC:
 
             dlc_key = data[-88:].decode("utf-8")
             dlc_data = base64.b64decode(data[:-88])
-            dlc_content = requests.get(self.API_URL + dlc_key).content.decode("utf-8")
+
+            headers = {'User-Agent': self.shared_state.values["user_agent"]}
+
+            dlc_content = requests.get(self.API_URL + dlc_key, headers=headers, timeout=10).content.decode("utf-8")
 
             rc = base64.b64decode(re.search(r"<rc>(.+)</rc>", dlc_content, re.S).group(1))[:16]
 
@@ -129,10 +133,12 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
     print("Attempting to decrypt Filecrypt link: " + url)
     session = requests.Session()
 
+    headers = {'User-Agent': shared_state.values["user_agent"]}
+
     password_field = None
     if password:
         try:
-            output = requests.get(url, headers={'User-Agent': shared_state.values["user_agent"]})
+            output = session.get(url, headers=headers)
             soup = BeautifulSoup(output.text, 'html.parser')
             input_element = soup.find('input', placeholder=lambda value: value and 'password' in value.lower())
             password_field = input_element['name']
@@ -147,7 +153,7 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
                               headers={'User-Agent': shared_state.values["user_agent"],
                                        'Content-Type': 'application/x-www-form-urlencoded'})
     else:
-        output = session.get(url, headers={'User-Agent': shared_state.values["user_agent"]})
+        output = session.get(url, headers=headers)
 
     url = output.url
     soup = BeautifulSoup(output.text, 'html.parser')
@@ -243,7 +249,7 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
 
         for mirror in mirrors:
             if not len(mirrors) == 1:
-                output = session.get(mirror, headers={'User-Agent': shared_state.values["user_agent"]})
+                output = session.get(mirror, headers=headers)
                 url = output.url
                 soup = BeautifulSoup(output.text, 'html.parser')
 
@@ -263,7 +269,7 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
                     filtered_cnl_secret = soup.find("input", {"name": "hidden_cnl_id"}).attrs["value"]
                     filtered_cnl_link = f"https://{domain}/_CNL/{filtered_cnl_secret}.html?{season}&{episode}"
                     filtered_cnl_result = session.post(filtered_cnl_link,
-                                                       headers={'User-Agent': shared_state.values["user_agent"]})
+                                                       headers=headers)
                     if filtered_cnl_result.status_code == 200:
                         filtered_cnl_data = json.loads(filtered_cnl_result.text)
                         if filtered_cnl_data["success"]:
@@ -284,7 +290,7 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
                     dlc_link = f"https://{domain}/DLC/{dlc_secret}.dlc?{episode}&{season}"
                 else:
                     dlc_link = f"https://{domain}/DLC/{dlc_secret}.dlc"
-                dlc_file = session.get(dlc_link, headers={'User-Agent': shared_state.values["user_agent"]}).content
-                links.extend(DLC(dlc_file).decrypt())
+                dlc_file = session.get(dlc_link, headers=headers).content
+                links.extend(DLC(shared_state, dlc_file).decrypt())
 
     return links

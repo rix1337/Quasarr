@@ -19,7 +19,7 @@ def get_dw_download_links(shared_state, url, title):
     session = requests.Session()
 
     try:
-        request = session.get(url, headers=headers)
+        request = session.get(url, headers=headers, timeout=10)
         content = BeautifulSoup(request.text, "html.parser")
         download_buttons = content.find_all("button", {"class": "show_link"})
     except:
@@ -35,7 +35,7 @@ def get_dw_download_links(shared_state, url, title):
                 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
             }
 
-            response = session.post(ajax_url, payload, headers=headers)
+            response = session.post(ajax_url, payload, headers=headers, timeout=10)
             if response.status_code != 200:
                 print(f"DW site has been updated. Grabbing download links for {title} not possible!")
                 continue

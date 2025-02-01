@@ -15,7 +15,7 @@ def get_poster_link(shared_state, imdb_id):
     poster_link = None
     if imdb_id:
         headers = {'User-Agent': shared_state.values["user_agent"]}
-        request = requests.get(f"https://www.imdb.com/title/{imdb_id}/", headers=headers).text
+        request = requests.get(f"https://www.imdb.com/title/{imdb_id}/", headers=headers, timeout=10).text
         soup = BeautifulSoup(request, "html.parser")
         try:
             poster_set = soup.find('div', class_='ipc-poster').div.img[
@@ -41,7 +41,7 @@ def get_localized_title(shared_state, imdb_id, language='de'):
     }
 
     try:
-        response = requests.get(f"https://www.imdb.com/title/{imdb_id}/", headers=headers)
+        response = requests.get(f"https://www.imdb.com/title/{imdb_id}/", headers=headers, timeout=10)
     except Exception as e:
         print(f"Error loading IMDb metadata for {imdb_id}: {e}")
         return localized_title
@@ -99,7 +99,7 @@ def get_imdb_id_from_title(shared_state, title, request_from, language="de"):
     }
 
     results = requests.get(f"https://www.imdb.com/find/?q={quote(title)}&s=tt&ttype={ttype}&ref_=fn_{ttype}",
-                           headers=headers)
+                           headers=headers, timeout=10)
 
     if results.status_code == 200:
         soup = BeautifulSoup(results.text, "html.parser")

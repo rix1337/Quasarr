@@ -36,18 +36,18 @@ def get_release_url(url, title, shared_state):
             'User-Agent': shared_state.values["user_agent"],
         }
 
-        series_page = requests.get(url, headers).text
+        series_page = requests.get(url, headers=headers, timeout=10).text
         season_id = re.findall(r"initSeason\('(.+?)\',", series_page)[0]
         epoch = str(datetime.now().timestamp()).replace('.', '')[:-3]
         api_url = 'https://' + sf + '/api/v1/' + season_id + f'/season/{season}?lang=ALL&_=' + epoch
 
-        response = requests.get(api_url)
+        response = requests.get(api_url, headers=headers, timeout=10)
         try:
             data = response.json()["html"]
         except ValueError:
             epoch = str(datetime.now().timestamp()).replace('.', '')[:-3]
             api_url = 'https://' + sf + '/api/v1/' + season_id + f'/season/ALL?lang=ALL&_=' + epoch
-            response = requests.get(api_url)
+            response = requests.get(api_url, headers=headers, timeout=10)
             data = response.json()["html"]
 
         content = BeautifulSoup(data, "html.parser")
@@ -95,7 +95,7 @@ def get_release_url(url, title, shared_state):
 
 def resolve_sf_redirect(url):
     try:
-        response = requests.get(url, allow_redirects=True)
+        response = requests.get(url, allow_redirects=True, timeout=10)
         return response.url
     except Exception as e:
         print(f"Error fetching redirected URL for {url}: {e}")

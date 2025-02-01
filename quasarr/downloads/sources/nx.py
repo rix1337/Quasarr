@@ -25,7 +25,8 @@ def create_and_persist_session(shared_state):
         'password': shared_state.values["config"]("NX").get("password")
     }
 
-    nx_response = nx_session.post(f'https://{nx}/api/user/auth', cookies=cookies, headers=headers, json=json_data)
+    nx_response = nx_session.post(f'https://{nx}/api/user/auth', cookies=cookies, headers=headers, json=json_data,
+                                  timeout=10)
 
     error = False
     if nx_response.status_code == 200:
@@ -81,7 +82,7 @@ def get_filer_folder_links(shared_state, url):
             'User-Agent': shared_state.values["user_agent"],
             'Referer': url
         }
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=10)
         links = []
         if response:
             soup = BeautifulSoup(response.content, 'html.parser')
@@ -120,6 +121,7 @@ def get_nx_download_links(shared_state, url, title):
     payload = nx_session.post(payload_url,
                               headers=headers,
                               json=json_data,
+                              timeout=10
                               )
 
     if payload.status_code == 200:
