@@ -10,6 +10,8 @@ from base64 import urlsafe_b64encode
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.log import info, debug
+
 
 def convert_to_rss_date(date_str):
     german_months = ["Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -46,7 +48,7 @@ def dw_get_download_links(shared_state, content, title):
             content = BeautifulSoup(str(content), "html.parser")
         download_buttons = content.find_all("button", {"class": "show_link"})
     except:
-        print("DW hat die Detail-Seite angepasst. Parsen von Download-Links für " + title + " nicht möglich!")
+        info("DW hat die Detail-Seite angepasst. Parsen von Download-Links für " + title + " nicht möglich!")
         return False
 
     dw = shared_state.values["config"]("Hostnames").get("dw")
@@ -74,7 +76,7 @@ def dw_get_download_links(shared_state, content, title):
                 hoster = button.nextSibling.img["src"].split("/")[-1].replace(".png", "")
                 download_links.append([link, hoster])
     except:
-        print("DW site has been updated. Parsing download links not possible!")
+        info("DW site has been updated. Parsing download links not possible!")
         pass
 
     return download_links
@@ -120,7 +122,7 @@ def dw_feed(shared_state, start_time, request_from):
                     "utf-8")
                 link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
             except Exception as e:
-                print(f"Error parsing DW feed: {e}")
+                info(f"Error parsing DW feed: {e}")
                 continue
 
             releases.append({
@@ -136,11 +138,10 @@ def dw_feed(shared_state, start_time, request_from):
             })
 
     except Exception as e:
-        print(f"Error loading DW feed: {e}")
+        info(f"Error loading DW feed: {e}")
 
-    if shared_state.debug():
-        elapsed_time = time.time() - start_time
-        print(f"Time taken: {elapsed_time:.2f} seconds (dw)")
+    elapsed_time = time.time() - start_time
+    debug(f"Time taken: {elapsed_time:.2f} seconds (dw)")
 
     return releases
 
@@ -166,7 +167,7 @@ def dw_search(shared_state, start_time, request_from, search_string):
         results = search.find_all('h4')
 
     except Exception as e:
-        print(f"Error loading DW search feed: {e}")
+        info(f"Error loading DW search feed: {e}")
         return releases
 
     imdb_id = shared_state.is_imdb_id(search_string)
@@ -196,7 +197,7 @@ def dw_search(shared_state, start_time, request_from, search_string):
                     "utf-8")
                 link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
             except Exception as e:
-                print(f"Error parsing DW search: {e}")
+                info(f"Error parsing DW search: {e}")
                 continue
 
             releases.append({
@@ -211,8 +212,7 @@ def dw_search(shared_state, start_time, request_from, search_string):
                 "type": "protected"
             })
 
-    if shared_state.debug():
-        elapsed_time = time.time() - start_time
-        print(f"Time taken: {elapsed_time:.2f} seconds (dw)")
+    elapsed_time = time.time() - start_time
+    debug(f"Time taken: {elapsed_time:.2f} seconds (dw)")
 
     return releases

@@ -4,6 +4,8 @@
 
 import requests
 
+from quasarr.providers.log import info
+
 
 def get_title_from_tvrage_id(tvrage_id):
     try:
@@ -14,8 +16,8 @@ def get_title_from_tvrage_id(tvrage_id):
             data = response.json()
             return data.get("name", "Title not found")
         else:
-            print(f"Error: Unable to fetch title. HTTP Status Code: {response.status_code}")
+            info(f"Error: Unable to fetch title. HTTP Status Code: {response.status_code}")
             return ""
     except Exception as e:
-        print(f"Exception occurred: {e}")
+        info(f"Exception occurred: {e}")
         return ""

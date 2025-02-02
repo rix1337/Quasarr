@@ -7,6 +7,8 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.log import info
+
 
 def get_dw_download_links(shared_state, url, title):
     dw = shared_state.values["config"]("Hostnames").get("dw")
@@ -23,7 +25,7 @@ def get_dw_download_links(shared_state, url, title):
         content = BeautifulSoup(request.text, "html.parser")
         download_buttons = content.find_all("button", {"class": "show_link"})
     except:
-        print(f"DW site has been updated. Grabbing download links for {title} not possible!")
+        info(f"DW site has been updated. Grabbing download links for {title} not possible!")
         return False
 
     download_links = []
@@ -37,7 +39,7 @@ def get_dw_download_links(shared_state, url, title):
 
             response = session.post(ajax_url, payload, headers=headers, timeout=10)
             if response.status_code != 200:
-                print(f"DW site has been updated. Grabbing download links for {title} not possible!")
+                info(f"DW site has been updated. Grabbing download links for {title} not possible!")
                 continue
             else:
                 response = response.json()
@@ -52,7 +54,7 @@ def get_dw_download_links(shared_state, url, title):
                 hoster = button.nextSibling.img["src"].split("/")[-1].replace(".png", "")
                 download_links.append([link, hoster])
     except:
-        print(f"DW site has been updated. Parsing download links for {title} not possible!")
+        info(f"DW site has been updated. Parsing download links for {title} not possible!")
         pass
 
     return download_links

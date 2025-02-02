@@ -12,6 +12,7 @@ import quasarr.downloads.sources.dd
 from quasarr.downloads.sources import dd
 from quasarr.downloads.sources import nx
 from quasarr.providers.html_templates import render_button, render_form, render_success, render_fail
+from quasarr.providers.log import info
 from quasarr.providers.shared_state import extract_valid_hostname
 from quasarr.providers.web_server import Server
 from quasarr.storage.config import Config
@@ -59,8 +60,8 @@ def path_config(shared_state):
         return render_success(f'Config path set to: "{config_path}"',
                               5)
 
-    print(f'Starting web server for config at: "{shared_state.values['internal_address']}".')
-    print("Please set desired config path there!")
+    info(f'Starting web server for config at: "{shared_state.values['internal_address']}".')
+    info("Please set desired config path there!")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
 
 
@@ -99,7 +100,7 @@ def hostnames_config(shared_state):
                 if hostname:
                     hostname = extract_valid_hostname(hostname, shorthand)
             except Exception as e:
-                print(f"Error extracting domain from {hostname}: {e}")
+                info(f"Error extracting domain from {hostname}: {e}")
                 continue
 
             if hostname:
@@ -113,9 +114,8 @@ def hostnames_config(shared_state):
         else:
             return render_fail("No valid hostname provided!")
 
-    print(
-        f'Hostnames not set. Starting web server for config at: "{shared_state.values['internal_address']}".')
-    print("Please set at least one valid hostname there!")
+    info(f'Hostnames not set. Starting web server for config at: "{shared_state.values['internal_address']}".')
+    info("Please set at least one valid hostname there!")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
 
 
@@ -167,11 +167,11 @@ def hostname_credentials_config(shared_state, shorthand, domain):
         config.save("password", "")
         return render_fail("User and Password wrong or empty!")
 
-    print(
+    info(
         f'"{shorthand.lower()}" credentials required to access download links. '
         f'Starting web server for config at: "{shared_state.values['internal_address']}".')
-    print(f"If needed register here: 'https://{domain}'")
-    print("Please set your credentials now, to allow Quasarr to launch!")
+    info(f"If needed register here: 'https://{domain}'")
+    info("Please set your credentials now, to allow Quasarr to launch!")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
 
 
@@ -282,9 +282,9 @@ def jdownloader_config(shared_state):
 
         return render_fail("Could not set credentials!")
 
-    print(
+    info(
         f'My-JDownloader-Credentials not set. '
         f'Starting web server for config at: "{shared_state.values['internal_address']}".')
-    print("If needed register here: 'https://my.jdownloader.org/login.html#register'")
-    print("Please set your credentials now, to allow Quasarr to launch!")
+    info("If needed register here: 'https://my.jdownloader.org/login.html#register'")
+    info("Please set your credentials now, to allow Quasarr to launch!")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()

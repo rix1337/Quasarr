@@ -8,6 +8,7 @@ from bottle import request, abort
 
 from quasarr.downloads import delete_package
 from quasarr.providers import shared_state
+from quasarr.providers.log import info
 from quasarr.providers.notifications import send_discord_message
 
 
@@ -47,20 +48,20 @@ def setup_sponsors_helper_routes(app):
             download_links = data.get('urls')
             password = data.get('password')
 
-            print(f"Received {len(download_links)} download links for {title}")
+            info(f"Received {len(download_links)} download links for {title}")
 
             if download_links:
                 downloaded = shared_state.download_package(download_links, title, password, package_id)
                 if downloaded:
                     shared_state.get_db("protected").delete(package_id)
                     send_discord_message(shared_state, title=title, case="solved")
-                    print(f"Download successfully started for {title}")
+                    info(f"Download successfully started for {title}")
                     return f"Downloaded {len(download_links)} download links for {title}"
                 else:
-                    print(f"Download failed for {title}")
+                    info(f"Download failed for {title}")
 
         except Exception as e:
-            print(f"Error decrypting: {e}")
+            info(f"Error decrypting: {e}")
 
         return abort(500, "Failed")
 
@@ -75,7 +76,7 @@ def setup_sponsors_helper_routes(app):
                 return f'Deleted package "{deleted}" with ID "{package_id}"'
 
         except Exception as e:
-            print(f"Error deleting: {e}")
+            info(f"Error deleting: {e}")
 
         return abort(500, "Failed")
 
@@ -86,7 +87,7 @@ def setup_sponsors_helper_routes(app):
             payload = json.loads(data)
             if payload["activate"]:
                 shared_state.update("helper_active", True)
-                print(f"Sponsor status activated successfully")
+                info(f"Sponsor status activated successfully")
                 return "Sponsor status activated successfully!"
         except:
             pass

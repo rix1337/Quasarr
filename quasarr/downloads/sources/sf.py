@@ -8,6 +8,8 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.log import info
+
 
 def is_last_section_integer(url):
     last_section = url.rstrip('/').split('/')[-1]
@@ -81,7 +83,7 @@ def get_release_url(url, title, shared_state):
                 group_match = not result_groups.isdisjoint(release_groups)  # Checks if any group matches
 
                 if name_match and season_match and resolution_match and group_match:
-                    print(f'Release "{name}" found on SF at: {url}')
+                    info(f'Release "{name}" found on SF at: {url}')
                     release_url = f'https://{sf}{details.find("a")["href"]}'
                     real_url = resolve_sf_redirect(release_url)
                     return real_url
@@ -98,5 +100,5 @@ def resolve_sf_redirect(url):
         response = requests.get(url, allow_redirects=True, timeout=10)
         return response.url
     except Exception as e:
-        print(f"Error fetching redirected URL for {url}: {e}")
+        info(f"Error fetching redirected URL for {url}: {e}")
         return None

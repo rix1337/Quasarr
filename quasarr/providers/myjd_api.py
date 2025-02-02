@@ -35,8 +35,12 @@ import time
 from urllib.parse import quote
 
 import requests
+import urllib3
 from Cryptodome.Cipher import AES
 
+from quasarr.providers.log import debug
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BS = 16
 
 
@@ -722,7 +726,7 @@ class Myjdapi:
                 encrypted_response = requests.get(api + query, timeout=timeout)
             except Exception:
                 encrypted_response = requests.get(api + query, timeout=timeout, verify=False)
-                print("Could not establish secure connection to JDownloader.")
+                debug("Could not establish secure connection to JDownloader.")
         else:
             params_request = []
             if params is not None:
@@ -767,7 +771,7 @@ class Myjdapi:
                         timeout=timeout,
                         verify=False
                     )
-                    print("Could not establish secure connection to JDownloader.")
+                    debug("Could not establish secure connection to JDownloader.")
                 except Exception:
                     return None
         if encrypted_response.status_code == 403:

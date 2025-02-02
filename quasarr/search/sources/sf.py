@@ -12,6 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from quasarr.providers.imdb_metadata import get_localized_title
+from quasarr.providers.log import info, debug
 
 
 def sf_feed(shared_state, start_time, request_from):
@@ -20,9 +21,7 @@ def sf_feed(shared_state, start_time, request_from):
     password = sf
 
     if "Radarr" in request_from:
-        if shared_state.debug():
-            elapsed_time = time.time() - start_time
-            print(f"Time taken: {elapsed_time:.2f} seconds (sf)")
+        debug(f"Skipped Radarr search (sf)")
         return releases
 
     headers = {
@@ -40,7 +39,7 @@ def sf_feed(shared_state, start_time, request_from):
         try:
             response = requests.get(f"https://serienfans.org/updates/{formatted_date}#list", headers, timeout=10)
         except Exception as e:
-            print(f"Error loading SF feed: {e} for {formatted_date}")
+            info(f"Error loading SF feed: {e} for {formatted_date}")
             return releases
 
         content = BeautifulSoup(response.text, "html.parser")
@@ -87,11 +86,10 @@ def sf_feed(shared_state, start_time, request_from):
                     })
 
             except Exception as e:
-                print(f"Error parsing SF feed: {e}")
+                info(f"Error parsing SF feed: {e}")
 
-    if shared_state.debug():
-        elapsed_time = time.time() - start_time
-        print(f"Time taken: {elapsed_time:.2f} seconds (sf)")
+    elapsed_time = time.time() - start_time
+    debug(f"Time taken: {elapsed_time:.2f} seconds (sf)")
 
     return releases
 
@@ -124,16 +122,14 @@ def sf_search(shared_state, start_time, request_from, search_string):
     title, season, episode = extract_season_episode(search_string)
 
     if "Radarr" in request_from:
-        if shared_state.debug():
-            elapsed_time = time.time() - start_time
-            print(f"Time taken: {elapsed_time:.2f} seconds (sf)")
+        debug(f"Skipped Radarr search (sf)")
         return releases
 
     if re.match(r'^tt\d{7,8}$', search_string):
         imdb_id = search_string
         search_string = get_localized_title(shared_state, imdb_id, 'de')
         if not search_string:
-            print(f"Could not extract title from IMDb-ID {imdb_id}")
+            info(f"Could not extract title from IMDb-ID {imdb_id}")
             return releases
         search_string = html.unescape(search_string)
 
@@ -148,7 +144,7 @@ def sf_search(shared_state, start_time, request_from, search_string):
         response = requests.get(url, headers, timeout=10)
         feed = response.json()
     except Exception as e:
-        print(f"Error loading SF search: {e}")
+        info(f"Error loading SF search: {e}")
         return releases
 
     results = feed['result']
@@ -158,8 +154,7 @@ def sf_search(shared_state, start_time, request_from, search_string):
 
         # Use word boundaries to ensure full word/phrase match
         if re.search(rf'\b{re.escape(sanitized_search_string)}\b', sanitized_title):
-            if shared_state.debug():
-                print(f"Matched search string '{search_string}' with result '{result['title']}'")
+            debug(f"Matched search string '{search_string}' with result '{result['title']}'")
             try:
                 try:
                     if not season:
@@ -171,9 +166,7 @@ def sf_search(shared_state, start_time, request_from, search_string):
                     recently_searched = shared_state.get_recently_searched(shared_state, context, threshold)
                     if series_id in recently_searched:
                         if recently_searched[series_id]["timestamp"] > datetime.now() - timedelta(seconds=threshold):
-                            if shared_state.debug():
-                                print(
-                                    f"'/{series_id}' - requested within the last {threshold} seconds! Skipping...")
+                            debug(f"'/{series_id}' - requested within the last {threshold} seconds! Skipping...")
                             continue
 
                     recently_searched[series_id] = {"timestamp": datetime.now()}
@@ -269,13 +262,11 @@ def sf_search(shared_state, start_time, request_from, search_string):
                     })
 
             except Exception as e:
-                print(f"Error parsing SF search: {e}")
+                info(f"Error parsing SF search: {e}")
         else:
-            if shared_state.debug():
-                print(f"Search string '{search_string}' does not match result '{result['title']}'")
+            debug(f"Search string '{search_string}' does not match result '{result['title']}'")
 
-    if shared_state.debug():
-        elapsed_time = time.time() - start_time
-        print(f"Time taken: {elapsed_time:.2f} seconds (sf)")
+    elapsed_time = time.time() - start_time
+    debug(f"Time taken: {elapsed_time:.2f} seconds (sf)")
 
     return releases

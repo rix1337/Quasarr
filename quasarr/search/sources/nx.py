@@ -9,6 +9,7 @@ from base64 import urlsafe_b64encode
 import requests
 
 from quasarr.providers.imdb_metadata import get_localized_title
+from quasarr.providers.log import info, debug
 
 
 def nx_feed(shared_state, start_time, request_from):
@@ -30,7 +31,7 @@ def nx_feed(shared_state, start_time, request_from):
         response = requests.get(url, headers, timeout=10)
         feed = response.json()
     except Exception as e:
-        print(f"Error loading NX feed: {e}")
+        info(f"Error loading NX feed: {e}")
         return releases
 
     items = feed['result']['list']
@@ -72,11 +73,10 @@ def nx_feed(shared_state, start_time, request_from):
                 })
 
         except Exception as e:
-            print(f"Error parsing NX feed: {e}")
+            info(f"Error parsing NX feed: {e}")
 
-    if shared_state.debug():
-        elapsed_time = time.time() - start_time
-        print(f"Time taken: {elapsed_time:.2f} seconds (nx)")
+    elapsed_time = time.time() - start_time
+    debug(f"Time taken: {elapsed_time:.2f} seconds (nx)")
 
     return releases
 
@@ -92,11 +92,10 @@ def nx_search(shared_state, start_time, request_from, search_string):
         valid_type = "episode"
 
     imdb_id = shared_state.is_imdb_id(search_string)
-
     if imdb_id:
         search_string = get_localized_title(shared_state, imdb_id, 'de')
         if not search_string:
-            print(f"Could not extract title from IMDb-ID {imdb_id}")
+            info(f"Could not extract title from IMDb-ID {imdb_id}")
             return releases
         search_string = html.unescape(search_string)
 
@@ -109,7 +108,7 @@ def nx_search(shared_state, start_time, request_from, search_string):
         response = requests.get(url, headers, timeout=10)
         feed = response.json()
     except Exception as e:
-        print(f"Error loading NX search: {e}")
+        info(f"Error loading NX search: {e}")
         return releases
 
     items = feed['result']['releases']
@@ -156,10 +155,9 @@ def nx_search(shared_state, start_time, request_from, search_string):
                     })
 
         except Exception as e:
-            print(f"Error parsing NX search: {e}")
+            info(f"Error parsing NX search: {e}")
 
-    if shared_state.debug():
-        elapsed_time = time.time() - start_time
-        print(f"Time taken: {elapsed_time:.2f} seconds (nx)")
+    elapsed_time = time.time() - start_time
+    debug(f"Time taken: {elapsed_time:.2f} seconds (nx)")
 
     return releases

@@ -7,6 +7,8 @@ import pickle
 
 import requests
 
+from quasarr.providers.log import info, debug
+
 
 def create_and_persist_session(shared_state):
     dd = shared_state.values["config"]("Hostnames").get("dd")
@@ -33,16 +35,16 @@ def create_and_persist_session(shared_state):
         try:
             response_data = dd_response.json()
             if not response_data.get('loggedin'):
-                print("DD rejected login.")
+                info("DD rejected login.")
                 raise ValueError
             session_id = dd_response.cookies.get("PHPSESSID")
             if session_id:
                 dd_session.cookies.set('PHPSESSID', session_id, domain=dd)
             else:
-                print("Invalid DD response on login.")
+                info("Invalid DD response on login.")
                 error = True
         except ValueError:
-            print("Could not parse DD response on login.")
+            info("Could not parse DD response on login.")
             error = True
 
         if error:
@@ -55,7 +57,7 @@ def create_and_persist_session(shared_state):
         shared_state.values["database"]("sessions").update_store("dd", session_string)
         return dd_session
     else:
-        print("Could not create DD session")
+        info("Could not create DD session")
         return None
 
 
@@ -70,7 +72,7 @@ def retrieve_and_validate_session(shared_state):
             if not isinstance(dd_session, requests.Session):
                 raise ValueError("Retrieved object is not a valid requests.Session instance.")
         except Exception as e:
-            print(f"Session retrieval failed: {e}")
+            info(f"Session retrieval failed: {e}")
             dd_session = create_and_persist_session(shared_state)
 
     return dd_session
@@ -81,7 +83,7 @@ def get_dd_download_links(shared_state, search_string):
 
     dd_session = retrieve_and_validate_session(shared_state)
     if not dd_session:
-        print(f"Could not retrieve valid session for {dd}")
+        info(f"Could not retrieve valid session for {dd}")
         return []
 
     links = []
@@ -114,10 +116,9 @@ def get_dd_download_links(shared_state, search_string):
         for release in release_list:
             try:
                 if release.get("fake"):
-                    if shared_state.debug():
-                        print(f"Release {release.get('release')} marked as fake. Invalidating DD session...")
-                        create_and_persist_session(shared_state)
-                        return []
+                    debug(f"Release {release.get('release')} marked as fake. Invalidating DD session...")
+                    create_and_persist_session(shared_state)
+                    return []
                 elif release.get("release") == search_string:
                     filtered_links = []
                     for link in release["links"]:
@@ -127,18 +128,17 @@ def get_dd_download_links(shared_state, search_string):
                                 link["url"].endswith(".mkv")
                                 for existing_link in filtered_links
                         ):
-                            if shared_state.debug():
-                                print(f"Skipping duplicate `.mkv` link from {link['hostname']}")
+                            debug(f"Skipping duplicate `.mkv` link from {link['hostname']}")
                             continue  # Skip adding duplicate `.mkv` links from the same hostname
                         filtered_links.append(link)
 
                     links = [link["url"] for link in filtered_links]
                     break
             except Exception as e:
-                print(f"Error parsing DD feed: {e}")
+                info(f"Error parsing DD feed: {e}")
                 continue
 
     except Exception as e:
-        print(f"Error loading DD feed: {e}")
+        info(f"Error loading DD feed: {e}")
 
     return links

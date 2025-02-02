@@ -6,6 +6,7 @@ import sqlite3
 import time
 
 from quasarr.providers import shared_state
+from quasarr.providers.log import info
 
 
 class DataBase(object):
@@ -27,7 +28,7 @@ class DataBase(object):
                     self._conn.execute(f"CREATE TABLE {self._table} (key, value)")
                     self._conn.commit()
             except sqlite3.OperationalError as e:
-                print(f"Error accessing Quasarr.db: {e}")
+                info(f"Error accessing Quasarr.db: {e}")
 
     def retrieve(self, key):
         query = f"SELECT value FROM {self._table} WHERE key=?"
