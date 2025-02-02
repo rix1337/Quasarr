@@ -2,11 +2,13 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+import html
 import time
 from base64 import urlsafe_b64encode
 from datetime import datetime, timezone
 
 from quasarr.downloads.sources.dd import create_and_persist_session, retrieve_and_validate_session
+from quasarr.providers.imdb_metadata import get_localized_title
 from quasarr.providers.log import info, debug
 
 
@@ -30,6 +32,15 @@ def dd_search(shared_state, start_time, search_string=""):
         return []
 
     releases = []
+
+    imdb_id = shared_state.is_imdb_id(search_string)
+    if imdb_id:
+        search_string = get_localized_title(shared_state, imdb_id, 'en')
+        if not search_string:
+            info(f"Could not extract title from IMDb-ID {imdb_id}")
+            return releases
+        search_string = html.unescape(search_string)
+
     password = dd
 
     qualities = [

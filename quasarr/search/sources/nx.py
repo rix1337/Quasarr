@@ -92,7 +92,6 @@ def nx_search(shared_state, start_time, request_from, search_string):
         valid_type = "episode"
 
     imdb_id = shared_state.is_imdb_id(search_string)
-
     if imdb_id:
         search_string = get_localized_title(shared_state, imdb_id, 'de')
         if not search_string:
