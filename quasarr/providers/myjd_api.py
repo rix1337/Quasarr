@@ -35,8 +35,10 @@ import time
 from urllib.parse import quote
 
 import requests
+import urllib3
 from Cryptodome.Cipher import AES
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BS = 16
 
 
