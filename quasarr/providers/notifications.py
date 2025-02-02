@@ -24,14 +24,15 @@ def send_discord_message(shared_state, title, case, imdb_id=None):
         return False
 
     poster_object = None
-    if not imdb_id:
-        imdb_id = get_imdb_id_from_title(shared_state, title)
-    if imdb_id:
-        poster_link = get_poster_link(shared_state, imdb_id)
-        if poster_link:
-            poster_object = {
-                'url': poster_link
-            }
+    if case == "unprotected" or case == "captcha":
+        if not imdb_id:
+            imdb_id = get_imdb_id_from_title(shared_state, title)
+        if imdb_id:
+            poster_link = get_poster_link(shared_state, imdb_id)
+            if poster_link:
+                poster_object = {
+                    'url': poster_link
+                }
 
     # Decide the embed content based on the case
     if case == "unprotected":
