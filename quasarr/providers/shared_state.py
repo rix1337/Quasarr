@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timedelta
 from urllib import parse
 
+from quasarr.providers.log import info, debug
 from quasarr.providers.myjd_api import Myjdapi, TokenExpiredException, RequestTimeoutException, MYJDException, Jddevice
 from quasarr.storage.config import Config
 from quasarr.storage.sqlite_database import DataBase
@@ -50,7 +51,7 @@ def set_files(config_path):
 def generate_api_key():
     api_key = os.urandom(32).hex()
     Config('API').save("key", api_key)
-    print(f'API key replaced with: "{api_key}!"')
+    info(f'API key replaced with: "{api_key}!"')
     return api_key
 
 
@@ -80,7 +81,7 @@ def connect_to_jd(jd, user, password, device_name):
         jd.update_devices()
         device = jd.get_device(device_name)
     except (TokenExpiredException, RequestTimeoutException, MYJDException) as e:
-        print("Error connecting to JDownloader: " + str(e))
+        info("Error connecting to JDownloader: " + str(e))
         return False
     if not device or not isinstance(device, (type, Jddevice)):
         return False
@@ -88,9 +89,9 @@ def connect_to_jd(jd, user, password, device_name):
         device.downloadcontroller.get_current_state()  # request forces direct_connection info update
         connection_info = device.check_direct_connection()
         if connection_info["status"]:
-            print(f'Direct connection to JDownloader established: "{connection_info['ip']}"')
+            info(f'Direct connection to JDownloader established: "{connection_info['ip']}"')
         else:
-            print("Could not establish direct connection to JDownloader.")
+            info("Could not establish direct connection to JDownloader.")
         update("device", device)
         return True
 
@@ -163,7 +164,7 @@ def get_device():
         update("device", False)
 
         if attempts % 10 == 0:
-            print(
+            info(
                 f"WARNING: {attempts} consecutive JDownloader connection errors. Please check your credentials!")
         time.sleep(3)
 
@@ -182,7 +183,7 @@ def get_devices(user, password):
         devices = jd.list_devices()
         return devices
     except (TokenExpiredException, RequestTimeoutException, MYJDException) as e:
-        print("Error connecting to JDownloader: " + str(e))
+        info("Error connecting to JDownloader: " + str(e))
         return []
 
 
@@ -253,7 +254,7 @@ def set_device_settings():
 
             location = f"{namespace}/{storage}" if storage != "null" else namespace
             status = "Updated" if success else "Failed to update"
-            print(f'{status} "{name}" in "{location}" to "{expected_value}".')
+            info(f'{status} "{name}" in "{location}" to "{expected_value}".')
 
     settings_to_add = [
         {
@@ -334,7 +335,7 @@ def set_device_settings():
 
             location = f"{namespace}/{storage}" if storage != "null" else namespace
             status = "Added" if success else "Failed to add"
-            print(f'{status} {added_items} items to "{name}" in "{location}".')
+            info(f'{status} {added_items} items to "{name}" in "{location}".')
 
 
 def get_db(table):
@@ -360,12 +361,6 @@ def convert_to_mb(item):
 
     size_mb = size_b / (1024 * 1024)
     return int(size_mb)
-
-
-def debug():
-    if os.getenv('DEBUG'):
-        return True
-    return False
 
 
 def sanitize_string(s):
@@ -413,12 +408,10 @@ def search_string_in_sanitized_title(search_string, title):
 
     # Use word boundaries to ensure full word/phrase match
     if re.search(rf'\b{re.escape(sanitized_search_string)}\b', sanitized_title):
-        if debug():
-            print(f"Matched search string: {sanitized_search_string} with title: {sanitized_title}")
+        debug(f"Matched search string: {sanitized_search_string} with title: {sanitized_title}")
         return True
     else:
-        if debug():
-            print(f"Skipping {title} as it doesn't match search string: {sanitized_search_string}")
+        debug(f"Skipping {title} as it doesn't match search string: {sanitized_search_string}")
         return False
 
 
@@ -427,8 +420,7 @@ def get_recently_searched(shared_state, context, timeout_seconds):
     threshold = datetime.now() - timedelta(seconds=timeout_seconds)
     keys_to_remove = [key for key, value in recently_searched.items() if value["timestamp"] <= threshold]
     for key in keys_to_remove:
-        if shared_state.debug():
-            print(f"Removing '/{key}' from recently searched memory ({context})...")
+        debug(f"Removing '/{key}' from recently searched memory ({context})...")
         del recently_searched[key]
     return recently_searched
 

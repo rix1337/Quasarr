@@ -5,6 +5,7 @@
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from quasarr.providers.log import info
 from quasarr.search.sources.dd import dd_search
 from quasarr.search.sources.dw import dw_feed, dw_search
 from quasarr.search.sources.fx import fx_feed, fx_search
@@ -53,7 +54,7 @@ def get_search_results(shared_state, request_from, search_string="", season="", 
             functions.append(lambda: sf_feed(shared_state, start_time, request_from))
 
     stype = f'search phrase "{search_string}"' if search_string else "feed search"
-    print(f'Starting {len(functions)} search functions for {stype}... This may take some time.')
+    info(f'Starting {len(functions)} search functions for {stype}... This may take some time.')
 
     with ThreadPoolExecutor() as executor:
         futures = [executor.submit(func) for func in functions]
@@ -62,9 +63,9 @@ def get_search_results(shared_state, request_from, search_string="", season="", 
                 result = future.result()
                 results.extend(result)
             except Exception as e:
-                print(f"An error occurred: {e}")
+                info(f"An error occurred: {e}")
 
     elapsed_time = time.time() - start_time
-    print(f"Providing {len(results)} releases to {request_from} for {stype}. Time taken: {elapsed_time:.2f} seconds")
+    info(f"Providing {len(results)} releases to {request_from} for {stype}. Time taken: {elapsed_time:.2f} seconds")
 
     return results

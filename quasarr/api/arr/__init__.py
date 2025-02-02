@@ -13,6 +13,7 @@ from bottle import abort, request
 
 from quasarr.downloads import download, delete_package, get_packages
 from quasarr.providers import shared_state
+from quasarr.providers.log import info, debug
 from quasarr.providers.tvmaze_metadata import get_title_from_tvrage_id
 from quasarr.search import get_search_results
 from quasarr.storage.config import Config
@@ -56,16 +57,16 @@ def setup_arr_routes(app):
             size_mb = root.find(".//file").attrib["size_mb"]
             password = root.find(".//file").attrib.get("password")
             imdb_id = root.find(".//file").attrib.get("imdb_id")
-            print(f"Attempting download for {title}")
+            info(f"Attempting download for {title}")
 
             request_from = request.headers.get('User-Agent')
 
             nzo_id = download(shared_state, request_from, title, url, size_mb, password, imdb_id)
             if nzo_id:
-                print(f"{title} added successfully!")
+                info(f"{title} added successfully!")
                 nzo_ids.append(nzo_id)
             else:
-                print(f"{title} could not be added!")
+                info(f"{title} could not be added!")
 
         return {
             "status": True,
@@ -141,8 +142,8 @@ def setup_arr_routes(app):
                             }
                         }
             except Exception as e:
-                print(f"Error loading packages: {e}")
-                print(traceback.format_exc())
+                info(f"Error loading packages: {e}")
+                info(traceback.format_exc())
             return {
                 "status": False
             }
@@ -173,8 +174,7 @@ def setup_arr_routes(app):
                         releases = get_search_results(shared_state, request_from, search_string=search_param)
 
                     elif mode == 'search':
-                        if shared_state.debug():
-                            print(f'Search in Anime-Order is not supported. Ignoring request: {dict(request.query)}')
+                        debug(f'Search in Anime-Order is not supported. Ignoring request: {dict(request.query)}')
 
                     elif mode == 'tvsearch':
                         # these are currently ignored, Sonarr handles them anyway
@@ -195,8 +195,7 @@ def setup_arr_routes(app):
                                                           episode=episode
                                                           )
                         else:
-                            if shared_state.debug():
-                                print(f'Offset higher than 0 is not supported. Ignoring request: {dict(request.query)}')
+                            debug(f'Offset higher than 0 is not supported. Ignoring request: {dict(request.query)}')
 
                     items = ""
                     if not releases:
@@ -230,8 +229,8 @@ def setup_arr_routes(app):
                                     </channel>
                                 </rss>'''
             except Exception as e:
-                print(f"Error loading search results: {e}")
-                print(traceback.format_exc())
+                info(f"Error loading search results: {e}")
+                info(traceback.format_exc())
 
-            print(f"Unknown request: {dict(request.query)}")
+            info(f"Unknown request: {dict(request.query)}")
             return {"error": True}

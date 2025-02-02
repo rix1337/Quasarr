@@ -8,6 +8,7 @@ import requests
 
 from quasarr.providers.imdb_metadata import get_imdb_id_from_title
 from quasarr.providers.imdb_metadata import get_poster_link
+from quasarr.providers.log import info
 
 
 def send_discord_message(shared_state, title, case, imdb_id=None):
@@ -58,7 +59,7 @@ def send_discord_message(shared_state, title, case, imdb_id=None):
                 'value': f'[Become a Sponsor and let SponsorsHelper solve CAPTCHAs for you!]({f"https://github.com/users/rix1337/sponsorship"})',
             }, )
     else:
-        print(f"Unknown notification case: {case}")
+        info(f"Unknown notification case: {case}")
         return False
 
     data = {
@@ -80,7 +81,7 @@ def send_discord_message(shared_state, title, case, imdb_id=None):
     response = requests.post(shared_state.values["discord"], data=json.dumps(data),
                              headers={"Content-Type": "application/json"})
     if response.status_code != 204:
-        print(f"Failed to send message to Discord webhook. Status code: {response.status_code}")
+        info(f"Failed to send message to Discord webhook. Status code: {response.status_code}")
         return False
 
     return True

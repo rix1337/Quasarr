@@ -16,6 +16,7 @@ import requests
 
 from quasarr.api import get_api
 from quasarr.providers import shared_state, version
+from quasarr.providers.log import info
 from quasarr.storage.config import Config, get_clean_hostnames
 from quasarr.storage.setup import path_config, hostnames_config, hostname_credentials_config, jdownloader_config
 from quasarr.storage.sqlite_database import DataBase
@@ -202,8 +203,8 @@ def run():
         protected = shared_state.get_db("protected").retrieve_all_titles()
         if protected:
             package_count = len(protected)
-            print(f'CAPTCHA-Solution required for {package_count} package{'s' if package_count > 1 else ''} at: '
-                  f'{shared_state.values["external_address"]}/captcha!')
+            info(f'CAPTCHA-Solution required for {package_count} package{'s' if package_count > 1 else ''} at: '
+                 f'{shared_state.values["external_address"]}/captcha!')
 
         try:
             get_api(shared_state_dict, shared_state_lock)
@@ -221,7 +222,7 @@ def jdownloader_connection(shared_state_dict, shared_state_lock):
         i = 0
         while i < 10:
             i += 1
-            print(f'Connection {i} to JDownloader failed. Device name: "{shared_state.values["device"]}"')
+            info(f'Connection {i} to JDownloader failed. Device name: "{shared_state.values["device"]}"')
             time.sleep(60)
             shared_state.set_device_from_config()
             connection_established = shared_state.get_device() and shared_state.get_device().name
@@ -229,9 +230,9 @@ def jdownloader_connection(shared_state_dict, shared_state_lock):
                 break
 
     try:
-        print(f'Connection to JDownloader successful. Device name: "{shared_state.get_device().name}"')
+        info(f'Connection to JDownloader successful. Device name: "{shared_state.get_device().name}"')
     except Exception as e:
-        print(f'Error connecting to JDownloader: {e}! Stopping Quasarr!')
+        info(f'Error connecting to JDownloader: {e}! Stopping Quasarr!')
         sys.exit(1)
 
     try:

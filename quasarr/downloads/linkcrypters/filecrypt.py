@@ -14,6 +14,8 @@ import requests
 from Cryptodome.Cipher import AES
 from bs4 import BeautifulSoup
 
+from quasarr.providers.log import info
+
 
 class CNL:
     def __init__(self, crypted_data):
@@ -123,14 +125,14 @@ class DLC:
                 all_urls.extend(urls)
 
         except Exception as e:
-            print("DLC Error: " + str(e))
+            info("DLC Error: " + str(e))
             return None
 
         return all_urls
 
 
 def get_filecrypt_links(shared_state, token, title, url, password=None):
-    print("Attempting to decrypt Filecrypt link: " + url)
+    info("Attempting to decrypt Filecrypt link: " + url)
     session = requests.Session()
 
     headers = {'User-Agent': shared_state.values["user_agent"]}
@@ -142,13 +144,13 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
             soup = BeautifulSoup(output.text, 'html.parser')
             input_element = soup.find('input', placeholder=lambda value: value and 'password' in value.lower())
             password_field = input_element['name']
-            print("Password field name identified: " + password_field)
+            info("Password field name identified: " + password_field)
             url = output.url
         except:
-            print("No password field found. Skipping password entry!")
+            info("No password field found. Skipping password entry!")
 
     if password and password_field:
-        print("Using Password: " + password)
+        info("Using Password: " + password)
         output = session.post(url, data=password_field + "=" + password,
                               headers={'User-Agent': shared_state.values["user_agent"],
                                        'Content-Type': 'application/x-www-form-urlencoded'})
@@ -158,12 +160,12 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
     url = output.url
     soup = BeautifulSoup(output.text, 'html.parser')
     if bool(soup.find_all("input", {"id": "p4assw0rt"})):
-        print(f"Password was wrong or missing. Could not get links for {title}")
+        info(f"Password was wrong or missing. Could not get links for {title}")
         return False
 
     no_captcha_present = bool(soup.find("form", {"class": "cnlform"}))
     if no_captcha_present:
-        print("No CAPTCHA present. Skipping token!")
+        info("No CAPTCHA present. Skipping token!")
     else:
         circle_captcha = bool(soup.find_all("div", {"class": "circle_captcha"}))
         i = 0
@@ -182,13 +184,13 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
     url = output.url
 
     if "/404.html" in url:
-        print("Filecrypt returned 404 - current IP is likely banned or the link is offline.")
+        info("Filecrypt returned 404 - current IP is likely banned or the link is offline.")
 
     soup = BeautifulSoup(output.text, 'html.parser')
 
     solved = bool(soup.find_all("div", {"class": "container"}))
     if not solved:
-        print("Token rejected by Filecrypt! Try another CAPTCHA to proceed...")
+        info("Token rejected by Filecrypt! Try another CAPTCHA to proceed...")
         return False
     else:
         season_number = ""
@@ -230,7 +232,7 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
                 pass
 
         if episode_number and not episode:
-            print(f"Missing select for episode number {episode_number}! Expect undesired links in the output.")
+            info(f"Missing select for episode number {episode_number}! Expect undesired links in the output.")
 
         links = []
 
@@ -281,7 +283,7 @@ def get_filecrypt_links(shared_state, token, title, url, password=None):
                             ]
                 links.extend(CNL(crypted_data).decrypt())
             except:
-                print("Click'n'Load not found! Falling back to DLC...")
+                info("Click'n'Load not found! Falling back to DLC...")
                 crypted_payload = soup.find("button", {"class": "dlcdownload"}).get("onclick")
                 crypted_data = re.findall(r"'(.*?)'", crypted_payload)
                 dlc_secret = crypted_data[0]

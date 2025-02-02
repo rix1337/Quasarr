@@ -10,6 +10,8 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.log import info, debug
+
 
 def get_poster_link(shared_state, imdb_id):
     poster_link = None
@@ -26,8 +28,8 @@ def get_poster_link(shared_state, imdb_id):
         except:
             pass
 
-    if not poster_link and shared_state.debug():
-        print(f"Could not get poster title for {imdb_id} from IMDb")
+    if not poster_link:
+        debug(f"Could not get poster title for {imdb_id} from IMDb")
 
     return poster_link
 
@@ -43,7 +45,7 @@ def get_localized_title(shared_state, imdb_id, language='de'):
     try:
         response = requests.get(f"https://www.imdb.com/title/{imdb_id}/", headers=headers, timeout=10)
     except Exception as e:
-        print(f"Error loading IMDb metadata for {imdb_id}: {e}")
+        info(f"Error loading IMDb metadata for {imdb_id}: {e}")
         return localized_title
 
     try:
@@ -56,8 +58,8 @@ def get_localized_title(shared_state, imdb_id, language='de'):
         except:
             pass
 
-    if not localized_title and shared_state.debug():
-        print(f"Could not get localized title for {imdb_id} in {language} from IMDb")
+    if not localized_title:
+        debug(f"Could not get localized title for {imdb_id} in {language} from IMDb")
 
     return localized_title
 
@@ -113,8 +115,7 @@ def get_imdb_id_from_title(shared_state, title, language="de"):
                     imdb_id = result['id']
                     break
     else:
-        if shared_state.debug():
-            print(f"Request on IMDb failed: {results.status_code}")
+        debug(f"Request on IMDb failed: {results.status_code}")
 
     recently_searched[title] = {
         "imdb_id": imdb_id,
@@ -122,7 +123,7 @@ def get_imdb_id_from_title(shared_state, title, language="de"):
     }
     shared_state.update(context, recently_searched)
 
-    if not imdb_id and shared_state.debug():
-        print(f"No IMDb-ID found for {title}")
+    if not imdb_id:
+        debug(f"No IMDb-ID found for {title}")
 
     return imdb_id

@@ -9,6 +9,8 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.log import info
+
 
 def create_and_persist_session(shared_state):
     nx = shared_state.values["config"]("Hostnames").get("nx")
@@ -33,16 +35,16 @@ def create_and_persist_session(shared_state):
         try:
             response_data = nx_response.json()
             if response_data.get('err', {}).get('status') == 403:
-                print("Invalid NX credentials provided.")
+                info("Invalid NX credentials provided.")
                 error = True
             elif response_data.get('user').get('username') != shared_state.values["config"]("NX").get("user"):
-                print("Invalid NX response on login.")
+                info("Invalid NX response on login.")
                 error = True
             else:
                 sessiontoken = response_data.get('user').get('sessiontoken')
                 nx_session.cookies.set('sessiontoken', sessiontoken, domain=nx)
         except ValueError:
-            print("Could not parse NX response on login.")
+            info("Could not parse NX response on login.")
             error = True
 
         if error:
@@ -55,7 +57,7 @@ def create_and_persist_session(shared_state):
         shared_state.values["database"]("sessions").update_store("nx", session_string)
         return nx_session
     else:
-        print("Could not create NX session")
+        info("Could not create NX session")
         return None
 
 
@@ -70,7 +72,7 @@ def retrieve_and_validate_session(shared_state):
             if not isinstance(nx_session, requests.Session):
                 raise ValueError("Retrieved object is not a valid requests.Session instance.")
         except Exception as e:
-            print(f"Session retrieval failed: {e}")
+            info(f"Session retrieval failed: {e}")
             nx_session = create_and_persist_session(shared_state)
 
     return nx_session
@@ -101,11 +103,11 @@ def get_nx_download_links(shared_state, url, title):
     nx = shared_state.values["config"]("Hostnames").get("nx")
 
     if f"{nx}/release/" not in url:
-        print("Link is not a Release link, could not proceed:" + url)
+        info("Link is not a Release link, could not proceed:" + url)
 
     nx_session = retrieve_and_validate_session(shared_state)
     if not nx_session:
-        print(f"Could not retrieve valid session for {nx}")
+        info(f"Could not retrieve valid session for {nx}")
         return []
 
     headers = {
@@ -128,7 +130,7 @@ def get_nx_download_links(shared_state, url, title):
         try:
             payload = payload.json()
         except:
-            print("Invalid response decrypting " + str(title) + " URL: " + str(url))
+            info("Invalid response decrypting " + str(title) + " URL: " + str(url))
             shared_state.values["database"]("sessions").delete("nx")
             return []
 
@@ -143,6 +145,6 @@ def get_nx_download_links(shared_state, url, title):
     except:
         pass
 
-    print("Something went wrong decrypting " + str(title) + " URL: " + str(url))
+    info("Something went wrong decrypting " + str(title) + " URL: " + str(url))
     shared_state.values["database"]("sessions").delete("nx")
     return []

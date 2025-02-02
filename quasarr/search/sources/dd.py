@@ -7,6 +7,7 @@ from base64 import urlsafe_b64encode
 from datetime import datetime, timezone
 
 from quasarr.downloads.sources.dd import create_and_persist_session, retrieve_and_validate_session
+from quasarr.providers.log import info, debug
 
 
 def convert_to_rss_date(unix_timestamp):
@@ -25,7 +26,7 @@ def dd_search(shared_state, start_time, search_string=""):
 
     dd_session = retrieve_and_validate_session(shared_state)
     if not dd_session:
-        print(f"Could not retrieve valid session for {dd}")
+        info(f"Could not retrieve valid session for {dd}")
         return []
 
     releases = []
@@ -59,10 +60,9 @@ def dd_search(shared_state, start_time, search_string=""):
         for release in release_list:
             try:
                 if release.get("fake"):
-                    if shared_state.debug():
-                        print(f"Release {release.get('release')} marked as fake. Invalidating DD session...")
-                        create_and_persist_session(shared_state)
-                        return []
+                    debug(f"Release {release.get('release')} marked as fake. Invalidating DD session...")
+                    create_and_persist_session(shared_state)
+                    return []
                 else:
                     title = release.get("release")
 
@@ -91,14 +91,13 @@ def dd_search(shared_state, start_time, search_string=""):
                         "type": "protected"
                     })
             except Exception as e:
-                print(f"Error parsing DD feed: {e}")
+                info(f"Error parsing DD feed: {e}")
                 continue
 
     except Exception as e:
-        print(f"Error loading DD feed: {e}")
+        info(f"Error loading DD feed: {e}")
 
-    if shared_state.debug():
-        elapsed_time = time.time() - start_time
-        print(f"Time taken: {elapsed_time:.2f} seconds (dd)")
+    elapsed_time = time.time() - start_time
+    debug(f"Time taken: {elapsed_time:.2f} seconds (dd)")
 
     return releases

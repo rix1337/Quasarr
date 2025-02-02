@@ -11,6 +11,7 @@ from bottle import request, response
 from quasarr.downloads.linkcrypters.filecrypt import get_filecrypt_links
 from quasarr.providers import shared_state
 from quasarr.providers.html_templates import render_button, render_centered_html
+from quasarr.providers.log import info
 from quasarr.providers.obfuscated import captcha_js, captcha_values
 
 
@@ -191,11 +192,11 @@ def setup_captcha_routes(app):
             link = data.get('link')
             password = data.get('password')
             if token:
-                print(f"Received token: {token}")
-                print(f"Decrypting links for {title}")
+                info(f"Received token: {token}")
+                info(f"Decrypting links for {title}")
                 download_links = get_filecrypt_links(shared_state, token, title, link, password)
 
-                print(f"Decrypted {len(download_links)} download links for {title}")
+                info(f"Decrypted {len(download_links)} download links for {title}")
 
                 if download_links:
                     downloaded = shared_state.download_package(download_links, title, password, package_id)
@@ -207,6 +208,6 @@ def setup_captcha_routes(app):
                     raise ValueError("No download links found")
 
         except Exception as e:
-            print(f"Error decrypting: {e}")
+            info(f"Error decrypting: {e}")
 
         return {"success": bool(download_links), "title": title}

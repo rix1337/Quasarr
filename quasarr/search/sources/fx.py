@@ -9,6 +9,8 @@ from base64 import urlsafe_b64encode
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.log import info, debug
+
 
 def extract_size(text):
     match = re.match(r"(\d+)\s*([A-Za-z]+)", text)
@@ -36,7 +38,7 @@ def fx_feed(shared_state, start_time):
         feed = BeautifulSoup(request, "html.parser")
         items = feed.find_all("article")
     except Exception as e:
-        print(f"Error loading FX feed: {e}")
+        info(f"Error loading FX feed: {e}")
         return releases
 
     if items:
@@ -92,11 +94,10 @@ def fx_feed(shared_state, start_time):
                     })
 
             except Exception as e:
-                print(f"Error parsing FX feed: {e}")
+                info(f"Error parsing FX feed: {e}")
 
-    if shared_state.debug():
-        elapsed_time = time.time() - start_time
-        print(f"Time taken: {elapsed_time:.2f} seconds (fx)")
+    elapsed_time = time.time() - start_time
+    debug(f"Time taken: {elapsed_time:.2f} seconds (fx)")
 
     return releases
 
@@ -118,7 +119,7 @@ def fx_search(shared_state, start_time, search_string):
         results = search.find('h2', class_='entry-title')
 
     except Exception as e:
-        print(f"Error loading FX feed: {e}")
+        info(f"Error loading FX feed: {e}")
         return releases
 
     imdb_id = shared_state.is_imdb_id(search_string)
@@ -131,7 +132,7 @@ def fx_search(shared_state, start_time, search_string):
                 feed = BeautifulSoup(request, "html.parser")
                 items = feed.find_all("article")
             except Exception as e:
-                print(f"Error loading FX feed: {e}")
+                info(f"Error loading FX feed: {e}")
                 return releases
 
             for item in items:
@@ -189,10 +190,9 @@ def fx_search(shared_state, start_time, search_string):
                         })
 
                 except Exception as e:
-                    print(f"Error parsing FX search: {e}")
+                    info(f"Error parsing FX search: {e}")
 
-    if shared_state.debug():
-        elapsed_time = time.time() - start_time
-        print(f"Time taken: {elapsed_time:.2f} seconds (fx)")
+    elapsed_time = time.time() - start_time
+    debug(f"Time taken: {elapsed_time:.2f} seconds (fx)")
 
     return releases
