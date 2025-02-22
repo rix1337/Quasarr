@@ -22,30 +22,34 @@ def get_links_comment(package, package_links):
     return None
 
 
-def get_links_finished_status(package, all_links):
+def get_links_status(package, all_links):
     links_in_package = []
     package_uuid = package.get("uuid")
     if package_uuid and all_links:
         for link in all_links:
-            if link.get("packageUUID") == package_uuid:
+            link_package_uuid = link.get("packageUUID")
+            if link_package_uuid and link_package_uuid == package_uuid:
                 links_in_package.append(link)
 
     all_finished = True
     eta = None
+    error = None
 
     for link in links_in_package:
         link_finished = link.get('finished', False)
-        link_extraction_status = link.get('extractionStatus', '').lower()
+        link_extraction_status = link.get('extractionStatus', '').lower()  # "error" signifies an issue
         link_eta = link.get('eta', 0) // 1000
         if not link_finished:
             all_finished = False
         elif link_extraction_status and link_extraction_status != 'successful':
-            if link_extraction_status == 'running' and link_eta > 0:
+            if link_extraction_status == 'error':
+                error = link.get('status', '')
+            elif link_extraction_status == 'running' and link_eta > 0:
                 if eta and link_eta > eta or not eta:
                     eta = link_eta
             all_finished = False
 
-    return {"all_finished": all_finished, "eta": eta}
+    return {"all_finished": all_finished, "eta": eta, "error": error}
 
 
 def get_links_matching_package_uuid(package, package_links):
@@ -115,17 +119,22 @@ def get_packages(shared_state):
     if downloader_packages and downloader_links:
         for package in downloader_packages:
             comment = get_links_comment(package, downloader_links)
-            all_finished = get_links_finished_status(package, downloader_links)
+            all_finished = get_links_status(package, downloader_links)
+
+            error = all_finished["error"]
             finished = all_finished["all_finished"]
             if not finished and all_finished["eta"]:
                 package["eta"] = all_finished["eta"]
 
+            location = "history" if error or finished else "queue"
+
             packages.append({
                 "details": package,
-                "location": "history" if finished else "queue",
+                "location": location,
                 "type": "downloader",
                 "comment": comment,
-                "uuid": package.get("uuid")
+                "uuid": package.get("uuid"),
+                "error": error
             })
 
     downloads = {
@@ -166,6 +175,8 @@ def get_packages(shared_state):
 
                 mb = bytes_total / (1024 * 1024)
                 mb_left = (bytes_total - bytes_loaded) / (1024 * 1024) if bytes_total else 0
+                if mb_left < 0:
+                    mb_left = 0
 
                 if eta is None:
                     status = "Paused"
@@ -233,11 +244,19 @@ def get_packages(shared_state):
             except TypeError:
                 category = "not_quasarr"
 
+            error = package.get("error")
+            fail_message = ""
+            if error:
+                status = "Failed"
+                fail_message = error
+            else:
+                status = "Completed"
+
             downloads["history"].append({
-                "fail_message": "",
+                "fail_message": fail_message,
                 "category": category,
                 "storage": storage,
-                "status": "Completed",
+                "status": status,
                 "nzo_id": package_id,
                 "name": name,
                 "bytes": int(size),

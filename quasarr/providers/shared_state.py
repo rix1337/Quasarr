@@ -49,7 +49,7 @@ def set_files(config_path):
 
 
 def generate_api_key():
-    api_key = os.urandom(32).hex()
+    api_key = os.urandom(24).hex()
     Config('API').save("key", api_key)
     info(f'API key replaced with: "{api_key}!"')
     return api_key
@@ -81,7 +81,7 @@ def connect_to_jd(jd, user, password, device_name):
         jd.update_devices()
         device = jd.get_device(device_name)
     except (TokenExpiredException, RequestTimeoutException, MYJDException) as e:
-        info("Error connecting to JDownloader: " + str(e))
+        info("Error connecting to JDownloader: " + str(e).strip())
         return False
     if not device or not isinstance(device, (type, Jddevice)):
         return False

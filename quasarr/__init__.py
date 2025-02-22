@@ -16,7 +16,7 @@ import requests
 
 from quasarr.api import get_api
 from quasarr.providers import shared_state, version
-from quasarr.providers.log import info
+from quasarr.providers.log import info, debug
 from quasarr.storage.config import Config, get_clean_hostnames
 from quasarr.storage.setup import path_config, hostnames_config, hostname_credentials_config, jdownloader_config
 from quasarr.storage.sqlite_database import DataBase
@@ -199,6 +199,8 @@ def run():
         print(f'Leave settings at default and use this API key: "{api_key}" (without quotes)')
 
         print("\n===== Quasarr Info Log =====")
+        if os.getenv('DEBUG'):
+            print("=====    / Debug Log   =====")
 
         protected = shared_state.get_db("protected").retrieve_all_titles()
         if protected:
