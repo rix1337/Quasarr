@@ -352,7 +352,7 @@ def download(shared_state, request_from, title, url, size_mb, password, imdb_id=
 
     elif dw and dw.lower() in url.lower():
         links = get_dw_download_links(shared_state, url, title)
-        info(f'CAPTCHA-Solution required for "{title}" at: {shared_state.values['external_address']}/captcha')
+        info(f'CAPTCHA-Solution required for "{title}" at: "{shared_state.values['external_address']}/captcha"')
         send_discord_message(shared_state, title=title, case="captcha", imdb_id=imdb_id)
         blob = json.dumps({"title": title, "links": links, "size_mb": size_mb, "password": password})
         shared_state.values["database"]("protected").update_store(package_id, blob)
@@ -364,7 +364,7 @@ def download(shared_state, request_from, title, url, size_mb, password, imdb_id=
             url = get_release_url(url, title, shared_state)
 
         if url:
-            info(f'CAPTCHA-Solution required for "{title}" at: {shared_state.values['external_address']}/captcha')
+            info(f'CAPTCHA-Solution required for "{title}" at: "{shared_state.values['external_address']}/captcha"')
             send_discord_message(shared_state, title=title, case="captcha", imdb_id=imdb_id)
             blob = json.dumps({"title": title, "links": [[url, "filecrypt"]], "size_mb": size_mb, "password": password})
             shared_state.values["database"]("protected").update_store(package_id, blob)
@@ -373,7 +373,7 @@ def download(shared_state, request_from, title, url, size_mb, password, imdb_id=
             package_id = None
 
     elif "filecrypt".lower() in url.lower():
-        info(f'CAPTCHA-Solution required for "{title}" at: {shared_state.values['external_address']}/captcha')
+        info(f'CAPTCHA-Solution required for "{title}" at: "{shared_state.values['external_address']}/captcha"')
         send_discord_message(shared_state, title=title, case="captcha", imdb_id=imdb_id)
         blob = json.dumps({"title": title, "links": [[url, "filecrypt"]], "size_mb": size_mb, "password": password})
         shared_state.values["database"]("protected").update_store(package_id, blob)
