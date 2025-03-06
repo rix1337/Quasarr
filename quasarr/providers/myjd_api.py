@@ -64,6 +64,45 @@ def unpad(s):
     return s[0:-s[-1]]
 
 
+class Update:
+    """
+    Class that represents the update-functionality of a Device
+    """
+
+    def __init__(self, device):
+        self.device = device
+        self.url = '/update'
+
+    def restart_and_update(self):
+        """
+
+        :return:
+        """
+        resp = self.device.action(self.url + "/restartAndUpdate")
+        return resp
+
+    def run_update_check(self):
+        """
+
+        :return:
+        """
+        resp = self.device.action(self.url + "/runUpdateCheck")
+        return resp
+
+    def is_update_available(self):
+        """
+
+        :return:
+        """
+        resp = self.device.action(self.url + "/isUpdateAvailable")
+        return resp
+
+    def update_available(self):
+        self.run_update_check()
+        resp = self.is_update_available()
+        return resp
+
+
 class Config:
     """
     Class that represents the Config of a Device
@@ -346,6 +385,7 @@ class Jddevice:
         self.linkgrabber = Linkgrabber(self)
         self.downloads = Downloads(self)
         self.downloadcontroller = DownloadController(self)
+        self.update = Update(self)
         self.__direct_connection_info = None
         self.__refresh_direct_connections()
         self.__direct_connection_enabled = True

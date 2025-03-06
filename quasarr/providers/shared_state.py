@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timedelta
 from urllib import parse
 
+import quasarr
 from quasarr.providers.log import info, debug
 from quasarr.providers.myjd_api import Myjdapi, TokenExpiredException, RequestTimeoutException, MYJDException, Jddevice
 from quasarr.storage.config import Config
@@ -336,6 +337,49 @@ def set_device_settings():
             location = f"{namespace}/{storage}" if storage != "null" else namespace
             status = "Added" if success else "Failed to add"
             info(f'{status} {added_items} items to "{name}" in "{location}".')
+
+
+def update_jdownloader():
+    try:
+        if not get_device():
+            set_device_from_config()
+        device = get_device()
+
+        if device:
+            try:
+                current_state = device.downloadcontroller.get_current_state()
+                is_collecting = device.linkgrabber.is_collecting()
+                update_available = device.update.update_available()
+
+                if (current_state.lower() == "idle") and (not is_collecting and update_available):
+                    info("JDownloader update ready. Starting update...")
+                    device.update.restart_and_update()
+            except quasarr.providers.myjd_api.TokenExpiredException:
+                return False
+            return True
+        else:
+            return False
+    except quasarr.providers.myjd_api.MYJDException as e:
+        info(f"Error updating JDownloader: {e}")
+        return False
+
+
+def start_downloads():
+    try:
+        if not get_device():
+            set_device_from_config()
+        device = get_device()
+
+        if device:
+            try:
+                return device.downloadcontroller.start_downloads()
+            except quasarr.providers.myjd_api.TokenExpiredException:
+                return False
+        else:
+            return False
+    except quasarr.providers.myjd_api.MYJDException as e:
+        info(f"Error starting Downloads: {e}")
+        return False
 
 
 def get_db(table):
