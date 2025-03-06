@@ -242,6 +242,16 @@ def jdownloader_connection(shared_state_dict, shared_state_lock):
     except Exception as e:
         print(f"Error checking settings: {e}")
 
+    try:
+        shared_state.update_jdownloader()
+    except Exception as e:
+        print(f"Error updating jdownloader: {e}")
+
+    try:
+        shared_state.start_downloads()
+    except Exception as e:
+        print(f"Error starting downloads: {e}")
+
 
 class Unbuffered(object):
     def __init__(self, stream):
