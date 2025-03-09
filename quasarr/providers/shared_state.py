@@ -196,49 +196,49 @@ def set_device_settings():
             "namespace": "org.jdownloader.settings.GeneralSettings",
             "storage": None,
             "setting": "AutoStartDownloadOption",
-            "expected_value": "ALWAYS",
+            "expected_value": "ALWAYS",  # Downloads must start automatically for Quasarr to work
         },
         {
             "namespace": "org.jdownloader.settings.GeneralSettings",
             "storage": None,
             "setting": "IfFileExistsAction",
-            "expected_value": "SKIP_FILE",
+            "expected_value": "SKIP_FILE",  # Prevents popups during download
         },
         {
             "namespace": "org.jdownloader.settings.GeneralSettings",
             "storage": None,
             "setting": "CleanupAfterDownloadAction",
-            "expected_value": "NEVER",
+            "expected_value": "NEVER",  # Links must be kept after download for Quasarr to work
         },
         {
             "namespace": "org.jdownloader.settings.GraphicalUserInterfaceSettings",
             "storage": None,
             "setting": "BannerEnabled",
-            "expected_value": False,
+            "expected_value": False,  # Removes UI clutter in JDownloader
         },
         {
             "namespace": "org.jdownloader.settings.GraphicalUserInterfaceSettings",
             "storage": None,
             "setting": "DonateButtonState",
-            "expected_value": "CUSTOM_HIDDEN",
+            "expected_value": "CUSTOM_HIDDEN",  # Removes UI clutter in JDownloader
         },
         {
             "namespace": "org.jdownloader.extensions.extraction.ExtractionConfig",
             "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
             "setting": "DeleteArchiveFilesAfterExtractionAction",
-            "expected_value": "NULL",
+            "expected_value": "NULL",  # "NULL" is the ENUM for "Delete files from Harddisk"
         },
         {
             "namespace": "org.jdownloader.extensions.extraction.ExtractionConfig",
             "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
             "setting": "IfFileExistsAction",
-            "expected_value": "OVERWRITE_FILE",
+            "expected_value": "OVERWRITE_FILE",  # Prevents popups during extraction
         },
         {
             "namespace": "org.jdownloader.extensions.extraction.ExtractionConfig",
             "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
             "setting": "DeleteArchiveDownloadlinksAfterExtraction",
-            "expected_value": False,
+            "expected_value": False,  # Links must be kept after extraction for Quasarr to work
         },
     ]
 

@@ -44,8 +44,8 @@ def run():
 └────────────────────────────────────┘""")
 
         print("\n===== Recommended Services =====")
-        print("- For automated CAPTCHA solutions use SponsorsHelper: https://github.com/users/rix1337/sponsorship")
-        print("- For convenient universal premium downloads use: https://linksnappy.com/?ref=397097")
+        print('- For automated CAPTCHA solutions use SponsorsHelper: "https://github.com/users/rix1337/sponsorship"')
+        print('- For convenient universal premium downloads use: "https://linksnappy.com/?ref=397097"')
 
         print("\n===== Startup Info =====")
 
@@ -138,9 +138,9 @@ def run():
                         print(f'No Hostnames found at "{hostnames_link}". '
                               'Ensure to pass a plain hostnames list, not html or json!')
                 else:
-                    print(f"Invalid hostnames URL: {hostnames_link}")
+                    print(f'Invalid hostnames URL: "{hostnames_link}"')
         except Exception as e:
-            print(f'Error parsing hostnames link: {e}')
+            print(f'Error parsing hostnames link: "{e}"')
 
         print("\n===== Configuration =====")
         api_key = Config('API').get('key')
@@ -194,9 +194,9 @@ def run():
         jdownloader.start()
 
         print("\n===== API Information =====")
-        print(f"Quasarr API now running at: {shared_state.values['internal_address']}")
-        print('Use this exact URL as "Newznab Indexer" and "SABnzbd Download Client" in Radarr/Sonarr')
-        print(f'Leave settings at default and use this API key: "{api_key}" (without quotes)')
+        print(f'Quasarr API now running at: "{shared_state.values['internal_address']}"')
+        print('Use the above URL to set up a "Newznab Indexer" and "SABnzbd Download Client" in Radarr/Sonarr')
+        print(f'Leave all settings at default and use this API key: "{api_key}" (without quotes)')
 
         print("\n===== Quasarr Info Log =====")
         if os.getenv('DEBUG'):
@@ -206,7 +206,7 @@ def run():
         if protected:
             package_count = len(protected)
             info(f'CAPTCHA-Solution required for {package_count} package{'s' if package_count > 1 else ''} at: '
-                 f'{shared_state.values["external_address"]}/captcha!')
+                 f'"{shared_state.values["external_address"]}/captcha"!')
 
         try:
             get_api(shared_state_dict, shared_state_lock)
@@ -245,7 +245,7 @@ def jdownloader_connection(shared_state_dict, shared_state_lock):
     try:
         shared_state.update_jdownloader()
     except Exception as e:
-        print(f"Error updating jdownloader: {e}")
+        print(f"Error updating JDownloader: {e}")
 
     try:
         shared_state.start_downloads()
@@ -286,18 +286,20 @@ def make_raw_pastebin_link(url):
     Takes a Pastebin URL and ensures it is a raw link.
     If it's not a Pastebin URL, it returns the URL unchanged.
     """
-    # Check if the URL is a Pastebin link
+    # Check if the URL is already a raw Pastebin link
+    if re.match(r"https?://(?:www\.)?pastebin\.com/raw/\w+", url):
+        return url  # Already raw, return as is
+
+    # Check if the URL is a standard Pastebin link
     pastebin_pattern = r"https?://(?:www\.)?pastebin\.com/(\w+)"
     match = re.match(pastebin_pattern, url)
 
     if match:
         paste_id = match.group(1)
-        # Construct the raw Pastebin link
         print(f"The link you provided is not a raw Pastebin link. Attempting to convert it to a raw link from {url}...")
         return f"https://pastebin.com/raw/{paste_id}"
-    else:
-        # Return the URL unchanged if it's not a Pastebin link
-        return url
+
+    return url  # Not a Pastebin link, return unchanged
 
 
 def is_valid_url(url):
