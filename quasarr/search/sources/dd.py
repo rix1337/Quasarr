@@ -11,6 +11,9 @@ from quasarr.downloads.sources.dd import create_and_persist_session, retrieve_an
 from quasarr.providers.imdb_metadata import get_localized_title
 from quasarr.providers.log import info, debug
 
+hostname = "dd"
+supported_mirrors = ["ironfiles", "rapidgator", "filefactory"]
+
 
 def convert_to_rss_date(unix_timestamp):
     parsed_date = datetime.fromtimestamp(unix_timestamp, tz=timezone.utc)
@@ -23,15 +26,19 @@ def extract_size(size_in_bytes):
     return {"size": size_in_bytes, "sizeunit": "B"}
 
 
-def dd_search(shared_state, start_time, search_string=""):
-    dd = shared_state.values["config"]("Hostnames").get("dd")
+def dd_search(shared_state, start_time, search_string="", mirror=None):
+    releases = []
+    dd = shared_state.values["config"]("Hostnames").get(hostname.lower())
 
     dd_session = retrieve_and_validate_session(shared_state)
     if not dd_session:
         info(f"Could not retrieve valid session for {dd}")
-        return []
+        return releases
 
-    releases = []
+    if mirror and mirror not in supported_mirrors:
+        debug(f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported mirrors: {supported_mirrors}.'
+              ' Skipping search!')
+        return releases
 
     imdb_id = shared_state.is_imdb_id(search_string)
     if imdb_id:
@@ -71,7 +78,8 @@ def dd_search(shared_state, start_time, search_string=""):
         for release in release_list:
             try:
                 if release.get("fake"):
-                    debug(f"Release {release.get('release')} marked as fake. Invalidating DD session...")
+                    debug(
+                        f"Release {release.get('release')} marked as fake. Invalidating {hostname.upper()} session...")
                     create_and_persist_session(shared_state)
                     return []
                 else:
@@ -86,15 +94,17 @@ def dd_search(shared_state, start_time, search_string=""):
                     size_item = extract_size(release.get("size"))
                     mb = shared_state.convert_to_mb(size_item) * 1024 * 1024
                     published = convert_to_rss_date(release.get("when"))
-                    payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode(
-                        "utf-8")
+                    payload = urlsafe_b64encode(
+                        f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
                     link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
 
                     releases.append({
                         "details": {
-                            "title": f"[DD] {title}",
+                            "title": title,
+                            "hostname": hostname.lower(),
                             "imdb_id": imdb_id,
                             "link": link,
+                            "mirror": mirror,
                             "size": mb,
                             "date": published,
                             "source": source
@@ -102,13 +112,13 @@ def dd_search(shared_state, start_time, search_string=""):
                         "type": "protected"
                     })
             except Exception as e:
-                info(f"Error parsing DD feed: {e}")
+                info(f"Error parsing {hostname.upper()} feed: {e}")
                 continue
 
     except Exception as e:
-        info(f"Error loading DD feed: {e}")
+        info(f"Error loading {hostname.upper()} feed: {e}")
 
     elapsed_time = time.time() - start_time
-    debug(f"Time taken: {elapsed_time:.2f} seconds (dd)")
+    debug(f"Time taken: {elapsed_time:.2f} seconds ({hostname.lower()})")
 
     return releases

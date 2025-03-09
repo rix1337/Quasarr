@@ -12,6 +12,9 @@ from bs4 import BeautifulSoup
 
 from quasarr.providers.log import info, debug
 
+hostname = "dw"
+supported_mirrors = ["1fichier", "rapidgator", "ddownload", "katfile"]
+
 
 def convert_to_rss_date(date_str):
     german_months = ["Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -48,10 +51,10 @@ def dw_get_download_links(shared_state, content, title):
             content = BeautifulSoup(str(content), "html.parser")
         download_buttons = content.find_all("button", {"class": "show_link"})
     except:
-        info("DW hat die Detail-Seite angepasst. Parsen von Download-Links für " + title + " nicht möglich!")
+        info(f"{hostname.upper()} has changed the details page. Parsing links for {title} failed!")
         return False
 
-    dw = shared_state.values["config"]("Hostnames").get("dw")
+    dw = shared_state.values["config"]("Hostnames").get(hostname.lower())
     ajax_url = "https://" + dw + "/wp-admin/admin-ajax.php"
 
     download_links = []
@@ -73,24 +76,29 @@ def dw_get_download_links(shared_state, content, title):
                         link = (f'https://filecrypt.cc/Container/{match.group(1)}'
                                 f'.html{match.group(2) if match.group(2) else ""}')
 
-                hoster = button.nextSibling.img["src"].split("/")[-1].replace(".png", "")
-                download_links.append([link, hoster])
+                mirror = button.nextSibling.img["src"].split("/")[-1].replace(".png", "")
+                download_links.append([link, mirror])
     except:
-        info("DW site has been updated. Parsing download links not possible!")
+        info(f"{hostname.upper()} has changed the site structure. Parsing links for {title} failed!")
         pass
 
     return download_links
 
 
-def dw_feed(shared_state, start_time, request_from):
+def dw_feed(shared_state, start_time, request_from, mirror=None):
     releases = []
-    dw = shared_state.values["config"]("Hostnames").get("dw")
+    dw = shared_state.values["config"]("Hostnames").get(hostname.lower())
     password = dw
 
     if "Radarr" in request_from:
         feed_type = "videos/filme/"
     else:
         feed_type = "videos/serien/"
+
+    if mirror and mirror not in supported_mirrors:
+        debug(f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported mirrors: {supported_mirrors}.'
+              ' Skipping search!')
+        return releases
 
     url = f'https://{dw}/{feed_type}'
     headers = {
@@ -118,18 +126,20 @@ def dw_feed(shared_state, start_time, request_from):
                 size = mb * 1024 * 1024
                 date = article.parent.parent.find("span", {"class": "date updated"}).text.strip()
                 published = convert_to_rss_date(date)
-                payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode(
-                    "utf-8")
+                payload = urlsafe_b64encode(
+                    f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
                 link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
             except Exception as e:
-                info(f"Error parsing DW feed: {e}")
+                info(f"Error parsing {hostname.upper()} feed: {e}")
                 continue
 
             releases.append({
                 "details": {
-                    "title": f"[DW] {title}",
+                    "title": title,
+                    "hostname": hostname.lower(),
                     "imdb_id": imdb_id,
                     "link": link,
+                    "mirror": mirror,
                     "size": size,
                     "date": published,
                     "source": source
@@ -138,23 +148,27 @@ def dw_feed(shared_state, start_time, request_from):
             })
 
     except Exception as e:
-        info(f"Error loading DW feed: {e}")
+        info(f"Error loading {hostname.upper()} feed: {e}")
 
     elapsed_time = time.time() - start_time
-    debug(f"Time taken: {elapsed_time:.2f} seconds (dw)")
+    debug(f"Time taken: {elapsed_time:.2f} seconds ({hostname.lower()})")
 
     return releases
 
 
-def dw_search(shared_state, start_time, request_from, search_string):
+def dw_search(shared_state, start_time, request_from, search_string, mirror=None):
     releases = []
-    dw = shared_state.values["config"]("Hostnames").get("dw")
+    dw = shared_state.values["config"]("Hostnames").get(hostname.lower())
     password = dw
 
     if "Radarr" in request_from:
         search_type = "videocategory=filme"
     else:
         search_type = "videocategory=serien"
+
+    if mirror and mirror not in ["1fichier", "rapidgator", "ddownload", "katfile"]:
+        debug(f'Mirror "{mirror}" not not supported by {hostname.upper()}. Skipping search!')
+        return releases
 
     url = f'https://{dw}/?s={search_string}&{search_type}'
     headers = {
@@ -167,7 +181,7 @@ def dw_search(shared_state, start_time, request_from, search_string):
         results = search.find_all('h4')
 
     except Exception as e:
-        info(f"Error loading DW search feed: {e}")
+        info(f"Error loading {hostname.upper()} search feed: {e}")
         return releases
 
     imdb_id = shared_state.is_imdb_id(search_string)
@@ -193,18 +207,20 @@ def dw_search(shared_state, start_time, request_from, search_string):
                 size = mb * 1024 * 1024
                 date = result.parent.parent.find("span", {"class": "date updated"}).text.strip()
                 published = convert_to_rss_date(date)
-                payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode(
-                    "utf-8")
+                payload = urlsafe_b64encode(
+                    f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
                 link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
             except Exception as e:
-                info(f"Error parsing DW search: {e}")
+                info(f"Error parsing {hostname.upper()} search: {e}")
                 continue
 
             releases.append({
                 "details": {
-                    "title": f"[DW] {title}",
+                    "title": title,
+                    "hostname": hostname.lower(),
                     "imdb_id": imdb_id,
                     "link": link,
+                    "mirror": mirror,
                     "size": size,
                     "date": published,
                     "source": source
@@ -213,6 +229,6 @@ def dw_search(shared_state, start_time, request_from, search_string):
             })
 
     elapsed_time = time.time() - start_time
-    debug(f"Time taken: {elapsed_time:.2f} seconds (dw)")
+    debug(f"Time taken: {elapsed_time:.2f} seconds ({hostname.lower()})")
 
     return releases

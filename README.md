@@ -33,6 +33,11 @@ Quasarr will confidently handle the rest.
 * Set up Quasarr as `Newznab Indexer` and `SABnzbd Download Client` in Radarr/Sonarr
     * Use the API key from console output (or copy it from the Quasarr web UI)
     * Leave all other settings at default.
+    * If you prefer to only get releases for a specific mirror, add the mirror name to the
+      API path in the advanced indexer settings.
+      * Example: `/api/dropbox/` results will only return releases where `dropbox` is explicitly mentioned in link.
+      * This also means that if a mirror is not mentioned in the link, it will not be returned.
+      * Some hostnames never mention the mirror in the link, effectively disabling them, when using this feature.
 * To see download status information
     * Open `Activity` → `Queue` → `Options` in Radarr/Sonarr
     * Enable `Release Title`
@@ -94,10 +99,12 @@ amount of flexibility.
 I will not waste my precious time on features that will slow future development cycles down.
 Issues, feature and pull requests that are meant to introduce feature toggles will therefore be rejected.
 
-* If you need to update hostnames or My-JDownloader-Credentials, simply delete the config and restart Quasarr.
-* Radarr/Sonarr provide custom formats to automatically chose the most fitting release for a given search.
-* Quasarr will always prefix release titles with the source hostname in square brackets in case you want to apply
-  custom format scores to certain hostnames.
+Intentional design decisions are:
+* There is no settings UI after the initial setup.
+  If you need to update hostnames or My-JDownloader-Credentials, simply delete the `Quasarr.ini` and restart Quasarr.
+* Radarr and Sonarr provide custom formats to automatically choose the most fitting release for a given search
+  based on the release's title. Quasarr prefixes release titles with the source hostname in square brackets in case you
+  want to apply custom format scores to certain hostnames.
 
 # Roadmap
 
@@ -108,7 +115,6 @@ Issues, feature and pull requests that are meant to introduce feature toggles wi
     - Existing settings in Radarr/Sonarr
     - Existing settings in JDownloader
     - Existing tools from the *arr ecosystem that integrate directly with Radarr/Sonarr
-- Exposing the mirrors of a release to Radarr/Sonarr is a desired feature. This will allow scoring desired mirrors using custom profiles in Radarr/Sonarr. Quasarr will always provide all found mirrors at once, if they are protected by the same or no CAPTCHA.
 - There are no hostname integrations in active development.
 - Adding one or more hostnames focused on English content is highly desired.
   - Please provide suggestions in a private thread on Discord.

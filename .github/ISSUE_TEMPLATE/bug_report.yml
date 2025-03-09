@@ -46,6 +46,7 @@ body:
       description: |
         Add ALL messages from the log that correlate with your issue.
         Redact all hostnames you may have set.
+        If you can't see a log message that correlates with your issue, set the DEBUG environment variable to "true".
       render: text
     validations:
       required: true

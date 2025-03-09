@@ -7,7 +7,7 @@ import json
 from quasarr.downloads.sources.dd import get_dd_download_links
 from quasarr.downloads.sources.dw import get_dw_download_links
 from quasarr.downloads.sources.nx import get_nx_download_links
-from quasarr.downloads.sources.sf import get_release_url, resolve_sf_redirect
+from quasarr.downloads.sources.sf import get_sf_download_links, resolve_sf_redirect
 from quasarr.providers.log import info, debug
 from quasarr.providers.myjd_api import TokenExpiredException, RequestTimeoutException, MYJDException
 from quasarr.providers.notifications import send_discord_message
@@ -308,7 +308,7 @@ def delete_package(shared_state, package_id):
     return deleted
 
 
-def download(shared_state, request_from, title, url, size_mb, password, imdb_id=None):
+def download(shared_state, request_from, title, url, mirror, size_mb, password, imdb_id=None):
     if "radarr".lower() in request_from.lower():
         category = "movies"
     else:
@@ -325,7 +325,7 @@ def download(shared_state, request_from, title, url, size_mb, password, imdb_id=
     sf = shared_state.values["config"]("Hostnames").get("sf")
 
     if dd and dd.lower() in url.lower():
-        links = get_dd_download_links(shared_state, title)
+        links = get_dd_download_links(shared_state, mirror, title)
         if links:
             info(f"Decrypted {len(links)} download links for {title}")
             send_discord_message(shared_state, title=title, case="unprotected", imdb_id=imdb_id)
@@ -351,17 +351,17 @@ def download(shared_state, request_from, title, url, size_mb, password, imdb_id=
             package_id = None
 
     elif dw and dw.lower() in url.lower():
-        links = get_dw_download_links(shared_state, url, title)
+        links = get_dw_download_links(shared_state, url, mirror, title)
         info(f'CAPTCHA-Solution required for "{title}" at: "{shared_state.values['external_address']}/captcha"')
         send_discord_message(shared_state, title=title, case="captcha", imdb_id=imdb_id)
         blob = json.dumps({"title": title, "links": links, "size_mb": size_mb, "password": password})
         shared_state.values["database"]("protected").update_store(package_id, blob)
 
     elif sf and sf.lower() in url.lower():
-        if f"https://{sf}/external" in url:
+        if url.startswith(f"https://{sf}/external"):  # from interactive search
             url = resolve_sf_redirect(url)
-        elif url.startswith(f"https://{sf}/"):
-            url = get_release_url(url, title, shared_state)
+        elif url.startswith(f"https://{sf}/"):  # from feed search
+            url = get_sf_download_links(shared_state, url, mirror, title)
 
         if url:
             info(f'CAPTCHA-Solution required for "{title}" at: "{shared_state.values['external_address']}/captcha"')

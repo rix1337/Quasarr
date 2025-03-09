@@ -9,6 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from quasarr.providers.log import info
+from quasarr.search.sources.sf import parse_mirrors
 
 
 def is_last_section_integer(url):
@@ -18,7 +19,7 @@ def is_last_section_integer(url):
     return None
 
 
-def get_release_url(url, title, shared_state):
+def get_sf_download_links(shared_state, url, mirror, title):
     release_pattern = re.compile(
         r'^(?P<name>.+?)\.S(?P<season>\d+)(?:E\d+)?\..*?\.(?P<resolution>\d+p)\..+?-(?P<group>\w+)$', re.IGNORECASE)
     release_match = release_pattern.match(title)
@@ -84,7 +85,18 @@ def get_release_url(url, title, shared_state):
 
                 if name_match and season_match and resolution_match and group_match:
                     info(f'Release "{name}" found on SF at: {url}')
-                    release_url = f'https://{sf}{details.find("a")["href"]}'
+
+                    mirrors = parse_mirrors(f"https://{sf}", details)
+
+                    if mirror:
+                        if mirror not in mirrors["season"]:
+                            continue
+                        release_url = mirrors["season"][mirror]
+                        if not release_url:
+                            info(f"Could not find mirror '{mirror}' for '{title}'")
+                    else:
+                        release_url = next(iter(mirrors["season"]))
+
                     real_url = resolve_sf_redirect(release_url)
                     return real_url
             except:

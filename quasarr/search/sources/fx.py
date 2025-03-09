@@ -11,6 +11,9 @@ from bs4 import BeautifulSoup
 
 from quasarr.providers.log import info, debug
 
+hostname = "fx"
+supported_mirrors = ["rapidgator"]
+
 
 def extract_size(text):
     match = re.match(r"(\d+)\s*([A-Za-z]+)", text)
@@ -22,10 +25,15 @@ def extract_size(text):
         raise ValueError(f"Invalid size format: {text}")
 
 
-def fx_feed(shared_state, start_time):
+def fx_feed(shared_state, start_time, mirror=None):
     releases = []
 
-    fx = shared_state.values["config"]("Hostnames").get("fx")
+    fx = shared_state.values["config"]("Hostnames").get(hostname.lower())
+
+    if mirror and mirror not in supported_mirrors:
+        debug(f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported mirrors: {supported_mirrors}.'
+              ' Skipping search!')
+        return releases
 
     password = fx.split(".")[0]
     url = f'https://{fx}/'
@@ -38,7 +46,7 @@ def fx_feed(shared_state, start_time):
         feed = BeautifulSoup(request, "html.parser")
         items = feed.find_all("article")
     except Exception as e:
-        info(f"Error loading FX feed: {e}")
+        info(f"Error loading {hostname.upper()} feed: {e}")
         return releases
 
     if items:
@@ -68,8 +76,8 @@ def fx_feed(shared_state, start_time):
                         size_item = extract_size(size_info)
                         mb = shared_state.convert_to_mb(size_item)
                         size = mb * 1024 * 1024
-                        payload = urlsafe_b64encode(f"{title}|{link}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode(
-                            "utf-8")
+                        payload = urlsafe_b64encode(
+                            f"{title}|{link}|{mirror}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
                         link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                     except:
                         continue
@@ -83,9 +91,11 @@ def fx_feed(shared_state, start_time):
 
                     releases.append({
                         "details": {
-                            "title": f"[FX] {title}",
+                            "title": title,
+                            "hostname": hostname.lower(),
                             "imdb_id": imdb_id,
                             "link": link,
+                            "mirror": mirror,
                             "size": size,
                             "date": published,
                             "source": source
@@ -94,18 +104,23 @@ def fx_feed(shared_state, start_time):
                     })
 
             except Exception as e:
-                info(f"Error parsing FX feed: {e}")
+                info(f"Error parsing {hostname.upper()} feed: {e}")
 
     elapsed_time = time.time() - start_time
-    debug(f"Time taken: {elapsed_time:.2f} seconds (fx)")
+    debug(f"Time taken: {elapsed_time:.2f} seconds ({hostname.lower()})")
 
     return releases
 
 
-def fx_search(shared_state, start_time, search_string):
+def fx_search(shared_state, start_time, search_string, mirror=None):
     releases = []
 
-    fx = shared_state.values["config"]("Hostnames").get("fx")
+    fx = shared_state.values["config"]("Hostnames").get(hostname.lower())
+
+    if mirror and mirror not in supported_mirrors:
+        debug(f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported mirrors: {supported_mirrors}.'
+              ' Skipping search!')
+        return releases
 
     password = fx.split(".")[0]
     url = f'https://{fx}/?s={search_string}'
@@ -119,7 +134,7 @@ def fx_search(shared_state, start_time, search_string):
         results = search.find('h2', class_='entry-title')
 
     except Exception as e:
-        info(f"Error loading FX feed: {e}")
+        info(f"Error loading {hostname.upper()} feed: {e}")
         return releases
 
     imdb_id = shared_state.is_imdb_id(search_string)
@@ -132,7 +147,7 @@ def fx_search(shared_state, start_time, search_string):
                 feed = BeautifulSoup(request, "html.parser")
                 items = feed.find_all("article")
             except Exception as e:
-                info(f"Error loading FX feed: {e}")
+                info(f"Error loading {hostname.upper()} feed: {e}")
                 return releases
 
             for item in items:
@@ -165,7 +180,7 @@ def fx_search(shared_state, start_time, search_string):
                             mb = shared_state.convert_to_mb(size_item)
                             size = mb * 1024 * 1024
                             payload = urlsafe_b64encode(
-                                f"{title}|{link}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
+                                f"{title}|{link}|{mirror}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
                             link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                         except:
                             continue
@@ -179,9 +194,11 @@ def fx_search(shared_state, start_time, search_string):
 
                         releases.append({
                             "details": {
-                                "title": f"[FX] {title}",
+                                "title": title,
+                                "hostname": hostname.lower(),
                                 "imdb_id": imdb_id,
                                 "link": link,
+                                "mirror": mirror,
                                 "size": size,
                                 "date": published,
                                 "source": result_source
@@ -190,9 +207,9 @@ def fx_search(shared_state, start_time, search_string):
                         })
 
                 except Exception as e:
-                    info(f"Error parsing FX search: {e}")
+                    info(f"Error parsing {hostname.upper()} search: {e}")
 
     elapsed_time = time.time() - start_time
-    debug(f"Time taken: {elapsed_time:.2f} seconds (fx)")
+    debug(f"Time taken: {elapsed_time:.2f} seconds ({hostname.lower()})")
 
     return releases

@@ -11,16 +11,24 @@ import requests
 from quasarr.providers.imdb_metadata import get_localized_title
 from quasarr.providers.log import info, debug
 
+hostname = "nx"
+supported_mirrors = ["filer"]
 
-def nx_feed(shared_state, start_time, request_from):
+
+def nx_feed(shared_state, start_time, request_from, mirror=None):
     releases = []
-    nx = shared_state.values["config"]("Hostnames").get("nx")
+    nx = shared_state.values["config"]("Hostnames").get(hostname.lower())
     password = nx
 
     if "Radarr" in request_from:
         category = "movie"
     else:
         category = "episode"
+
+    if mirror and mirror not in supported_mirrors:
+        debug(f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported mirrors: {supported_mirrors}.'
+              ' Skipping search!')
+        return releases
 
     url = f'https://{nx}/api/frontend/releases/category/{category}/tag/all/1/51?sort=date'
     headers = {
@@ -31,7 +39,7 @@ def nx_feed(shared_state, start_time, request_from):
         response = requests.get(url, headers, timeout=10)
         feed = response.json()
     except Exception as e:
-        info(f"Error loading NX feed: {e}")
+        info(f"Error loading {hostname.upper()} feed: {e}")
         return releases
 
     items = feed['result']['list']
@@ -44,7 +52,8 @@ def nx_feed(shared_state, start_time, request_from):
                     source = f"https://{nx}/release/{item['slug']}"
                     imdb_id = item.get('_media', {}).get('imdbid', None)
                     mb = shared_state.convert_to_mb(item)
-                    payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode(
+                    payload = urlsafe_b64encode(
+                        f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode(
                         "utf-8")
                     link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                 except:
@@ -62,9 +71,11 @@ def nx_feed(shared_state, start_time, request_from):
 
                 releases.append({
                     "details": {
-                        "title": f"[NX] {title}",
+                        "title": title,
+                        "hostname": hostname.lower(),
                         "imdb_id": imdb_id,
                         "link": link,
+                        "mirror": mirror,
                         "size": size,
                         "date": published,
                         "source": source
@@ -73,23 +84,28 @@ def nx_feed(shared_state, start_time, request_from):
                 })
 
         except Exception as e:
-            info(f"Error parsing NX feed: {e}")
+            info(f"Error parsing {hostname.upper()} feed: {e}")
 
     elapsed_time = time.time() - start_time
-    debug(f"Time taken: {elapsed_time:.2f} seconds (nx)")
+    debug(f"Time taken: {elapsed_time:.2f} seconds ({hostname.lower()})")
 
     return releases
 
 
-def nx_search(shared_state, start_time, request_from, search_string):
+def nx_search(shared_state, start_time, request_from, search_string, mirror=None):
     releases = []
-    nx = shared_state.values["config"]("Hostnames").get("nx")
+    nx = shared_state.values["config"]("Hostnames").get(hostname.lower())
     password = nx
 
     if "Radarr" in request_from:
         valid_type = "movie"
     else:
         valid_type = "episode"
+
+    if mirror and mirror not in supported_mirrors:
+        debug(f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported mirrors: {supported_mirrors}.'
+              ' Skipping search!')
+        return releases
 
     imdb_id = shared_state.is_imdb_id(search_string)
     if imdb_id:
@@ -108,7 +124,7 @@ def nx_search(shared_state, start_time, request_from, search_string):
         response = requests.get(url, headers, timeout=10)
         feed = response.json()
     except Exception as e:
-        info(f"Error loading NX search: {e}")
+        info(f"Error loading {hostname.upper()} search: {e}")
         return releases
 
     items = feed['result']['releases']
@@ -126,7 +142,7 @@ def nx_search(shared_state, start_time, request_from, search_string):
                             imdb_id = item.get('_media', {}).get('imdbid', None)
 
                         mb = shared_state.convert_to_mb(item)
-                        payload = urlsafe_b64encode(f"{title}|{source}|{mb}|{password}|{imdb_id}".
+                        payload = urlsafe_b64encode(f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}".
                                                     encode("utf-8")).decode("utf-8")
                         link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                     except:
@@ -144,9 +160,11 @@ def nx_search(shared_state, start_time, request_from, search_string):
 
                     releases.append({
                         "details": {
-                            "title": f"[NX] {title}",
+                            "title": title,
+                            "hostname": hostname.lower(),
                             "imdb_id": imdb_id,
                             "link": link,
+                            "mirror": mirror,
                             "size": size,
                             "date": published,
                             "source": source
@@ -155,9 +173,9 @@ def nx_search(shared_state, start_time, request_from, search_string):
                     })
 
         except Exception as e:
-            info(f"Error parsing NX search: {e}")
+            info(f"Error parsing {hostname.upper()} search: {e}")
 
     elapsed_time = time.time() - start_time
-    debug(f"Time taken: {elapsed_time:.2f} seconds (nx)")
+    debug(f"Time taken: {elapsed_time:.2f} seconds ({hostname.lower()})")
 
     return releases

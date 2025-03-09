@@ -9,19 +9,91 @@ from base64 import urlsafe_b64encode
 from datetime import datetime, timedelta
 
 import requests
-from bs4 import BeautifulSoup
 
 from quasarr.providers.imdb_metadata import get_localized_title
 from quasarr.providers.log import info, debug
 
+hostname = "sf"
+supported_mirrors = ["1fichier", "ddownload", "katfile", "rapidgator", "turbobit"]
 
-def sf_feed(shared_state, start_time, request_from):
+from bs4 import BeautifulSoup
+
+
+def parse_mirrors(base_url, entry):
+    """
+    entry: a BeautifulSoup Tag for <div class="entry">
+    returns a dict with:
+      - name:        header text
+      - season:      list of {host: link}
+      - episodes:    list of {number, title, links}
+    """
+
+    mirrors = {}
+
+    try:
+        host_map = {
+            '1F': '1fichier',
+            'DD': 'ddownload',
+            'KA': 'katfile',
+            'RG': 'rapidgator',
+            'TB': 'turbobit'
+        }
+
+        h3 = entry.select_one('h3')
+        name = h3.get_text(separator=' ', strip=True) if h3 else ''
+
+        season = {}
+        for a in entry.select('a.dlb.row'):
+            if a.find_parent('div.list.simple'):
+                continue
+            host = a.get_text(strip=True)
+            if len(host) > 2:  # episode hosts are 2 chars
+                season[host] = f"{base_url}{a['href']}"
+
+        episodes = []
+        for ep_row in entry.select('div.list.simple > div.row'):
+            if 'head' in ep_row.get('class', []):
+                continue
+
+            divs = ep_row.find_all('div', recursive=False)
+            number = int(divs[0].get_text(strip=True).rstrip('.'))
+            title = divs[1].get_text(strip=True)
+
+            ep_links = {}
+            for a in ep_row.select('div.row > a.dlb.row'):
+                host = a.get_text(strip=True)
+                full_host = host_map.get(host, host)
+                ep_links[full_host] = f"{base_url}{a['href']}"
+
+            episodes.append({
+                'number': number,
+                'title': title,
+                'links': ep_links
+            })
+
+        mirrors = {
+            'name': name,
+            'season': season,
+            'episodes': episodes
+        }
+    except Exception as e:
+        info(f"Error parsing mirrors: {e}")
+
+    return mirrors
+
+
+def sf_feed(shared_state, start_time, request_from, mirror=None):
     releases = []
-    sf = shared_state.values["config"]("Hostnames").get("sf")
+    sf = shared_state.values["config"]("Hostnames").get(hostname.lower())
     password = sf
 
     if "Radarr" in request_from:
-        debug(f"Skipped Radarr search (sf)")
+        debug(f'Skipping Radarr search on "{hostname.upper()}" (unsupported media type at hostname)!')
+        return releases
+
+    if mirror and mirror not in supported_mirrors:
+        debug(f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported mirrors: {supported_mirrors}.'
+              ' Skipping search!')
         return releases
 
     headers = {
@@ -37,9 +109,9 @@ def sf_feed(shared_state, start_time, request_from):
         date -= timedelta(days=1)
 
         try:
-            response = requests.get(f"https://serienfans.org/updates/{formatted_date}#list", headers, timeout=10)
+            response = requests.get(f"https://{sf}/updates/{formatted_date}#list", headers, timeout=10)
         except Exception as e:
-            info(f"Error loading SF feed: {e} for {formatted_date}")
+            info(f"Error loading {hostname.upper()} feed: {e} for {formatted_date}")
             return releases
 
         content = BeautifulSoup(response.text, "html.parser")
@@ -57,7 +129,7 @@ def sf_feed(shared_state, start_time, request_from):
                         imdb_id = None  # imdb info is missing here
 
                         payload = urlsafe_b64encode(
-                            f"{title}|{source}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
+                            f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}".encode("utf-8")).decode("utf-8")
                         link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                     except:
                         continue
@@ -75,9 +147,11 @@ def sf_feed(shared_state, start_time, request_from):
 
                     releases.append({
                         "details": {
-                            "title": f"[SF] {title}",
+                            "title": title,
+                            "hostname": hostname.lower(),
                             "imdb_id": imdb_id,
                             "link": link,
+                            "mirror": mirror,
                             "size": size,
                             "date": published,
                             "source": source,
@@ -86,22 +160,24 @@ def sf_feed(shared_state, start_time, request_from):
                     })
 
             except Exception as e:
-                info(f"Error parsing SF feed: {e}")
+                info(f"Error parsing {hostname.upper()} feed: {e}")
 
     elapsed_time = time.time() - start_time
-    debug(f"Time taken: {elapsed_time:.2f} seconds (sf)")
+    debug(f"Time taken: {elapsed_time:.2f} seconds ({hostname.lower()})")
 
     return releases
 
 
 def extract_season_episode(search_string):
-    match = re.search(r'(.*?)(S\d{1,3})(?:E(\d{1,3}))?', search_string, re.IGNORECASE)
-    if match:
-        title = match.group(1).strip()
-        season = int(match.group(2)[1:])
-        episode = int(match.group(3)) if match.group(3) else None
-        return title, season, episode
-    return search_string, None, None
+    try:
+        match = re.search(r'(.*?)(S\d{1,3})(?:E(\d{1,3}))?', search_string, re.IGNORECASE)
+        if match:
+            season = int(match.group(2)[1:])
+            episode = int(match.group(3)) if match.group(3) else None
+            return season, episode
+    except Exception as e:
+        debug(f"Error extracting season / episode from {search_string}: {e}")
+    return None, None
 
 
 def extract_size(text):
@@ -114,15 +190,20 @@ def extract_size(text):
         raise ValueError(f"Invalid size format: {text}")
 
 
-def sf_search(shared_state, start_time, request_from, search_string):
+def sf_search(shared_state, start_time, request_from, search_string, mirror=None):
     releases = []
-    sf = shared_state.values["config"]("Hostnames").get("sf")
+    sf = shared_state.values["config"]("Hostnames").get(hostname.lower())
     password = sf
 
-    title, season, episode = extract_season_episode(search_string)
+    season, episode = extract_season_episode(search_string)
 
     if "Radarr" in request_from:
-        debug(f"Skipped Radarr search (sf)")
+        debug(f'Skipping Radarr search on "{hostname.upper()}" (unsupported media type at hostname)!')
+        return releases
+
+    if mirror and mirror not in supported_mirrors:
+        debug(f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported mirrors: {supported_mirrors}.'
+              ' Skipping search!')
         return releases
 
     if re.match(r'^tt\d{7,8}$', search_string):
@@ -144,7 +225,7 @@ def sf_search(shared_state, start_time, request_from, search_string):
         response = requests.get(url, headers, timeout=10)
         feed = response.json()
     except Exception as e:
-        info(f"Error loading SF search: {e}")
+        info(f"Error loading {hostname.upper()} search: {e}")
         return releases
 
     results = feed['result']
@@ -161,7 +242,7 @@ def sf_search(shared_state, start_time, request_from, search_string):
                         season = "ALL"
 
                     series_id = result["url_id"]
-                    threshold = 30
+                    threshold = 15  # this should cut down duplicates in case Sonarr is searching variants of a title
                     context = "recents_sf"
                     recently_searched = shared_state.get_recently_searched(shared_state, context, threshold)
                     if series_id in recently_searched:
@@ -196,15 +277,25 @@ def sf_search(shared_state, start_time, request_from, search_string):
                 for item in items:
                     try:
                         details = item.parent.parent.parent
-                        name = details.find("small").text.strip()
+                        title = details.find("small").text.strip()
 
-                        if not shared_state.search_string_in_sanitized_title(search_string, name):
+                        if not shared_state.search_string_in_sanitized_title(search_string, title):
                             continue
 
                         size_string = item.find("span", {"class": "morespec"}).text.split("|")[1].strip()
                         size_item = extract_size(size_string)
-                        source = f'https://{sf}{details.find("a")["href"]}'
+                        mirrors = parse_mirrors(f"https://{sf}", details)
+
+                        if mirror:
+                            if mirror not in mirrors["season"]:
+                                continue
+                            source = mirrors["season"][mirror]
+                            if not source:
+                                info(f"Could not find mirror '{mirror}' for '{title}'")
+                        else:
+                            source = next(iter(mirrors["season"]))
                     except:
+                        debug(f"Could not find link for '{search_string}'")
                         continue
 
                     mb = shared_state.convert_to_mb(size_item)
@@ -212,20 +303,28 @@ def sf_search(shared_state, start_time, request_from, search_string):
                     if episode:
                         mb = 0
                         try:
-                            if not re.search(r'S\d{1,3}E\d{1,3}', name):
-                                name = re.sub(r'(S\d{1,3})', rf'\1E{episode:02d}', name)
+                            if not re.search(r'S\d{1,3}E\d{1,3}', title):
+                                title = re.sub(r'(S\d{1,3})', rf'\1E{episode:02d}', title)
 
-                                item_details = details.find("div", {"class": "list simple"})
-                                details_episodes = item_details.find_all("div", {"class": "row"})
-                                episodes_in_release = 0
+                                # Count episodes
+                                episodes_in_release = len(mirrors["episodes"])
 
-                                for row in details_episodes:
-                                    main_row = row.find_all("div", {"class": "row"})
-                                    links_in_row = row.find_all("a", {"class": "dlb row"})
-                                    if main_row and links_in_row:
-                                        episodes_in_release += 1
-                                        if episodes_in_release == episode:
-                                            source = f'https://{sf}{links_in_row[0]["href"]}'
+                                # Get the correct episode entry (episode numbers are 1-based, list index is 0-based)
+                                episode_data = next((e for e in mirrors["episodes"] if e["number"] == int(episode)),
+                                                    None)
+
+                                if episode_data:
+                                    if mirror:
+                                        if mirror not in episode_data["links"]:
+                                            debug(
+                                                f"Mirror '{mirror}' does not exist for '{title}' episode {episode}'")
+                                        else:
+                                            source = episode_data["links"][mirror]
+
+                                    else:
+                                        source = next(iter(episode_data["links"].values()))
+                                else:
+                                    debug(f"Episode '{episode}' data not found in mirrors for '{title}'")
 
                                 if episodes_in_release:
                                     mb = shared_state.convert_to_mb({
@@ -235,7 +334,7 @@ def sf_search(shared_state, start_time, request_from, search_string):
                         except:
                             continue
 
-                    payload = urlsafe_b64encode(f"{name}|{source}|{mb}|{password}|{imdb_id}".
+                    payload = urlsafe_b64encode(f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}".
                                                 encode("utf-8")).decode("utf-8")
                     link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
 
@@ -251,9 +350,11 @@ def sf_search(shared_state, start_time, request_from, search_string):
 
                     releases.append({
                         "details": {
-                            "title": f"[SF] {name}",
+                            "title": title,
+                            "hostname": hostname.lower(),
                             "imdb_id": imdb_id,
                             "link": link,
+                            "mirror": mirror,
                             "size": size,
                             "date": published,
                             "source": f"{series_url}/{season}" if season else series_url
@@ -262,11 +363,11 @@ def sf_search(shared_state, start_time, request_from, search_string):
                     })
 
             except Exception as e:
-                info(f"Error parsing SF search: {e}")
+                info(f"Error parsing {hostname.upper()} search: {e}")
         else:
             debug(f"Search string '{search_string}' does not match result '{result['title']}'")
 
     elapsed_time = time.time() - start_time
-    debug(f"Time taken: {elapsed_time:.2f} seconds (sf)")
+    debug(f"Time taken: {elapsed_time:.2f} seconds ({hostname.lower()})")
 
     return releases

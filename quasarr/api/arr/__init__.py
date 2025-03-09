@@ -39,32 +39,38 @@ def setup_arr_routes(app):
         decoded_payload = urlsafe_b64decode(payload).decode("utf-8").split("|")
         title = decoded_payload[0]
         url = decoded_payload[1]
-        size_mb = decoded_payload[2]
-        password = decoded_payload[3]
-        imdb_id = decoded_payload[4]
-        return f'<nzb><file title="{title}" url="{url}" size_mb="{size_mb}" password="{password}" imdb_id="{imdb_id}"/></nzb>'
+        mirror = decoded_payload[2]
+        size_mb = decoded_payload[3]
+        password = decoded_payload[4]
+        imdb_id = decoded_payload[5]
+        return f'<nzb><file title="{title}" url="{url}" mirror="{mirror}" size_mb="{size_mb}" password="{password}" imdb_id="{imdb_id}"/></nzb>'
 
     @app.post('/api')
     @require_api_key
     def download_fake_nzb_file():
         downloads = request.files.getall('name')
-        nzo_ids = []
+        nzo_ids = []  # naming structure for package IDs expected in newznab
+
         for upload in downloads:
             file_content = upload.file.read()
             root = ElementTree.fromstring(file_content)
+
             title = sax_utils.unescape(root.find(".//file").attrib["title"])
+
             url = root.find(".//file").attrib["url"]
+            mirror = None if (mirror := root.find(".//file").attrib.get("mirror")) == "None" else mirror
+
             size_mb = root.find(".//file").attrib["size_mb"]
             password = root.find(".//file").attrib.get("password")
             imdb_id = root.find(".//file").attrib.get("imdb_id")
+
             info(f"Attempting download for {title}")
-
             request_from = request.headers.get('User-Agent')
+            package_id = download(shared_state, request_from, title, url, mirror, size_mb, password, imdb_id)
 
-            nzo_id = download(shared_state, request_from, title, url, size_mb, password, imdb_id)
-            if nzo_id:
+            if package_id:
                 info(f"{title} added successfully!")
-                nzo_ids.append(nzo_id)
+                nzo_ids.append(package_id)
             else:
                 info(f"{title} could not be added!")
 
@@ -74,11 +80,13 @@ def setup_arr_routes(app):
         }
 
     @app.get('/api')
+    @app.get('/api/<mirror>')
     @require_api_key
-    def fake_sabnzbd_and_newznab_apis():
-        api_type = 'sabnzbd' if request.query.mode else 'newznab' if request.query.t else None
+    def quasarr_api(mirror=None):
+        api_type = 'arr_download_client' if request.query.mode else 'arr_indexer' if request.query.t else None
 
-        if api_type == 'sabnzbd':
+        if api_type == 'arr_download_client':
+            # This yields with a mock SABnzbd API response based on the My JDownloader integration
             try:
                 mode = request.query.mode
                 if mode == "version":
@@ -148,8 +156,12 @@ def setup_arr_routes(app):
                 "status": False
             }
 
-        elif api_type == 'newznab':
+        elif api_type == 'arr_indexer':
+            # this yields with a mock Newznab API response based on Quasarr search
             try:
+                if mirror:
+                    debug(f'Search will only return releases that match this mirror: "{mirror}"')
+
                 mode = request.query.t
                 if mode == 'caps':
                     return '''<?xml version="1.0" encoding="UTF-8"?>
@@ -171,7 +183,10 @@ def setup_arr_routes(app):
                         search_param = f"tt{getattr(request.query, 'imdbid', '')}" \
                             if getattr(request.query, 'imdbid', '') else ""
 
-                        releases = get_search_results(shared_state, request_from, search_string=search_param)
+                        releases = get_search_results(shared_state, request_from,
+                                                      search_string=search_param,
+                                                      mirror=mirror
+                                                      )
 
                     elif mode == 'search':
                         debug(f'Search in Anime-Order is not supported. Ignoring request: {dict(request.query)}')
@@ -191,6 +206,7 @@ def setup_arr_routes(app):
                         if int(offset) == 0:
                             releases = get_search_results(shared_state, request_from,
                                                           search_string=search_param,
+                                                          mirror=mirror,
                                                           season=season,
                                                           episode=episode
                                                           )
@@ -212,9 +228,12 @@ def setup_arr_routes(app):
 
                     for release in releases:
                         release = release["details"]
+
+                        prefix = f'[{release["hostname"].upper()}]'
+
                         items += f'''
                         <item>
-                            <title>{sax_utils.escape(release["title"])}</title>
+                            <title>{prefix} {sax_utils.escape(release["title"])}</title>
                             <guid isPermaLink="True">{release["link"]}</guid>
                             <link>{release["link"]}</link>
                             <comments>{release["source"]}</comments>
@@ -232,5 +251,5 @@ def setup_arr_routes(app):
                 info(f"Error loading search results: {e}")
                 info(traceback.format_exc())
 
-            info(f"Unknown request: {dict(request.query)}")
-            return {"error": True}
+        info(f"Unknown request: {dict(request.query)}")
+        return {"error": True}

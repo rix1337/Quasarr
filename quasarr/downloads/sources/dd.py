@@ -78,7 +78,7 @@ def retrieve_and_validate_session(shared_state):
     return dd_session
 
 
-def get_dd_download_links(shared_state, search_string):
+def get_dd_download_links(shared_state, mirror, search_string):
     dd = shared_state.values["config"]("Hostnames").get("dd")
 
     dd_session = retrieve_and_validate_session(shared_state)
@@ -122,6 +122,10 @@ def get_dd_download_links(shared_state, search_string):
                 elif release.get("release") == search_string:
                     filtered_links = []
                     for link in release["links"]:
+                        if mirror and mirror not in link["hostname"]:
+                            debug(f'Skipping link from "{link["hostname"]}" (not the desired mirror "{mirror}")!')
+                            continue
+
                         if any(
                                 existing_link["hostname"] == link["hostname"] and
                                 existing_link["url"].endswith(".mkv") and

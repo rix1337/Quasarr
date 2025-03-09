@@ -13,7 +13,7 @@ from quasarr.search.sources.nx import nx_feed, nx_search
 from quasarr.search.sources.sf import sf_feed, sf_search
 
 
-def get_search_results(shared_state, request_from, search_string="", season="", episode=""):
+def get_search_results(shared_state, request_from, search_string="", mirror=None, season="", episode=""):
     results = []
 
     dd = shared_state.values["config"]("Hostnames").get("dd")
@@ -32,26 +32,26 @@ def get_search_results(shared_state, request_from, search_string="", season="", 
             search_string = f"{search_string} S{int(season):02}"
 
         if dd:
-            functions.append(lambda: dd_search(shared_state, start_time, search_string))
+            functions.append(lambda: dd_search(shared_state, start_time, search_string, mirror=mirror))
         if dw:
-            functions.append(lambda: dw_search(shared_state, start_time, request_from, search_string))
+            functions.append(lambda: dw_search(shared_state, start_time, request_from, search_string, mirror=mirror))
         if fx:
-            functions.append(lambda: fx_search(shared_state, start_time, search_string))
+            functions.append(lambda: fx_search(shared_state, start_time, search_string, mirror=mirror))
         if nx:
-            functions.append(lambda: nx_search(shared_state, start_time, request_from, search_string))
+            functions.append(lambda: nx_search(shared_state, start_time, request_from, search_string, mirror=mirror))
         if sf:
-            functions.append(lambda: sf_search(shared_state, start_time, request_from, search_string))
+            functions.append(lambda: sf_search(shared_state, start_time, request_from, search_string, mirror=mirror))
     else:
         if dd:
-            functions.append(lambda: dd_search(shared_state, start_time))
+            functions.append(lambda: dd_search(shared_state, start_time, mirror=mirror))
         if dw:
-            functions.append(lambda: dw_feed(shared_state, start_time, request_from))
+            functions.append(lambda: dw_feed(shared_state, start_time, request_from, mirror=mirror))
         if fx:
-            functions.append(lambda: fx_feed(shared_state, start_time))
+            functions.append(lambda: fx_feed(shared_state, start_time, mirror=mirror))
         if nx:
-            functions.append(lambda: nx_feed(shared_state, start_time, request_from))
+            functions.append(lambda: nx_feed(shared_state, start_time, request_from, mirror=mirror))
         if sf:
-            functions.append(lambda: sf_feed(shared_state, start_time, request_from))
+            functions.append(lambda: sf_feed(shared_state, start_time, request_from, mirror=mirror))
 
     stype = f'search phrase "{search_string}"' if search_string else "feed search"
     info(f'Starting {len(functions)} search functions for {stype}... This may take some time.')

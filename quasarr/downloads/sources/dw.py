@@ -7,10 +7,10 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.log import info
+from quasarr.providers.log import info, debug
 
 
-def get_dw_download_links(shared_state, url, title):
+def get_dw_download_links(shared_state, url, mirror, title):
     dw = shared_state.values["config"]("Hostnames").get("dw")
     ajax_url = "https://" + dw + "/wp-admin/admin-ajax.php"
 
@@ -52,6 +52,11 @@ def get_dw_download_links(shared_state, url, title):
                                 f'.html{match.group(2) if match.group(2) else ""}')
 
                 hoster = button.nextSibling.img["src"].split("/")[-1].replace(".png", "")
+                hoster = f"1{hoster}" if hoster.startswith("fichier") else hoster  # align with expected mirror name
+                if mirror and mirror not in hoster:
+                    debug(f'Skipping link from "{hoster}" (not the desired mirror "{mirror}")!')
+                    continue
+
                 download_links.append([link, hoster])
     except:
         info(f"DW site has been updated. Parsing download links for {title} not possible!")
