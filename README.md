@@ -104,12 +104,15 @@ Issues, feature and pull requests that are meant to introduce feature toggles wi
 - Assume there are zero known
   issues [unless you find one or more open issues in this repository](https://github.com/rix1337/Quasarr/issues).
 - Still having an issue? Provide a detailed report [here](https://github.com/rix1337/Quasarr/issues/new/choose)!
-- The feature set is considered complete. This should not be an issue, since most feature requests can be satisfied by:
+- The feature set is considered complete. Most feature requests can be satisfied by:
     - Existing settings in Radarr/Sonarr
     - Existing settings in JDownloader
     - Existing tools from the *arr ecosystem that integrate directly with Radarr/Sonarr
-    - There are no hostname integrations in active development.
-- Pull requests are welcome. Especially for new and popular hostnames.
+- There are no hostname integrations in active development.
+- Adding one or more hostnames focused on English content is highly desired.
+  - Please provide suggestions in a private thread on Discord.
+- Pull requests are welcome. Especially for popular hostnames.
     - Always reach out on Discord before starting work on a new feature.
     - Please follow the existing code style and project structure.
+    - Anti-bot measures bust be circumvented without relying on third party tools like Flaresolverr.
     - Please provide proof of functionality (screenshots/examples) when submitting your pull request.
