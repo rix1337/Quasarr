@@ -1,4 +1,4 @@
-# 
+#  
 
 <img src="https://raw.githubusercontent.com/rix1337/Quasarr/main/Quasarr.png" data-canonical-src="https://raw.githubusercontent.com/rix1337/Quasarr/main/Quasarr.png" width="64" height="64" />
 
@@ -22,17 +22,20 @@ Quasarr will confidently handle the rest.
 
 * Set up at least one hostname for Quasarr to use
     * Chose your own or use the `HOSTNAMES` variable to provide a list of hostnames.
+    * This project will not condone nor provide you with hostnames. Search Google, Pastebin, etc. for suggestions.
     * Always redact hostnames when creating issues in this repo.
     * Quasarr will become available once at least one suitable hostname is set.
 * Provide your [My-JDownloader-Credentials](https://my.jdownloader.org)
+    * Consider setting up a fresh JDownloader before you begin.
+    * Quasarr will modify settings of JDownloader so downloads can be properly handled by Radarr/Sonarr.
+    * If using docker make extra sure that JDownloader's download path is available to Radarr/Sonarr with the exakt same
+      internal and external path mapping. Just matching the external path is not enough.
 * Set up Quasarr as `Newznab Indexer` and `SABnzbd Download Client` in Radarr/Sonarr
     * Use the API key from console output (or copy it from the Quasarr web UI)
-    * Leave all other settings at default!
-* To see download status messages
-  * Open `Activity` → `Queue` → `Options` in Radarr/Sonarr
-  * Enable `Release Title`
-* To prevent downloads from being removed before processed by Radarr/Sonarr, Quasarr automatically changes some
-  JDownloader settings at launch.
+    * Leave all other settings at default.
+* To see download status information
+    * Open `Activity` → `Queue` → `Options` in Radarr/Sonarr
+    * Enable `Release Title`
 
 # Docker
 
@@ -67,7 +70,6 @@ Use this only in case you cant run the docker image.
 * Requires Python 3.12 or later
 
 ```
-
   --port=8080
   --discord=https://discord.com/api/webhooks/1234567890/ABCDEFGHIJKLMN
   --external_address=https://foo.bar/
@@ -78,20 +80,36 @@ Use this only in case you cant run the docker image.
 * `--external_address` see `EXTERNAL_ADDRESS`docker variable
 * `--hostnames` see `HOSTNAMES`docker variable
 
+# Philosophy
+
+Complexity is the killer of solo projects like this one. It must be fought at all cost!
+
+Therefore, feature toggles to modify Quasarr's behavior will never be introduced to this project.
+
+Consider that every choice for the user must be reflected throughout the project.
+Every feature toggle therefore is a negative multiplier for future development efforts.
+This project's predecessor [FeedCrawler](https://github.com/rix1337/FeedCrawler) died because it allowed an insane
+amount of flexibility.
+
+I will not waste my precious time on features that will slow future development cycles down.
+Issues, feature and pull requests that are meant to introduce feature toggles will therefore be rejected.
+
+* If you need to update hostnames or My-JDownloader-Credentials, simply delete the config and restart Quasarr.
+* Radarr/Sonarr provide custom formats to automatically chose the most fitting release for a given search.
+* Quasarr will always prefix release titles with the source hostname in square brackets in case you want to apply
+  custom format scores to certain hostnames.
+
 # Roadmap
-- Assume there are zero known issues unless you find one or more open issues in this repository.
-  - Stability improvements and bugfixes require your help.
-  - Report problems by opening a new issue in this repository.
-  - Issues must be reproducible and include logs / screenshots.
-- The feature set is considered complete. Don't expect feature upgrades.
-  - Most feature requests can be satisfied by:
-    - Existing settings in  Radarr/Sonarr
+
+- Assume there are zero known
+  issues [unless you find one or more open issues in this repository](https://github.com/rix1337/Quasarr/issues).
+- Still having an issue? Provide a detailed report [here](https://github.com/rix1337/Quasarr/issues/new/choose)!
+- The feature set is considered complete. This should not be an issue, since most feature requests can be satisfied by:
+    - Existing settings in Radarr/Sonarr
     - Existing settings in JDownloader
-      - You can set up link filters for undesired mirrors there.
-      - The same applies to filtering out offline links.
     - Existing tools from the *arr ecosystem that integrate directly with Radarr/Sonarr
-  - There are no hostname integrations in active development.
+    - There are no hostname integrations in active development.
 - Pull requests are welcome. Especially for new and popular hostnames.
-  - Always reach out on Discord before starting work on a new feature.
-  - Please follow the existing code style and project structure.
-  - Please provide proof of functionality (screenshots/examples) when submitting your pull request.
+    - Always reach out on Discord before starting work on a new feature.
+    - Please follow the existing code style and project structure.
+    - Please provide proof of functionality (screenshots/examples) when submitting your pull request.
