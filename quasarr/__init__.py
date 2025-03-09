@@ -286,18 +286,20 @@ def make_raw_pastebin_link(url):
     Takes a Pastebin URL and ensures it is a raw link.
     If it's not a Pastebin URL, it returns the URL unchanged.
     """
-    # Check if the URL is a Pastebin link
+    # Check if the URL is already a raw Pastebin link
+    if re.match(r"https?://(?:www\.)?pastebin\.com/raw/\w+", url):
+        return url  # Already raw, return as is
+
+    # Check if the URL is a standard Pastebin link
     pastebin_pattern = r"https?://(?:www\.)?pastebin\.com/(\w+)"
     match = re.match(pastebin_pattern, url)
 
     if match:
         paste_id = match.group(1)
-        # Construct the raw Pastebin link
         print(f"The link you provided is not a raw Pastebin link. Attempting to convert it to a raw link from {url}...")
         return f"https://pastebin.com/raw/{paste_id}"
-    else:
-        # Return the URL unchanged if it's not a Pastebin link
-        return url
+
+    return url  # Not a Pastebin link, return unchanged
 
 
 def is_valid_url(url):
