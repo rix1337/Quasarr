@@ -32,7 +32,10 @@ jobs:
       - name: Compile Linux wheel
         run: |
           python setup.py sdist bdist_wheel
-      - name: Upload Linux wheel
+      - name: Rename AMD64 wheel
+        run: |
+          mv ./dist/quasarr-*.whl ./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-amd64.whl
+      - name: Upload AMD64 wheel
         uses: actions/upload-artifact@v4
         with:
           name: artifact-wheel-amd64
@@ -61,6 +64,9 @@ jobs:
       - name: Compile Linux ARM64 wheel
         run: |
           python setup.py sdist bdist_wheel
+      - name: Rename ARM64 wheel
+        run: |
+          mv ./dist/quasarr-*.whl ./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-arm64.whl
       - name: Upload Linux ARM64 wheel
         uses: actions/upload-artifact@v4
         with:
@@ -129,7 +135,7 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "./artifact-wheel-amd64/*.whl,./artifact-wheel-arm64/*.whl,./artifact-exe/*.exe"
+          artifacts: "./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-amd64.whl,./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-arm64.whl,./artifact-exe/*.exe"
           artifactErrorsFailBuild: true
           bodyFile: ".github/Changelog.md"
           tag: v.${{ steps.version.outputs.version }}
