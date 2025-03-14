@@ -29,13 +29,13 @@ jobs:
           pip install wheel
           pip install pyinstaller
           pip install -r requirements.txt
-      - name: Compile Linux wheel
+      - name: Compile Linux AMD64 wheel
         run: |
           python setup.py sdist bdist_wheel
       - name: Rename AMD64 wheel
         run: |
-          mv ./dist/quasarr-*.whl ./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-amd64.whl
-      - name: Upload AMD64 wheel
+          mv ./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-any.whl ./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-amd64.whl
+      - name: Upload Linux AMD64 wheel
         uses: actions/upload-artifact@v4
         with:
           name: artifact-wheel-amd64
@@ -66,7 +66,7 @@ jobs:
           python setup.py sdist bdist_wheel
       - name: Rename ARM64 wheel
         run: |
-          mv ./dist/quasarr-*.whl ./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-arm64.whl
+          mv ./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-any.whl ./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-arm64.whl
       - name: Upload Linux ARM64 wheel
         uses: actions/upload-artifact@v4
         with:
@@ -93,14 +93,14 @@ jobs:
           pip install wheel
           pip install pyinstaller
           pip install -r requirements.txt
-      - name: Compile Windows Exe
+      - name: Compile Windows AMD64 Exe
         run: |
           $version = python quasarr/providers/version.py
           pyinstaller --onefile -y --version-file "file_version_info.txt" "Quasarr.py" -n "quasarr-$version-standalone-win64"
-      - name: Upload Windows Exe
+      - name: Upload Windows AMD64 Exe
         uses: actions/upload-artifact@v4
         with:
-          name: artifact-exe
+          name: artifact-exe-amd64
           path: ./dist/*.exe
 
   release:
@@ -135,7 +135,7 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-amd64.whl,./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-arm64.whl,./artifact-exe/*.exe"
+          artifacts: "./artifact-exe-amd64/*.whl,./artifact-exe-arm64/*.whl,./artifact-exe-amd64/*.exe"
           artifactErrorsFailBuild: true
           bodyFile: ".github/Changelog.md"
           tag: v.${{ steps.version.outputs.version }}
