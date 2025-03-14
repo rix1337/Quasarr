@@ -50,7 +50,7 @@ docker run -d \
   -e 'EXTERNAL_ADDRESS'='https://foo.bar/' \
   -e 'DISCORD'='https://discord.com/api/webhooks/1234567890/ABCDEFGHIJKLMN' \
   -e 'HOSTNAMES'='https://pastebin.com/raw/eX4Mpl3'
-  rix1337/docker-quasarr:latest
+  ghcr.io/rix1337/quasarr:latest
   ```
 
 * `INTERNAL_ADDRESS` is required so Radarr/Sonarr can reach Quasarr. **Must** include port!
@@ -108,11 +108,12 @@ Issues, feature and pull requests that are meant to introduce feature toggles wi
     - Existing settings in Radarr/Sonarr
     - Existing settings in JDownloader
     - Existing tools from the *arr ecosystem that integrate directly with Radarr/Sonarr
+- Exposing the mirrors of a release to Radarr/Sonarr is a desired feature. This will allow scoring desired mirrors using custom profiles in Radarr/Sonarr. Quasarr will always provide all found mirrors at once, if they are protected by the same or no CAPTCHA.
 - There are no hostname integrations in active development.
 - Adding one or more hostnames focused on English content is highly desired.
   - Please provide suggestions in a private thread on Discord.
 - Pull requests are welcome. Especially for popular hostnames.
     - Always reach out on Discord before starting work on a new feature.
     - Please follow the existing code style and project structure.
-    - Anti-bot measures bust be circumvented without relying on third party tools like Flaresolverr.
+    - Anti-bot measures must be circumvented without relying on third party tools like Flaresolverr.
     - Please provide proof of functionality (screenshots/examples) when submitting your pull request.
