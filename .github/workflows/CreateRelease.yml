@@ -34,7 +34,7 @@ jobs:
           python setup.py sdist bdist_wheel
       - name: Rename AMD64 wheel
         run: |
-          mv ./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-any.whl ./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-amd64.whl
+          mv ./dist/quasarr*-py3-none-any.whl ./dist/quasarr*-py3-none-amd64.whl
       - name: Upload Linux AMD64 wheel
         uses: actions/upload-artifact@v4
         with:
@@ -64,9 +64,9 @@ jobs:
       - name: Compile Linux ARM64 wheel
         run: |
           python setup.py sdist bdist_wheel
-      - name: Rename ARM64 wheel
+      - name: Rename AMD64 wheel
         run: |
-          mv ./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-any.whl ./dist/quasarr-${{ steps.version.outputs.version }}-py3-none-arm64.whl
+          mv ./dist/quasarr*-py3-none-any.whl ./dist/quasarr*-py3-none-arm64.whl
       - name: Upload Linux ARM64 wheel
         uses: actions/upload-artifact@v4
         with:
