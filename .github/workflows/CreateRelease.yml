@@ -10,7 +10,7 @@ on:
 
 jobs:
   build_wheel_amd64:
-    name: Build Linux wheel
+    name: Build Linux AMD64 wheel
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -68,7 +68,7 @@ jobs:
           path: ./dist/*
 
   build_exe:
-    name: Build Windows Exe
+    name: Build Windows AMD64 Exe
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -135,7 +135,7 @@ jobs:
           tag: v.${{ steps.version.outputs.version }}
       - name: Upload to PyPI
         run: |
-          python -m twine upload ./artifact-wheel-amd64/* ./artifact-wheel-arm64/* -u __token__ -p ${{ secrets.PYPI_TOKEN }}
+          python -m twine upload ./artifact-wheel-*/* -u __token__ -p ${{ secrets.PYPI_TOKEN }}
       - name: Trigger Docker Image build
         run: |
           curl -XPOST -H "authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" -H "Content-Type: application/json" https://api.github.com/repos/rix1337/Quasarr/actions/workflows/BuildImage.yml/dispatches --data '{"ref": "main", "inputs": {"version": "${{ steps.version.outputs.version }}"}}'
