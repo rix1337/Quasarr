@@ -50,7 +50,7 @@ docker run -d \
   -e 'EXTERNAL_ADDRESS'='https://foo.bar/' \
   -e 'DISCORD'='https://discord.com/api/webhooks/1234567890/ABCDEFGHIJKLMN' \
   -e 'HOSTNAMES'='https://pastebin.com/raw/eX4Mpl3'
-  rix1337/docker-quasarr:latest
+  ghcr.io/rix1337/Quasarr:latest
   ```
 
 * `INTERNAL_ADDRESS` is required so Radarr/Sonarr can reach Quasarr. **Must** include port!
