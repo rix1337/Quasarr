@@ -63,7 +63,7 @@ def run():
         else:
             if arguments.port:
                 port = int(arguments.port)
-            internal_address = f'http://{check_ip()}'
+            internal_address = f'http://{check_ip()}:{port}'
 
         if arguments.internal_address:
             internal_address = arguments.internal_address
@@ -194,7 +194,7 @@ def run():
         jdownloader.start()
 
         print("\n===== API Information =====")
-        print(f'Quasarr API now running at: "{shared_state.values['internal_address']}"')
+        print(f'Quasarr API now running at: "{shared_state.values['external_address']}"')
         print('Use the above URL to set up a "Newznab Indexer" and "SABnzbd Download Client" in Radarr/Sonarr')
         print(f'Leave all settings at default and use this API key: "{api_key}" (without quotes)')
 
