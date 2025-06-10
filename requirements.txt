@@ -3,4 +3,4 @@ bottle==0.13.3
 dukpy==0.5.0
 pillow==11.2.1
 pycryptodomex==3.22.0
-requests==2.32.3
+requests==2.32.4
