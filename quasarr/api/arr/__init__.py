@@ -340,11 +340,8 @@ def setup_arr_routes(app):
                         if not "lazylibrarian" in request_from.lower():
                             title = f'[{release.get("hostname", "").upper()}] {title}'
 
-                        # CRITICAL FIX: Ensure pubDate is never empty
-                        # Use current time if date is missing or empty
+                        # Get publication date - sources should provide valid dates
                         pub_date = release.get("date", "").strip()
-                        if not pub_date:
-                            pub_date = datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
 
                         items += f'''
                         <item>

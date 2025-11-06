@@ -19,7 +19,7 @@ from quasarr.downloads.sources.nx import get_nx_download_links
 from quasarr.downloads.sources.sf import get_sf_download_links, resolve_sf_redirect
 from quasarr.downloads.sources.sl import get_sl_download_links
 from quasarr.downloads.sources.wd import get_wd_download_links
-from quasarr.downloads.sources.wcx import get_wcx_download_links
+from quasarr.downloads.sources.wx import get_wx_download_links
 from quasarr.providers.log import info
 from quasarr.providers.notifications import send_discord_message
 from quasarr.providers.statistics import StatsHelper
@@ -173,7 +173,7 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
         'SF': config.get("sf"),
         'SL': config.get("sl"),
         'WD': config.get("wd"),
-        'WCX': config.get("wcx")
+        'WX': config.get("wx")
     }
 
     handlers = [
@@ -188,7 +188,7 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
         (flags['SF'], handle_sf),
         (flags['SL'], handle_sl),
         (flags['WD'], handle_wd),
-        (flags['WCX'], lambda *a: handle_unprotected(*a, func=get_wcx_download_links, label='WCX')),
+        (flags['WX'], lambda *a: handle_unprotected(*a, func=get_wx_download_links, label='WX')),
     ]
 
     for flag, fn in handlers:

@@ -184,9 +184,9 @@ def run():
 
         dl = Config('Hostnames').get('dl')
         if dl:
-            xf_session = Config('DL').get('xf_session')
-            xf_cookie = Config('DL').get('xf_cookie')
-            if not xf_session or not xf_cookie:
+            username = Config('DL').get('username')
+            password = Config('DL').get('password')
+            if not username or not password:
                 hostname_credentials_config_dl(shared_state, "DL", dl)
 
         config = Config('JDownloader')

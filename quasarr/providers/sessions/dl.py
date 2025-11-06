@@ -6,6 +6,7 @@ import base64
 import pickle
 
 import requests
+from bs4 import BeautifulSoup
 
 from quasarr.providers.log import info, debug
 
@@ -14,7 +15,7 @@ hostname = "dl"
 
 def create_and_persist_session(shared_state):
     """
-    Create and persist a session for data-load.me using XenForo cookies.
+    Create and persist a session using username and password.
     
     Args:
         shared_state: Shared state object
@@ -26,11 +27,11 @@ def create_and_persist_session(shared_state):
     host = cfg.get(hostname)
     credentials_cfg = shared_state.values["config"](hostname.upper())
     
-    xf_session = credentials_cfg.get("xf_session")
-    xf_cookie = credentials_cfg.get("xf_cookie")
+    username = credentials_cfg.get("username")
+    password = credentials_cfg.get("password")
 
-    if not xf_session or not xf_cookie:
-        info(f'Missing credentials for: "{hostname}" - xf_session and xf_cookie are required')
+    if not username or not password:
+        info(f'Missing credentials for: "{hostname}" - username and password are required')
         return None
 
     sess = requests.Session()
@@ -39,22 +40,48 @@ def create_and_persist_session(shared_state):
     ua = shared_state.values["user_agent"]
     sess.headers.update({'User-Agent': ua})
     
-    # Set the XenForo cookies
-    sess.cookies.set('xf_session', xf_session, domain=host, path='/')
-    sess.cookies.set('xf_user', xf_cookie, domain=host, path='/')
-    
-    # Verify session by accessing the main page
     try:
-        r = sess.get(f'https://www.{host}/', timeout=30)
+        # Step 1: Get login page to retrieve CSRF token
+        login_page_url = f'https://www.{host}/login/'
+        login_page = sess.get(login_page_url, timeout=30)
         
-        # Check if we're logged in by looking for specific indicators
-        if 'data-logged-in="true"' not in r.text:
-            info(f'Login verification failed for: "{hostname}" - invalid cookies')
+        if login_page.status_code != 200:
+            info(f'Failed to load login page for: "{hostname}" - Status {login_page.status_code}')
             return None
         
-        info(f'Session successfully created for: "{hostname}"')
+        # Extract CSRF token from login form
+        soup = BeautifulSoup(login_page.text, 'html.parser')
+        csrf_input = soup.find('input', {'name': '_xfToken'})
+        
+        if not csrf_input or not csrf_input.get('value'):
+            info(f'Could not find CSRF token on login page for: "{hostname}"')
+            return None
+        
+        csrf_token = csrf_input['value']
+        
+        # Step 2: Submit login form
+        login_data = {
+            'login': username,
+            'password': password,
+            '_xfToken': csrf_token,
+            'remember': '1',
+            '_xfRedirect': f'https://www.{host}/'
+        }
+        
+        login_url = f'https://www.{host}/login/login'
+        login_response = sess.post(login_url, data=login_data, timeout=30)
+        
+        # Step 3: Verify login success
+        # Check if we're logged in by accessing the main page
+        verify_response = sess.get(f'https://www.{host}/', timeout=30)
+        
+        if 'data-logged-in="true"' not in verify_response.text:
+            info(f'Login verification failed for: "{hostname}" - invalid credentials or login failed')
+            return None
+        
+        info(f'Session successfully created for: "{hostname}" using username/password')
     except Exception as e:
-        info(f'Failed to verify session for: "{hostname}" - {e}')
+        info(f'Failed to create session for: "{hostname}" - {e}')
         return None
 
     # Persist session to database

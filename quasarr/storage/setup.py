@@ -286,7 +286,7 @@ def hostname_credentials_config(shared_state, shorthand, domain):
 
 
 def hostname_credentials_config_dl(shared_state, shorthand, domain):
-    """Special credentials config for data-load.me (DL) using XenForo cookies."""
+    """Credentials config for DL using username and password."""
     app = Bottle()
 
     shorthand = shorthand.upper()
@@ -294,21 +294,12 @@ def hostname_credentials_config_dl(shared_state, shorthand, domain):
     @app.get('/')
     def credentials_form():
         form_content = f'''
-        <span>You must be logged in to: <a href="https://{domain}" target="_blank">{domain}</a>!</span><br><br>
-        <p><strong>Extract cookies from your browser while logged in:</strong></p>
-        <ol style="text-align: left; max-width: 500px; margin: 0 auto;">
-            <li>Open <a href="https://{domain}" target="_blank">{domain}</a> and log in</li>
-            <li>Press F12 to open Developer Tools</li>
-            <li>Go to Application/Storage → Cookies → https://www.{domain}</li>
-            <li>Find and copy the values for:<br>
-                &nbsp;&nbsp;• <code>xf_session</code><br>
-                &nbsp;&nbsp;• <code>xf_user</code></li>
-        </ol><br>
-        <label for="xf_session">xf_session Cookie</label>
-        <input type="text" id="xf_session" name="xf_session" placeholder="Cookie value..." autocorrect="off"><br>
+        <span>If required register account at: <a href="https://{domain}">{domain}</a>!</span><br><br>
+        <label for="user">Username</label>
+        <input type="text" id="user" name="user" placeholder="User" autocorrect="off"><br>
 
-        <label for="xf_cookie">xf_user Cookie</label>
-        <input type="text" id="xf_cookie" name="xf_cookie" placeholder="Cookie value..." autocorrect="off"><br>
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="Password"><br>
         '''
 
         form_html = f'''
@@ -318,32 +309,32 @@ def hostname_credentials_config_dl(shared_state, shorthand, domain):
         </form>
         '''
 
-        return render_form(f"Set Cookies for {shorthand}", form_html)
+        return render_form(f"Set User and Password for {shorthand}", form_html)
 
     @app.post("/api/credentials/<sh>")
     def set_credentials(sh):
-        xf_session = request.forms.get('xf_session')
-        xf_cookie = request.forms.get('xf_cookie')
+        user = request.forms.get('user')
+        password = request.forms.get('password')
         config = Config(shorthand)
 
-        if xf_session and xf_cookie:
-            config.save("xf_session", xf_session)
-            config.save("xf_cookie", xf_cookie)
+        if user and password:
+            config.save("username", user)
+            config.save("password", password)
 
             if sh.lower() == "dl":
                 if quasarr.providers.sessions.dl.create_and_persist_session(shared_state):
                     quasarr.providers.web_server.temp_server_success = True
                     return render_success(f"{sh} credentials set successfully", 5)
 
-        config.save("xf_session", "")
-        config.save("xf_cookie", "")
-        return render_fail("Cookies wrong or empty!")
+        config.save("username", "")
+        config.save("password", "")
+        return render_fail("User and Password wrong or empty!")
 
     info(
         f'"{shorthand.lower()}" credentials required to access download links. '
         f'Starting web server for config at: "{shared_state.values["internal_address"]}".')
-    info(f"Login here: 'https://{domain}' and extract your cookies!")
-    info("Please set your cookies now, to allow Quasarr to launch!")
+    info(f"If needed register here: 'https://{domain}'")
+    info("Please set your credentials now, to allow Quasarr to launch!")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
 
 

@@ -12,62 +12,39 @@ from quasarr.providers.sessions.dl import retrieve_and_validate_session, fetch_v
 hostname = "dl"
 
 
-def extract_links_from_post(post_html):
+def extract_links_from_post(post_html, host):
     """
     Extract download links from a forum post.
-    Common patterns: direct links, base64 encoded, obfuscated links
+    Only filecrypt and hide are supported - other link crypters will cause an error.
     """
     links = []
     soup = BeautifulSoup(post_html, 'html.parser')
     
-    # Find all links in the post
     for link in soup.find_all('a', href=True):
         href = link.get('href')
         
         # Skip internal forum links
-        if href.startswith('/') or 'data-load.me' in href:
+        if href.startswith('/') or host in href:
             continue
         
-        # Common file hosters and link crypters
-        hoster_patterns = [
-            # Link crypters/containers (PRIORITY - these contain the actual links)
-            r'filecrypt\.cc',
-            r'linksnappy\.io',
-            r'relink\.us',
-            r'links\.snahp\.it',
-            # Direct file hosters
-            r'rapidgator\.net',
-            r'uploaded\.net',
-            r'nitroflare\.com',
-            r'turbobit\.net',
-            r'ddownload\.com',
-            r'filefactory\.com',
-            r'katfile\.com',
-            r'mexashare\.com',
-            r'keep2share\.cc',
-            r'alfafile\.net',
-            r'mega\.nz',
-            r'1fichier\.com'
-        ]
-        
-        for pattern in hoster_patterns:
-            if re.search(pattern, href, re.IGNORECASE):
-                if href not in links:
-                    links.append(href)
-                break
+        # ONLY support filecrypt and hide
+        if re.search(r'filecrypt\.cc', href, re.IGNORECASE):
+            if href not in links:
+                links.append(href)
+        elif re.search(r'hide\.', href, re.IGNORECASE):
+            if href not in links:
+                links.append(href)
+        elif re.search(r'(linksnappy|relink\.us|links\.snahp|rapidgator|uploaded\.net|nitroflare|turbobit|ddownload\.com|filefactory|katfile|mexashare|keep2share|alfafile|mega\.nz|1fichier)', href, re.IGNORECASE):
+            # These crypters/hosters are NOT supported yet
+            info(f"Unsupported link crypter/hoster found: {href}")
+            info(f"Currently only filecrypt.cc and hide.* are supported. Other crypters may be added later.")
     
     return links
 
 
 def get_dl_download_links(shared_state, url, mirror, title):
     """
-    Get download links from a data-load.me thread.
-    
-    Args:
-        shared_state: Shared state object
-        url: Thread URL
-        mirror: Mirror (not used for data-load.me)
-        title: Release title
+    Get download links from a thread.
     
     Returns:
         dict with 'links', 'password', and 'title'
@@ -80,7 +57,6 @@ def get_dl_download_links(shared_state, url, mirror, title):
         return {}
 
     try:
-        # Fetch the thread page
         response = fetch_via_requests_session(shared_state, method="GET", 
                                              target_url=url, 
                                              timeout=30)
@@ -91,7 +67,6 @@ def get_dl_download_links(shared_state, url, mirror, title):
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Extract links from the first post (original post)
         first_post = soup.select_one('article.message--post')
         if not first_post:
             info(f"Could not find first post in thread: {url}")
@@ -102,18 +77,15 @@ def get_dl_download_links(shared_state, url, mirror, title):
             info(f"Could not find post content in thread: {url}")
             return {}
         
-        # Extract all download links
-        links = extract_links_from_post(str(post_content))
+        links = extract_links_from_post(str(post_content), host)
         
         if not links:
-            info(f"No download links found in thread: {url}")
+            info(f"No supported download links found in thread: {url}")
             return {}
         
-        # Extract password if present
         password = f"www.{host}"
         password_patterns = [
             r'(?:Passwort|Password|Pass|PW)[\s:]*([^\s<]+)',
-            r'www\.data-load\.me'
         ]
         
         post_text = post_content.get_text()
