@@ -183,9 +183,9 @@ def run():
 
         dl = Config('Hostnames').get('dl')
         if dl:
-            username = Config('DL').get('username')
+            user = Config('DL').get('user')
             password = Config('DL').get('password')
-            if not username or not password:
+            if not user or not password:
                 hostname_credentials_config(shared_state, "DL", dl)
 
         config = Config('JDownloader')
