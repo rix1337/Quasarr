@@ -264,14 +264,21 @@ def hostname_credentials_config(shared_state, shorthand, domain):
                 if quasarr.providers.sessions.al.create_and_persist_session(shared_state):
                     quasarr.providers.web_server.temp_server_success = True
                     return render_success(f"{sh} credentials set successfully", 5)
-            if sh.lower() == "dd":
+            elif sh.lower() == "dd":
                 if quasarr.providers.sessions.dd.create_and_persist_session(shared_state):
                     quasarr.providers.web_server.temp_server_success = True
                     return render_success(f"{sh} credentials set successfully", 5)
-            if sh.lower() == "nx":
+            elif sh.lower() == "dl":
+                if quasarr.providers.sessions.dl.create_and_persist_session(shared_state):
+                    quasarr.providers.web_server.temp_server_success = True
+                    return render_success(f"{sh} credentials set successfully", 5)
+            elif sh.lower() == "nx":
                 if quasarr.providers.sessions.nx.create_and_persist_session(shared_state):
                     quasarr.providers.web_server.temp_server_success = True
                     return render_success(f"{sh} credentials set successfully", 5)
+            else:
+                quasarr.providers.web_server.temp_server_success = False
+                return render_fail(f"Unknown site shorthand! ({sh})")
 
         config.save("user", "")
         config.save("password", "")
@@ -280,59 +287,6 @@ def hostname_credentials_config(shared_state, shorthand, domain):
     info(
         f'"{shorthand.lower()}" credentials required to access download links. '
         f'Starting web server for config at: "{shared_state.values['internal_address']}".')
-    info(f"If needed register here: 'https://{domain}'")
-    info("Please set your credentials now, to allow Quasarr to launch!")
-    return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
-
-
-def hostname_credentials_config_dl(shared_state, shorthand, domain):  # todo replace with above function
-    """Credentials config for DL using username and password."""
-    app = Bottle()
-
-    shorthand = shorthand.upper()
-
-    @app.get('/')
-    def credentials_form():
-        form_content = f'''
-        <span>If required register account at: <a href="https://{domain}">{domain}</a>!</span><br><br>
-        <label for="user">Username</label>
-        <input type="text" id="user" name="user" placeholder="User" autocorrect="off"><br>
-
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" placeholder="Password"><br>
-        '''
-
-        form_html = f'''
-        <form action="/api/credentials/{shorthand}" method="post">
-            {form_content}
-            {render_button("Save", "primary", {"type": "submit"})}
-        </form>
-        '''
-
-        return render_form(f"Set User and Password for {shorthand}", form_html)
-
-    @app.post("/api/credentials/<sh>")
-    def set_credentials(sh):
-        user = request.forms.get('user')
-        password = request.forms.get('password')
-        config = Config(shorthand)
-
-        if user and password:
-            config.save("username", user)
-            config.save("password", password)
-
-            if sh.lower() == "dl":
-                if quasarr.providers.sessions.dl.create_and_persist_session(shared_state):
-                    quasarr.providers.web_server.temp_server_success = True
-                    return render_success(f"{sh} credentials set successfully", 5)
-
-        config.save("username", "")
-        config.save("password", "")
-        return render_fail("User and Password wrong or empty!")
-
-    info(
-        f'"{shorthand.lower()}" credentials required to access download links. '
-        f'Starting web server for config at: "{shared_state.values["internal_address"]}".')
     info(f"If needed register here: 'https://{domain}'")
     info("Please set your credentials now, to allow Quasarr to launch!")
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()

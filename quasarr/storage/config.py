@@ -56,7 +56,7 @@ class Config(object):
             ("password", "secret", "")
         ],
         'DL': [
-            ("username", "secret", ""),
+            ("user", "secret", ""),
             ("password", "secret", "")
         ],
         'NX': [

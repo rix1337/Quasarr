@@ -15,7 +15,7 @@ hostname = "dl"
 
 def create_and_persist_session(shared_state):
     """
-    Create and persist a session using username and password.
+    Create and persist a session using user and password.
     
     Args:
         shared_state: Shared state object
@@ -27,11 +27,11 @@ def create_and_persist_session(shared_state):
     host = cfg.get(hostname)
     credentials_cfg = shared_state.values["config"](hostname.upper())
     
-    username = credentials_cfg.get("username")
+    user = credentials_cfg.get("user")
     password = credentials_cfg.get("password")
 
-    if not username or not password:
-        info(f'Missing credentials for: "{hostname}" - username and password are required')
+    if not user or not password:
+        info(f'Missing credentials for: "{hostname}" - user and password are required')
         return None
 
     sess = requests.Session()
@@ -61,7 +61,7 @@ def create_and_persist_session(shared_state):
         
         # Step 2: Submit login form
         login_data = {
-            'login': username,
+            'login': user,
             'password': password,
             '_xfToken': csrf_token,
             'remember': '1',
@@ -79,7 +79,7 @@ def create_and_persist_session(shared_state):
             info(f'Login verification failed for: "{hostname}" - invalid credentials or login failed')
             return None
         
-        info(f'Session successfully created for: "{hostname}" using username/password')
+        info(f'Session successfully created for: "{hostname}" using user/password')
     except Exception as e:
         info(f'Failed to create session for: "{hostname}" - {e}')
         return None

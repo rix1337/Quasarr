@@ -19,8 +19,8 @@ from quasarr.providers import shared_state, version
 from quasarr.providers.log import info, debug
 from quasarr.providers.notifications import send_discord_message
 from quasarr.storage.config import Config, get_clean_hostnames
-from quasarr.storage.setup import path_config, hostnames_config, hostname_credentials_config, \
-    hostname_credentials_config_dl, flaresolverr_config, jdownloader_config
+from quasarr.storage.setup import path_config, hostnames_config, hostname_credentials_config, flaresolverr_config, \
+    jdownloader_config
 from quasarr.storage.sqlite_database import DataBase
 
 
@@ -186,7 +186,7 @@ def run():
             username = Config('DL').get('username')
             password = Config('DL').get('password')
             if not username or not password:
-                hostname_credentials_config_dl(shared_state, "DL", dl)
+                hostname_credentials_config(shared_state, "DL", dl)
 
         config = Config('JDownloader')
         user = config.get('user')
