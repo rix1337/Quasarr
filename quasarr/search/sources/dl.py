@@ -210,7 +210,6 @@ def _search_single_page(shared_state, host, search_string, search_id, page_num, 
 
                 # Fallback: use current time if no date found
                 if not date_str:
-                    from datetime import datetime
                     date_str = datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
 
                 mb = 0

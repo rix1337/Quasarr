@@ -4,10 +4,13 @@
 
 import html
 import time
+import traceback
 import warnings
 from base64 import urlsafe_b64encode
+from datetime import datetime
 
 import requests
+from bs4 import BeautifulSoup
 from bs4 import XMLParsedAsHTMLWarning
 
 from quasarr.providers.imdb_metadata import get_localized_title
@@ -36,7 +39,6 @@ def wx_feed(shared_state, start_time, request_from, mirror=None):
     }
 
     try:
-        from bs4 import BeautifulSoup
         response = requests.get(rss_url, headers=headers, timeout=10)
 
         if response.status_code != 200:
@@ -91,7 +93,6 @@ def wx_feed(shared_state, start_time, request_from, mirror=None):
                     published = pub_date.get_text(strip=True)
                 else:
                     # Fallback: use current time if no pubDate found
-                    from datetime import datetime
                     published = datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
 
                 mb = 0
@@ -246,7 +247,6 @@ def wx_search(shared_state, start_time, request_from, search_string, mirror=None
 
                         published = detail_item.get('updated_at') or detail_item.get('created_at')
                         if not published:
-                            from datetime import datetime
                             published = datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
                         password = f"www.{host}"
 
@@ -297,7 +297,6 @@ def wx_search(shared_state, start_time, request_from, search_string, mirror=None
                             release_published = release.get('updated_at') or release.get(
                                 'created_at') or detail_item.get('updated_at')
                             if not release_published:
-                                from datetime import datetime
                                 release_published = datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
                             release_size = release.get('size', 0)
                             password = f"www.{host}"
@@ -330,7 +329,6 @@ def wx_search(shared_state, start_time, request_from, search_string, mirror=None
 
             except Exception as e:
                 debug(f"{hostname.upper()}: Error processing item: {e}")
-                import traceback
                 debug(f"{hostname.upper()}: {traceback.format_exc()}")
                 continue
 
@@ -338,7 +336,7 @@ def wx_search(shared_state, start_time, request_from, search_string, mirror=None
 
     except Exception as e:
         info(f"Error in {hostname.upper()} search: {e}")
-        import traceback
+
         debug(f"{hostname.upper()}: {traceback.format_exc()}")
         return releases
 

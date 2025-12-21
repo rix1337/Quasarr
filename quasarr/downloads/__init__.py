@@ -32,15 +32,7 @@ from quasarr.providers.statistics import StatsHelper
 def handle_unprotected(shared_state, title, password, package_id, imdb_id, url,
                        mirror=None, size_mb=None, links=None, func=None, label=""):
     if func:
-        data = func(shared_state, url, mirror, title)
-        # links = func(shared_state, url, mirror, title)
-        if isinstance(data, dict):  # todo revert to previous state (fix by dl / wx signature update)
-            links = data.get("links", [])
-            # Update title and password if provided
-            title = data.get("title", title)
-            password = data.get("password", password)
-        else:
-            links = data
+        links = func(shared_state, url, mirror, title)
 
     if links:
         info(f"Decrypted {len(links)} download links for {title}")
@@ -233,7 +225,7 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
         (flags['BY'], handle_by),
         (flags['DD'], lambda *a: handle_unprotected(*a, func=get_dd_download_links, label='DD')),
         (flags['DJ'], lambda *a: handle_protected(*a, func=get_dj_download_links, label='DJ')),
-        (flags['DL'], lambda *a: handle_unprotected(*a, func=get_dl_download_links, label='DL')),
+        (flags['DL'], lambda *a: handle_protected(*a, func=get_dl_download_links, label='DL')),
         (flags['DT'], lambda *a: handle_unprotected(*a, func=get_dt_download_links, label='DT')),
         (flags['DW'], lambda *a: handle_protected(*a, func=get_dw_download_links, label='DW')),
         (flags['HE'], lambda *a: handle_unprotected(*a, func=get_he_download_links, label='HE')),
@@ -244,7 +236,7 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
         (flags['SJ'], lambda *a: handle_protected(*a, func=get_sj_download_links, label='SJ')),
         (flags['SL'], handle_sl),
         (flags['WD'], handle_wd),
-        (flags['WX'], lambda *a: handle_unprotected(*a, func=get_wx_download_links, label='WX')),
+        (flags['WX'], lambda *a: handle_protected(*a, func=get_wx_download_links, label='WX')),
     ]
 
     for flag, fn in handlers:

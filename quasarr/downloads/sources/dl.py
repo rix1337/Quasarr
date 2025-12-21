@@ -54,7 +54,7 @@ def get_dl_download_links(shared_state, url, mirror, title):
     sess = retrieve_and_validate_session(shared_state)
     if not sess:
         info(f"Could not retrieve valid session for {host}")
-        return {}
+        return {}  # todo fix wrong return signature
 
     try:
         response = fetch_via_requests_session(shared_state, method="GET", 
@@ -63,25 +63,25 @@ def get_dl_download_links(shared_state, url, mirror, title):
         
         if response.status_code != 200:
             info(f"Failed to load thread page: {url} (Status: {response.status_code})")
-            return {}
+            return {}  # todo fix wrong return signature
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
         first_post = soup.select_one('article.message--post')
         if not first_post:
             info(f"Could not find first post in thread: {url}")
-            return {}
+            return {}  # todo fix wrong return signature
         
         post_content = first_post.select_one('div.bbWrapper')
         if not post_content:
             info(f"Could not find post content in thread: {url}")
-            return {}
+            return {}  # todo fix wrong return signature
         
         links = extract_links_from_post(str(post_content), host)
         
         if not links:
             info(f"No supported download links found in thread: {url}")
-            return {}
+            return {}  # todo fix wrong return signature
         
         password = f"www.{host}"
         password_patterns = [
@@ -96,7 +96,8 @@ def get_dl_download_links(shared_state, url, mirror, title):
                 break
         
         debug(f"Found {len(links)} download link(s) for: {title}")
-        
+
+        # todo fix wrong return signature
         return {
             "links": links,
             "password": password,
@@ -106,4 +107,4 @@ def get_dl_download_links(shared_state, url, mirror, title):
     except Exception as e:
         info(f"Error extracting download links from {url}: {e}")
         invalidate_session(shared_state)
-        return {}
+        return {}  # todo fix wrong return signature
