@@ -121,6 +121,39 @@ def handle_by(shared_state, title, password, package_id, imdb_id, url, mirror, s
     )
 
 
+def handle_dl(shared_state, title, password, package_id, imdb_id, url, mirror, size_mb):
+    links, extracted_password = get_dl_download_links(shared_state, url, mirror, title)
+    if not links:
+        fail(title, package_id, shared_state,
+             reason=f'Offline / no links found for "{title}" on DL - "{url}"')
+        return {"success": False, "title": title}
+
+    # Use extracted password if available, otherwise fall back to provided password
+    final_password = extracted_password if extracted_password else password
+
+    decrypted = decrypt_links_if_hide(shared_state, links)
+    if decrypted and decrypted.get("status") != "none":
+        status = decrypted.get("status", "error")
+        links = decrypted.get("results", [])
+        if status == "success":
+            return handle_unprotected(
+                shared_state, title, final_password, package_id, imdb_id, url,
+                links=links, label='DL'
+            )
+        else:
+            fail(title, package_id, shared_state,
+                 reason=f'Error decrypting hide.cx links for "{title}" on DL - "{url}"')
+            return {"success": False, "title": title}
+
+    return handle_protected(
+        shared_state, title, final_password, package_id, imdb_id, url,
+        mirror=mirror,
+        size_mb=size_mb,
+        func=lambda ss, u, m, t: links,
+        label='DL'
+    )
+
+
 def handle_sf(shared_state, title, password, package_id, imdb_id, url, mirror, size_mb):
     if url.startswith(f"https://{shared_state.values['config']('Hostnames').get('sf')}/external"):
         url = resolve_sf_redirect(url, shared_state.values["user_agent"])
@@ -225,7 +258,7 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
         (flags['BY'], handle_by),
         (flags['DD'], lambda *a: handle_unprotected(*a, func=get_dd_download_links, label='DD')),
         (flags['DJ'], lambda *a: handle_protected(*a, func=get_dj_download_links, label='DJ')),
-        (flags['DL'], lambda *a: handle_protected(*a, func=get_dl_download_links, label='DL')),
+        (flags['DL'], handle_dl),
         (flags['DT'], lambda *a: handle_unprotected(*a, func=get_dt_download_links, label='DT')),
         (flags['DW'], lambda *a: handle_protected(*a, func=get_dw_download_links, label='DW')),
         (flags['HE'], lambda *a: handle_unprotected(*a, func=get_he_download_links, label='HE')),
