@@ -12,6 +12,7 @@ from quasarr.downloads.sources.al import get_al_download_links
 from quasarr.downloads.sources.by import get_by_download_links
 from quasarr.downloads.sources.dd import get_dd_download_links
 from quasarr.downloads.sources.dj import get_dj_download_links
+from quasarr.downloads.sources.dl import get_dl_download_links
 from quasarr.downloads.sources.dt import get_dt_download_links
 from quasarr.downloads.sources.dw import get_dw_download_links
 from quasarr.downloads.sources.he import get_he_download_links
@@ -22,6 +23,7 @@ from quasarr.downloads.sources.sf import get_sf_download_links, resolve_sf_redir
 from quasarr.downloads.sources.sj import get_sj_download_links
 from quasarr.downloads.sources.sl import get_sl_download_links
 from quasarr.downloads.sources.wd import get_wd_download_links
+from quasarr.downloads.sources.wx import get_wx_download_links
 from quasarr.providers.log import info
 from quasarr.providers.notifications import send_discord_message
 from quasarr.providers.statistics import StatsHelper
@@ -30,7 +32,14 @@ from quasarr.providers.statistics import StatsHelper
 def handle_unprotected(shared_state, title, password, package_id, imdb_id, url,
                        mirror=None, size_mb=None, links=None, func=None, label=""):
     if func:
-        links = func(shared_state, url, mirror, title)
+        data = func(shared_state, url, mirror, title)
+        if isinstance(data, dict):
+            links = data.get("links", [])
+            # Update title and password if provided
+            title = data.get("title", title)
+            password = data.get("password", password)
+        else:
+            links = data
 
     if links:
         info(f"Decrypted {len(links)} download links for {title}")
@@ -204,6 +213,7 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
         'BY': config.get("by"),
         'DD': config.get("dd"),
         'DJ': config.get("dj"),
+        'DL': config.get("dl"),
         'DT': config.get("dt"),
         'DW': config.get("dw"),
         'HE': config.get("he"),
@@ -213,7 +223,8 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
         'SF': config.get("sf"),
         'SJ': config.get("sj"),
         'SL': config.get("sl"),
-        'WD': config.get("wd")
+        'WD': config.get("wd"),
+        'WX': config.get("wx")
     }
 
     handlers = [
@@ -221,6 +232,7 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
         (flags['BY'], handle_by),
         (flags['DD'], lambda *a: handle_unprotected(*a, func=get_dd_download_links, label='DD')),
         (flags['DJ'], lambda *a: handle_protected(*a, func=get_dj_download_links, label='DJ')),
+        (flags['DL'], lambda *a: handle_unprotected(*a, func=get_dl_download_links, label='DL')),
         (flags['DT'], lambda *a: handle_unprotected(*a, func=get_dt_download_links, label='DT')),
         (flags['DW'], lambda *a: handle_protected(*a, func=get_dw_download_links, label='DW')),
         (flags['HE'], lambda *a: handle_unprotected(*a, func=get_he_download_links, label='HE')),
@@ -231,6 +243,7 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
         (flags['SJ'], lambda *a: handle_protected(*a, func=get_sj_download_links, label='SJ')),
         (flags['SL'], handle_sl),
         (flags['WD'], handle_wd),
+        (flags['WX'], lambda *a: handle_unprotected(*a, func=get_wx_download_links, label='WX')),
     ]
 
     for flag, fn in handlers:
