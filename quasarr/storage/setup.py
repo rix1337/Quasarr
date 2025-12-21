@@ -285,7 +285,7 @@ def hostname_credentials_config(shared_state, shorthand, domain):
     return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
 
 
-def hostname_credentials_config_dl(shared_state, shorthand, domain):
+def hostname_credentials_config_dl(shared_state, shorthand, domain):  # todo replace with above function
     """Credentials config for DL using username and password."""
     app = Bottle()
 

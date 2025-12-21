@@ -54,7 +54,7 @@ def dl_feed(shared_state, start_time, request_from, mirror=None):
             info(f"{hostname}: RSS feed returned status {response.status_code}")
             return releases
         
-        soup = BeautifulSoup(response.content, 'xml')
+        soup = BeautifulSoup(response.content, 'xml') # todo use html.parser
         items = soup.find_all('item')
         
         if not items:

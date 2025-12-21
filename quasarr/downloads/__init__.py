@@ -33,7 +33,8 @@ def handle_unprotected(shared_state, title, password, package_id, imdb_id, url,
                        mirror=None, size_mb=None, links=None, func=None, label=""):
     if func:
         data = func(shared_state, url, mirror, title)
-        if isinstance(data, dict):
+        # links = func(shared_state, url, mirror, title)
+        if isinstance(data, dict):  # todo revert to previous state (fix by dl / wx signature update)
             links = data.get("links", [])
             # Update title and password if provided
             title = data.get("title", title)
