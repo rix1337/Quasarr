@@ -9,6 +9,7 @@ from quasarr.providers.log import info, debug
 from quasarr.search.sources.al import al_feed, al_search
 from quasarr.search.sources.by import by_feed, by_search
 from quasarr.search.sources.dd import dd_search, dd_feed
+from quasarr.search.sources.dl import dl_search, dl_feed
 from quasarr.search.sources.dt import dt_feed, dt_search
 from quasarr.search.sources.dw import dw_feed, dw_search
 from quasarr.search.sources.fx import fx_feed, fx_search
@@ -17,6 +18,7 @@ from quasarr.search.sources.nx import nx_feed, nx_search
 from quasarr.search.sources.sf import sf_feed, sf_search
 from quasarr.search.sources.sl import sl_feed, sl_search
 from quasarr.search.sources.wd import wd_feed, wd_search
+from quasarr.search.sources.wx import wx_feed, wx_search
 
 
 def get_search_results(shared_state, request_from, imdb_id="", search_phrase="", mirror=None, season="", episode=""):
@@ -30,6 +32,7 @@ def get_search_results(shared_state, request_from, imdb_id="", search_phrase="",
     al = shared_state.values["config"]("Hostnames").get("al")
     by = shared_state.values["config"]("Hostnames").get("by")
     dd = shared_state.values["config"]("Hostnames").get("dd")
+    dl = shared_state.values["config"]("Hostnames").get("dl")
     dt = shared_state.values["config"]("Hostnames").get("dt")
     dw = shared_state.values["config"]("Hostnames").get("dw")
     fx = shared_state.values["config"]("Hostnames").get("fx")
@@ -38,6 +41,7 @@ def get_search_results(shared_state, request_from, imdb_id="", search_phrase="",
     sf = shared_state.values["config"]("Hostnames").get("sf")
     sl = shared_state.values["config"]("Hostnames").get("sl")
     wd = shared_state.values["config"]("Hostnames").get("wd")
+    wx = shared_state.values["config"]("Hostnames").get("wx")
 
     start_time = time.time()
 
@@ -48,6 +52,7 @@ def get_search_results(shared_state, request_from, imdb_id="", search_phrase="",
         (al, al_search),
         (by, by_search),
         (dd, dd_search),
+        (dl, dl_search),
         (dt, dt_search),
         (dw, dw_search),
         (fx, fx_search),
@@ -56,11 +61,13 @@ def get_search_results(shared_state, request_from, imdb_id="", search_phrase="",
         (sf, sf_search),
         (sl, sl_search),
         (wd, wd_search),
+        (wx, wx_search),
     ]
 
     # LazyLibrarian uses search_phrase for searches
     phrase_map = [
         (by, by_search),
+        (dl, dl_search),
         (dt, dt_search),
         (nx, nx_search),
         (sl, sl_search),
@@ -72,6 +79,7 @@ def get_search_results(shared_state, request_from, imdb_id="", search_phrase="",
         (al, al_feed),
         (by, by_feed),
         (dd, dd_feed),
+        (dl, dl_feed),
         (dt, dt_feed),
         (dw, dw_feed),
         (fx, fx_feed),
@@ -80,6 +88,7 @@ def get_search_results(shared_state, request_from, imdb_id="", search_phrase="",
         (sf, sf_feed),
         (sl, sl_feed),
         (wd, wd_feed),
+        (wx, wx_feed),
     ]
 
     if imdb_id:  # only Radarr/Sonarr are using imdb_id
