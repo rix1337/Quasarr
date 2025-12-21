@@ -19,7 +19,7 @@ def is_last_section_integer(url):
     return None
 
 
-def get_sf_download_links(shared_state, url, mirror, title): # signature must align with other download link functions!
+def get_sf_download_links(shared_state, url, mirror, title):  # signature must align with other download link functions!
     release_pattern = re.compile(
         r'''
           ^                                   # start of string
@@ -148,6 +148,9 @@ def resolve_sf_redirect(url, user_agent):
         if response.history:
             for resp in response.history:
                 debug(f"Redirected from {resp.url} to {response.url}")
+            if "/404.html" in response.url:
+                info(f"SF link redirected to 404 page: {response.url}")
+                return None
             return response.url
         else:
             info(f"SF blocked attempt to resolve {url}. Your IP may be banned. Try again later.")

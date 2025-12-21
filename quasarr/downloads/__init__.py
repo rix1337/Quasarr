@@ -11,12 +11,16 @@ from quasarr.downloads.linkcrypters.hide import decrypt_links_if_hide
 from quasarr.downloads.sources.al import get_al_download_links
 from quasarr.downloads.sources.by import get_by_download_links
 from quasarr.downloads.sources.dd import get_dd_download_links
+from quasarr.downloads.sources.dj import get_dj_download_links
 from quasarr.downloads.sources.dl import get_dl_download_links
 from quasarr.downloads.sources.dt import get_dt_download_links
 from quasarr.downloads.sources.dw import get_dw_download_links
+from quasarr.downloads.sources.he import get_he_download_links
 from quasarr.downloads.sources.mb import get_mb_download_links
+from quasarr.downloads.sources.nk import get_nk_download_links
 from quasarr.downloads.sources.nx import get_nx_download_links
 from quasarr.downloads.sources.sf import get_sf_download_links, resolve_sf_redirect
+from quasarr.downloads.sources.sj import get_sj_download_links
 from quasarr.downloads.sources.sl import get_sl_download_links
 from quasarr.downloads.sources.wd import get_wd_download_links
 from quasarr.downloads.sources.wx import get_wx_download_links
@@ -58,6 +62,19 @@ def handle_protected(shared_state, title, password, package_id, imdb_id, url,
                      mirror=None, size_mb=None, func=None, label=""):
     links = func(shared_state, url, mirror, title)
     if links:
+        valid_links = [pair for pair in links if "/404.html" not in pair[0]]
+
+        # If none left, IP was banned
+        if not valid_links:
+            fail(
+                title,
+                package_id,
+                shared_state,
+                reason=f'IP was banned during download of "{title}" on {label} - "{url}"'
+            )
+            return {"success": False, "title": title}
+        links = valid_links
+
         info(f'CAPTCHA-Solution required for "{title}" at: "{shared_state.values['external_address']}/captcha"')
         send_discord_message(shared_state, title=title, case="captcha", imdb_id=imdb_id, source=url)
         blob = json.dumps({"title": title, "links": links, "size_mb": size_mb, "password": password})
@@ -78,6 +95,36 @@ def handle_al(shared_state, title, password, package_id, imdb_id, url, mirror, s
         shared_state, title, password, package_id, imdb_id, url,
         links=links,
         label='AL'
+    )
+
+
+def handle_by(shared_state, title, password, package_id, imdb_id, url, mirror, size_mb):
+    links = get_by_download_links(shared_state, url, mirror, title)
+    if not links:
+        fail(title, package_id, shared_state,
+             reason=f'Offline / no links found for "{title}" on BY - "{url}"')
+        return {"success": False, "title": title}
+
+    decrypted = decrypt_links_if_hide(shared_state, links)
+    if decrypted and decrypted.get("status") != "none":
+        status = decrypted.get("status", "error")
+        links = decrypted.get("results", [])
+        if status == "success":
+            return handle_unprotected(
+                shared_state, title, password, package_id, imdb_id, url,
+                links=links, label='BY'
+            )
+        else:
+            fail(title, package_id, shared_state,
+                 reason=f'Error decrypting hide.cx links for "{title}" on BY - "{url}"')
+            return {"success": False, "title": title}
+
+    return handle_protected(
+        shared_state, title, password, package_id, imdb_id, url,
+        mirror=mirror,
+        size_mb=size_mb,
+        func=lambda ss, u, m, t: links,
+        label='BY'
     )
 
 
@@ -118,7 +165,7 @@ def handle_sl(shared_state, title, password, package_id, imdb_id, url, mirror, s
 
 def handle_wd(shared_state, title, password, package_id, imdb_id, url, mirror, size_mb):
     data = get_wd_download_links(shared_state, url, mirror, title)
-    links = data.get("links")
+    links = data.get("links", []) if data else []
     if not links:
         fail(title, package_id, shared_state,
              reason=f'Offline / no links found for "{title}" on WD - "{url}"')
@@ -165,12 +212,16 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
         'AL': config.get("al"),
         'BY': config.get("by"),
         'DD': config.get("dd"),
+        'DJ': config.get("dj"),
         'DL': config.get("dl"),
         'DT': config.get("dt"),
         'DW': config.get("dw"),
+        'HE': config.get("he"),
         'MB': config.get("mb"),
+        'NK': config.get("nk"),
         'NX': config.get("nx"),
         'SF': config.get("sf"),
+        'SJ': config.get("sj"),
         'SL': config.get("sl"),
         'WD': config.get("wd"),
         'WX': config.get("wx")
@@ -178,14 +229,18 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
 
     handlers = [
         (flags['AL'], handle_al),
-        (flags['BY'], lambda *a: handle_protected(*a, func=get_by_download_links, label='BY')),
+        (flags['BY'], handle_by),
         (flags['DD'], lambda *a: handle_unprotected(*a, func=get_dd_download_links, label='DD')),
+        (flags['DJ'], lambda *a: handle_protected(*a, func=get_dj_download_links, label='DJ')),
         (flags['DL'], lambda *a: handle_unprotected(*a, func=get_dl_download_links, label='DL')),
         (flags['DT'], lambda *a: handle_unprotected(*a, func=get_dt_download_links, label='DT')),
         (flags['DW'], lambda *a: handle_protected(*a, func=get_dw_download_links, label='DW')),
+        (flags['HE'], lambda *a: handle_unprotected(*a, func=get_he_download_links, label='HE')),
         (flags['MB'], lambda *a: handle_protected(*a, func=get_mb_download_links, label='MB')),
+        (flags['NK'], lambda *a: handle_protected(*a, func=get_nk_download_links, label='NK')),
         (flags['NX'], lambda *a: handle_unprotected(*a, func=get_nx_download_links, label='NX')),
         (flags['SF'], handle_sf),
+        (flags['SJ'], lambda *a: handle_protected(*a, func=get_sj_download_links, label='SJ')),
         (flags['SL'], handle_sl),
         (flags['WD'], handle_wd),
         (flags['WX'], lambda *a: handle_unprotected(*a, func=get_wx_download_links, label='WX')),

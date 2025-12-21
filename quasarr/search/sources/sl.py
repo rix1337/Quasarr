@@ -6,6 +6,7 @@ import datetime
 import html
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import xml.etree.ElementTree as ET
 from base64 import urlsafe_b64encode
 from urllib.parse import quote_plus
@@ -144,67 +145,97 @@ def sl_search(shared_state, start_time, request_from, search_string, mirror=None
                 info(f"Could not extract title from IMDb-ID {imdb_id}")
                 return releases
 
-        # Perform HTML search (faster than feed)
+        # Build the list of URLs to search. For tv-shows also search the "foreign" section.
         q = quote_plus(search_string)
-        url = f'https://{sl}/{feed_type}/?s={q}'
+        urls = [f'https://{sl}/{feed_type}/?s={q}']
+        if feed_type == "tv-shows":
+            urls.append(f'https://{sl}/foreign/?s={q}')
+
         headers = {"User-Agent": shared_state.values['user_agent']}
-        html_text = requests.get(url, headers=headers, timeout=10).text
 
-        soup = BeautifulSoup(html_text, 'html.parser')
-        posts = soup.find_all('div', class_=lambda c: c and c.startswith('post-'))
-
-        for post in posts:
+        # Fetch pages in parallel (so we don't double the slow site latency)
+        def fetch(url):
             try:
-                # Title and link
-                a = post.find('h1').find('a')
-                title = a.get_text(strip=True)
-
-                if not shared_state.is_valid_release(title,
-                                                     request_from,
-                                                     search_string,
-                                                     season,
-                                                     episode):
-                    continue
-
-                if 'lazylibrarian' in request_from.lower():
-                    # lazylibrarian can only detect specific date formats / issue numbering for magazines
-                    title = shared_state.normalize_magazine_title(title)
-
-                source = a['href']
-
-                # Published date
-                time_tag = post.find('span', {'class': 'localtime'})
-                published = None
-                if time_tag and time_tag.has_attr('data-lttime'):
-                    published = time_tag['data-lttime']
-                # Fallback: now
-                published = published or datetime.datetime.utcnow().isoformat() + '+00:00'
-
-                # No description in HTML search: set size zero and no IMDb
-                size = 0
-                imdb_id = None
-
-                # Build payload and link
-                payload = urlsafe_b64encode(
-                    f"{title}|{source}|{mirror}|0|{password}|{imdb_id}".encode('utf-8')
-                ).decode('utf-8')
-                link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
-
-                releases.append({
-                    "details": {
-                        "title": title,
-                        "hostname": hostname.lower(),
-                        "imdb_id": imdb_id,
-                        "link": link,
-                        "mirror": mirror,
-                        "size": size,
-                        "date": published,
-                        "source": source
-                    },
-                    "type": "protected"
-                })
+                debug(f"Fetching {url} ({hostname})")
+                r = requests.get(url, headers=headers, timeout=10)
+                r.raise_for_status()
+                return r.text
             except Exception as e:
-                info(f"Error parsing {hostname.upper()} search item: {e}")
+                info(f"Error fetching {hostname} url {url}: {e}")
+                return ''
+
+        html_texts = []
+        with ThreadPoolExecutor(max_workers=len(urls)) as tpe:
+            futures = {tpe.submit(fetch, u): u for u in urls}
+            for future in as_completed(futures):
+                try:
+                    html_texts.append(future.result())
+                except Exception as e:
+                    info(f"Error fetching {hostname} search page: {e}")
+
+        # Parse each result and collect unique releases (dedupe by source link)
+        seen_sources = set()
+        for html_text in html_texts:
+            if not html_text:
+                continue
+            try:
+                soup = BeautifulSoup(html_text, 'html.parser')
+                posts = soup.find_all('div', class_=lambda c: c and c.startswith('post-'))
+
+                for post in posts:
+                    try:
+                        a = post.find('h1').find('a')
+                        title = a.get_text(strip=True)
+
+                        if not shared_state.is_valid_release(title,
+                                                             request_from,
+                                                             search_string,
+                                                             season,
+                                                             episode):
+                            continue
+
+                        if 'lazylibrarian' in request_from.lower():
+                            title = shared_state.normalize_magazine_title(title)
+
+                        source = a['href']
+                        # dedupe
+                        if source in seen_sources:
+                            continue
+                        seen_sources.add(source)
+
+                        # Published date
+                        time_tag = post.find('span', {'class': 'localtime'})
+                        published = None
+                        if time_tag and time_tag.has_attr('data-lttime'):
+                            published = time_tag['data-lttime']
+                        published = published or datetime.datetime.utcnow().isoformat() + '+00:00'
+
+                        size = 0
+                        imdb_id = None
+
+                        payload = urlsafe_b64encode(
+                            f"{title}|{source}|{mirror}|0|{password}|{imdb_id}".encode('utf-8')
+                        ).decode('utf-8')
+                        link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
+
+                        releases.append({
+                            "details": {
+                                "title": title,
+                                "hostname": hostname.lower(),
+                                "imdb_id": imdb_id,
+                                "link": link,
+                                "mirror": mirror,
+                                "size": size,
+                                "date": published,
+                                "source": source
+                            },
+                            "type": "protected"
+                        })
+                    except Exception as e:
+                        info(f"Error parsing {hostname.upper()} search item: {e}")
+                        continue
+            except Exception as e:
+                info(f"Error parsing {hostname.upper()} search HTML: {e}")
                 continue
 
     except Exception as e:

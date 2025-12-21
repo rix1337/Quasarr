@@ -117,8 +117,15 @@ def get_imdb_id_from_title(shared_state, title, language="de"):
 
         if len(search_results) > 0:
             for result in search_results:
-                if shared_state.search_string_in_sanitized_title(title, f"{result['titleNameText']}"):
-                    imdb_id = result['id']
+                try:
+                    found_title = result["listItem"]["titleText"]
+                    found_id = result["listItem"]["titleId"]
+                except KeyError:
+                    found_title = result["titleNameText"]
+                    found_id = result['id']
+
+                if shared_state.search_string_in_sanitized_title(title, found_title):
+                    imdb_id = found_id
                     break
     else:
         debug(f"Request on IMDb failed: {results.status_code}")

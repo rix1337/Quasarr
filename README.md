@@ -12,11 +12,21 @@ Quasarr pretends to be both `Newznab Indexer` and `SABnzbd client`. Therefore, d
 indexers or download clients. It simply does not know what NZB or torrent files are.
 
 Quasarr includes a solution to quickly and easily decrypt protected links.
-[Active Sponsors get access to SponsorsHelper to do so automatically.](https://github.com/rix1337/Quasarr?tab=readme-ov-file#sponsorshelper)
+[Active monthly Sponsors get access to SponsorsHelper to do so automatically.](https://github.com/rix1337/Quasarr?tab=readme-ov-file#sponsorshelper)
 Alternatively, follow the link from the console output (or discord notification) to solve CAPTCHAs manually.
 Quasarr will confidently handle the rest.
 
 # Instructions
+1. Set up and run [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) 3.4.4 or later.
+2. Set up and run [JDownloader 2](https://jdownloader.org/download/index).
+3. Follow the next steps.
+
+---
+
+## FlareSolverr
+1. Ensure your running FlareSolverr is reachable by Quasarr.
+2. Provide your FlareSolverr URL to Quasarr during the setup process.
+3. The full URL must include the version path, e.g., `http://192.168.1.1:8191/v1`.
 
 ---
 
@@ -33,7 +43,7 @@ Tell Quasarr which sites to search for releases. It requires at least one valid 
 
 ## JDownloader
 
-1. Run JDownloader and connect it to the My JDownloader service.  
+1. Ensure your running JDownloader is connected to the My JDownloader service.  
 2. Provide your [My‑JDownloader‑Credentials](https://my.jdownloader.org) to Quasarr during the setup process.
 
 > - Consider setting up a fresh JDownloader before you begin.  
@@ -134,6 +144,8 @@ Use this only in case you can't run the docker image.
 `pip install quasarr`
 
 * Requires Python 3.12 or later
+* Requires [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr)
+* Requires [JDownloader 2](https://jdownloader.org/download/index) with [My JDownloader](https://my.jdownloader.org/)
 
 ```
   --port=8080
@@ -173,54 +185,74 @@ Most feature requests can be satisfied by:
 
 # SponsorsHelper
 
-<img src="https://imgur.com/iHBqLwT.png" data-canonical-src="https://imgur.com/iHBqLwT.png" width="64" height="64" />
+<img src="https://imgur.com/iHBqLwT.png" width="64" height="64" />
 
-The SponsorsHelper is a Docker image that automatically solves CAPTCHAs and decrypts links for Quasarr.
-
-[The process strictly requires an account token with credit at DeathByCaptcha](https://deathbycaptcha.com/register?refid=6184288242b).
-
-The image is only available to active [sponsors](https://github.com/users/rix1337/sponsorship) (hence the name).
-
-Access is automatically granted via GitHub:
+SponsorsHelper is a Docker image that solves CAPTCHAs and decrypts links for Quasarr.  
+Image access is limited to [active monthly GitHub sponsors](https://github.com/users/rix1337/sponsorship).
 
 [![Github Sponsorship](https://img.shields.io/badge/support-me-red.svg)](https://github.com/users/rix1337/sponsorship)
 
-## Docker Login
+---
 
-### Generate GitHub Token
+## 🔑 GitHub Token Setup
 
-1. Open the [GitHub token settings](https://github.com/settings/tokens/new).
-2. Select `New personal access token (classic)`.
-3. Fill in the note, e.g., `SponsorsHelper`.
-4. Enable the "read:packages" scope.
-5. Create and use the token for login as `GITHUB_TOKEN` below:
+1. Start your [sponsorship](https://github.com/users/rix1337/sponsorship) first.
+2. Open [GitHub Classic Token Settings](https://github.com/settings/tokens/new?type=classic)
+3. Name it (e.g., `SponsorsHelper`) and choose unlimited expiration  
+4. Enable these scopes:
+   - `read:packages`
+   - `read:user`
+   - `read:org`
+5. Click **Generate token** and copy it for the next steps
 
-### Login
+---
 
-`docker login https://ghcr.io  -u USERNAME -p GITHUB_TOKEN`
+## 🐋 Docker Login
 
-`USERNAME` is your GitHub username.
-`GITHUB_TOKEN` is the token you created above.
+```bash
+echo "GITHUB_TOKEN" | docker login ghcr.io -u USERNAME --password-stdin
+````
 
-## Starting SponsorsHelper
+* `USERNAME` → your GitHub username
+* `GITHUB_TOKEN` → the token you just created
 
-Without logging in, it is not possible to download the image!
+---
 
-```
+⚠️ **Before logging in, the image will not download.**
+
+---
+
+## ▶️ Run SponsorsHelper
+
+```bash
 docker run -d \
-    --name='SponsorsHelper' \
-    -e 'QUASARR_URL'='http://192.168.0.1:8080' \
-    -e 'DEATHBYCAPTCHA_TOKEN'='2FMum5zuDBxMmbXDIsADnllEFl73bomydIpzo7...' \
-    'ghcr.io/rix1337-sponsors/docker/helper:latest'
+  --name='SponsorsHelper' \
+  -e 'QUASARR_URL'='http://192.168.0.1:8080' \
+  -e 'DEATHBYCAPTCHA_TOKEN'='2FMum5zuDBxMmbXDIsADnllEFl73bomydIpzo7...' \
+  -e 'GITHUB_TOKEN'='ghp_123.....456789' \
+  -e 'FLARESOLVERR_URL'='http://10.10.0.1:8191/v1' \
+  -e 'NX_USER'='your_nx_username' \
+  -e 'NX_PASS'='your_nx_password' \
+  -e 'JUNKIES_USER'='your_junkies_username' \
+  -e 'JUNKIES_PASS'='your_junkies_password' \
+  -e 'JUNKIES_HOSTER'='your_desired_hoster' \
+  ghcr.io/rix1337-sponsors/docker/helper:latest
 ```
 
 ### Required Parameters
 
-- `-e 'QUASARR_URL'` The local URL of Quasarr - e.g., `http://192.168.0.1:8080`
-  (should match the `INTERNAL_ADDRESS` parameter from above)
-- `-e 'DEATHBYCAPTCHA_TOKEN'` The account token
-  from [DeathByCaptcha](https://deathbycaptcha.com/register?refid=6184288242b) - e.g.,
-  `2FMum5zuDBxMmbXDIsADnllEFl73bomydIpzo7...aBc`
+* `QUASARR_URL` → Local URL of Quasarr
+* `DEATHBYCAPTCHA_TOKEN` → [DeathByCaptcha](https://deathbycaptcha.com/register?refid=6184288242b) account token
+* `GITHUB_TOKEN` → Classic GitHub PAT with the scopes listed above
+* `FLARESOLVERR_URL` → Local URL of [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) - required!
+* `NX_USER` / `NX_PASS` → NX account credentials
+* `JUNKIES_USER` / `JUNKIES_PASS` → Junkies account credentials
+* `JUNKIES_HOSTER` → Preferred hoster for Junkies links
+---
+
+⚠️ **Without a valid GitHub token linked to an active sponsorship, the image will not run.**
+
+---
 
 # Development Setup for Pull Requests
 

@@ -159,7 +159,7 @@ def render_centered_html(inner_content):
                 text-decoration: none;
             }
             a:hover {
-                text-decoration: underline;
+               
             }
             /* footer styling */
             footer {

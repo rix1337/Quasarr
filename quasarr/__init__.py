@@ -100,12 +100,21 @@ def run():
         shared_state.update("database", DataBase)
         supported_hostnames = extract_allowed_keys(Config._DEFAULT_CONFIG, 'Hostnames')
         shared_state.update("sites", [key.upper() for key in supported_hostnames])
-        shared_state.update("user_agent",
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36")
+        shared_state.update("user_agent", "")  # will be set by FlareSolverr
         shared_state.update("helper_active", False)
 
         print(f'Config path: "{config_path}"')
 
+        flaresolverr_url = Config('FlareSolverr').get('url')
+        if not flaresolverr_url:
+            flaresolverr_config(shared_state)
+        else:
+            print(f'Flaresolverr URL: "{flaresolverr_url}"')
+            flaresolverr_check = check_flaresolverr(shared_state, flaresolverr_url)
+            if flaresolverr_check:
+                print(f'User Agent: "{shared_state.values["user_agent"]}"')
+
+        print("\n===== Hostnames =====")
         try:
             if arguments.hostnames:
                 hostnames_link = make_raw_pastebin_link(arguments.hostnames)
@@ -144,11 +153,6 @@ def run():
         except Exception as e:
             print(f'Error parsing hostnames link: "{e}"')
 
-        print("\n===== Configuration =====")
-        api_key = Config('API').get('key')
-        if not api_key:
-            api_key = shared_state.generate_api_key()
-
         hostnames = get_clean_hostnames(shared_state)
         if not hostnames:
             hostnames_config(shared_state)
@@ -158,11 +162,6 @@ def run():
 
         al = Config('Hostnames').get('al')
         if al:
-            flaresolverr_url = Config('FlareSolverr').get('url')
-            if not flaresolverr_url:
-                flaresolverr_config(shared_state)
-            else:
-                print(f'Using Flaresolverr URL: "{flaresolverr_url}"')
             user = Config('AL').get('user')
             password = Config('AL').get('password')
             if not user or not password:
@@ -212,6 +211,10 @@ def run():
         shared_state.update("discord", discord_url)
 
         print("\n===== API Information =====")
+        api_key = Config('API').get('key')
+        if not api_key:
+            api_key = shared_state.generate_api_key()
+
         print('Setup instructions: "https://github.com/rix1337/Quasarr?tab=readme-ov-file#instructions"')
         print(f'URL: "{shared_state.values['internal_address']}"')
         print(f'API key: "{api_key}" (without quotes)')
@@ -352,6 +355,41 @@ def check_ip():
     finally:
         s.close()
     return ip
+
+
+def check_flaresolverr(shared_state, flaresolverr_url):
+    # Ensure it ends with /v<digit+>
+    if not re.search(r"/v\d+$", flaresolverr_url):
+        print(f"FlareSolverr URL does not end with /v#: {flaresolverr_url}")
+        return False
+
+    # Try sending a simple test request
+    headers = {"Content-Type": "application/json"}
+    data = {
+        "cmd": "request.get",
+        "url": "http://www.google.com/",
+        "maxTimeout": 10000
+    }
+
+    try:
+        response = requests.post(flaresolverr_url, headers=headers, json=data, timeout=10)
+        response.raise_for_status()
+        json_data = response.json()
+
+        # Check if the structure looks like a valid FlareSolverr response
+        if "status" in json_data and json_data["status"] == "ok":
+            solution = json_data["solution"]
+            solution_ua = solution.get("userAgent", None)
+            if solution_ua:
+                shared_state.update("user_agent", solution_ua)
+            return True
+        else:
+            print(f"Unexpected FlareSolverr response: {json_data}")
+            return False
+
+    except Exception as e:
+        print(f"Failed to connect to FlareSolverr: {e}")
+        return False
 
 
 def make_raw_pastebin_link(url):

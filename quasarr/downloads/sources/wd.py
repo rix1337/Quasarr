@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.cloudflare import flaresolverr_get, is_cloudflare_challenge
 from quasarr.providers.log import info, debug
 
 
@@ -36,12 +37,14 @@ def resolve_wd_redirect(url, user_agent):
 def get_wd_download_links(shared_state, url, mirror, title):  # signature must align with other download link functions!
     wd = shared_state.values["config"]("Hostnames").get("wd")
     user_agent = shared_state.values["user_agent"]
-    headers = {"User-Agent": user_agent}
 
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
+        output = requests.get(url)
+        if output.status_code == 403 or is_cloudflare_challenge(output.text):
+            info("WD is protected by Cloudflare. Using FlareSolverr to bypass protection.")
+            output = flaresolverr_get(shared_state, url)
+
+        soup = BeautifulSoup(output.text, "html.parser")
 
         # extract IMDb id if present
         imdb_id = None

@@ -152,7 +152,7 @@ def setup_sponsors_helper_routes(app):
 
         return abort(500, "Failed")
 
-    @app.put("/sponsors_helper/api/activate_sponsor_status/")
+    @app.put("/sponsors_helper/api/set_sponsor_status/")
     def activate_sponsor_status():
         try:
             data = request.body.read().decode("utf-8")
