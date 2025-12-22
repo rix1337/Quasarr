@@ -79,6 +79,31 @@ def handle_protected(shared_state, title, password, package_id, imdb_id, url,
     return {"success": True, "title": title}
 
 
+def handle_hide(shared_state, title, password, package_id, imdb_id, url, links, label):
+    """
+    Attempt to decrypt hide.cx links and handle the result.
+    Returns a dict with 'handled' (bool) and 'result' (response dict or None).
+    """
+    decrypted = decrypt_links_if_hide(shared_state, links)
+
+    if not decrypted or decrypted.get("status") == "none":
+        return {"handled": False, "result": None}
+
+    status = decrypted.get("status", "error")
+    decrypted_links = decrypted.get("results", [])
+
+    if status == "success":
+        result = handle_unprotected(
+            shared_state, title, password, package_id, imdb_id, url,
+            links=decrypted_links, label=label
+        )
+        return {"handled": True, "result": result}
+    else:
+        fail(title, package_id, shared_state,
+             reason=f'Error decrypting hide.cx links for "{title}" on {label} - "{url}"')
+        return {"handled": True, "result": {"success": False, "title": title}}
+
+
 def handle_al(shared_state, title, password, package_id, imdb_id, url, mirror, size_mb):
     data = get_al_download_links(shared_state, url, mirror, title, password)
     links = data.get("links", [])
@@ -98,19 +123,12 @@ def handle_by(shared_state, title, password, package_id, imdb_id, url, mirror, s
              reason=f'Offline / no links found for "{title}" on BY - "{url}"')
         return {"success": False, "title": title}
 
-    decrypted = decrypt_links_if_hide(shared_state, links)
-    if decrypted and decrypted.get("status") != "none":
-        status = decrypted.get("status", "error")
-        links = decrypted.get("results", [])
-        if status == "success":
-            return handle_unprotected(
-                shared_state, title, password, package_id, imdb_id, url,
-                links=links, label='BY'
-            )
-        else:
-            fail(title, package_id, shared_state,
-                 reason=f'Error decrypting hide.cx links for "{title}" on BY - "{url}"')
-            return {"success": False, "title": title}
+    decrypt_result = handle_hide(
+        shared_state, title, password, package_id, imdb_id, url, links, 'BY'
+    )
+
+    if decrypt_result["handled"]:
+        return decrypt_result["result"]
 
     return handle_protected(
         shared_state, title, password, package_id, imdb_id, url,
@@ -131,19 +149,12 @@ def handle_dl(shared_state, title, password, package_id, imdb_id, url, mirror, s
     # Use extracted password if available, otherwise fall back to provided password
     final_password = extracted_password if extracted_password else password
 
-    decrypted = decrypt_links_if_hide(shared_state, links)
-    if decrypted and decrypted.get("status") != "none":
-        status = decrypted.get("status", "error")
-        links = decrypted.get("results", [])
-        if status == "success":
-            return handle_unprotected(
-                shared_state, title, final_password, package_id, imdb_id, url,
-                links=links, label='DL'
-            )
-        else:
-            fail(title, package_id, shared_state,
-                 reason=f'Error decrypting hide.cx links for "{title}" on DL - "{url}"')
-            return {"success": False, "title": title}
+    decrypt_result = handle_hide(
+        shared_state, title, final_password, package_id, imdb_id, url, links, 'DL'
+    )
+
+    if decrypt_result["handled"]:
+        return decrypt_result["result"]
 
     return handle_protected(
         shared_state, title, final_password, package_id, imdb_id, url,
@@ -197,19 +208,12 @@ def handle_wd(shared_state, title, password, package_id, imdb_id, url, mirror, s
              reason=f'Offline / no links found for "{title}" on WD - "{url}"')
         return {"success": False, "title": title}
 
-    decrypted = decrypt_links_if_hide(shared_state, links)
-    if decrypted and decrypted.get("status") != "none":
-        status = decrypted.get("status", "error")
-        links = decrypted.get("results", [])
-        if status == "success":
-            return handle_unprotected(
-                shared_state, title, password, package_id, imdb_id, url,
-                links=links, label='WD'
-            )
-        else:
-            fail(title, package_id, shared_state,
-                 reason=f'Error decrypting hide.cx links for "{title}" on WD - "{url}"')
-            return {"success": False, "title": title}
+    decrypt_result = handle_hide(
+        shared_state, title, password, package_id, imdb_id, url, links, 'WD'
+    )
+
+    if decrypt_result["handled"]:
+        return decrypt_result["result"]
 
     return handle_protected(
         shared_state, title, password, package_id, imdb_id, url,
@@ -227,19 +231,12 @@ def handle_wx(shared_state, title, password, package_id, imdb_id, url, mirror, s
              reason=f'Offline / no links found for "{title}" on WX - "{url}"')
         return {"success": False, "title": title}
 
-    decrypted = decrypt_links_if_hide(shared_state, links)
-    if decrypted and decrypted.get("status") != "none":
-        status = decrypted.get("status", "error")
-        links = decrypted.get("results", [])
-        if status == "success":
-            return handle_unprotected(
-                shared_state, title, password, package_id, imdb_id, url,
-                links=links, label='WX'
-            )
-        else:
-            fail(title, package_id, shared_state,
-                 reason=f'Error decrypting hide.cx links for "{title}" on WX - "{url}"')
-            return {"success": False, "title": title}
+    decrypt_result = handle_hide(
+        shared_state, title, password, package_id, imdb_id, url, links, 'WX'
+    )
+
+    if decrypt_result["handled"]:
+        return decrypt_result["result"]
 
     return handle_protected(
         shared_state, title, password, package_id, imdb_id, url,
