@@ -124,6 +124,7 @@ docker run -d \
   -e 'HOSTNAMES'='https://pastebin.com/raw/eX4Mpl3'
   -e 'SILENT'='True' \
   -e 'DEBUG'='' \
+  -e 'TZ'='Europe/Berlin' \
   ghcr.io/rix1337/quasarr:latest
   ```
 
@@ -136,6 +137,7 @@ docker run -d \
     * Must contain at least one valid Hostname per line `ab = xyz`
 * `SILENT` is optional and silences all discord notifications except for error messages from SponsorsHelper if `True`.
 * `DEBUG` is optional and enables debug logging if `True`.
+* `TZ` is optional, wrong timezone can cause HTTPS/SSL issues
 
 # Manual setup
 
