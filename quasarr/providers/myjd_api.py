@@ -38,7 +38,7 @@ import requests
 import urllib3
 from Cryptodome.Cipher import AES
 
-from quasarr.providers.log import debug
+from quasarr.providers.log import info, debug
 from quasarr.providers.version import get_version
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -569,6 +569,8 @@ class Myjdapi:
     Main class for connecting to JD API.
 
     """
+    # Class variable to track connection failures across all instances
+    _connection_failed_at = None
 
     def __init__(self):
         """
@@ -708,6 +710,15 @@ class Myjdapi:
         :returns: boolean -- True if succesful, False if there was any error.
 
         """
+        # Check if we're in cooldown period (5 minutes = 300 seconds)
+        if Myjdapi._connection_failed_at is not None:
+            time_since_failure = time.time() - Myjdapi._connection_failed_at
+            if time_since_failure < 300:
+                # Silently return False during cooldown - don't log anything
+                return False
+            # Cooldown expired, reset for retry
+            Myjdapi._connection_failed_at = None
+
         self.update_request_id()
         self.__login_secret = None
         self.__device_secret = None
@@ -723,6 +734,15 @@ class Myjdapi:
         response = self.request_api("/my/connect", "GET", [("email", email),
                                                            ("appkey",
                                                             self.__app_key)])
+
+        if response is None:
+            # Log and set failure timestamp
+            info("JDownloader API is currently unavailable! Stopping connection attempts for 5 minutes.")
+            Myjdapi._connection_failed_at = time.time()
+            return False
+
+        # Connection successful, reset failure timestamp
+        Myjdapi._connection_failed_at = None
         self.__connected = True
         self.update_request_id()
         self.__session_token = response["sessiontoken"]
@@ -826,9 +846,16 @@ class Myjdapi:
             }
             try:
                 encrypted_response = requests.get(api + query, timeout=timeout, headers=headers)
+            except requests.exceptions.ConnectionError:
+                return None
             except Exception:
-                encrypted_response = requests.get(api + query, timeout=timeout, headers=headers, verify=False)
-                debug("Could not establish secure connection to JDownloader.")
+                try:
+                    encrypted_response = requests.get(api + query, timeout=timeout, headers=headers, verify=False)
+                    debug("Could not establish secure connection to JDownloader. Is your time / timezone correct?")
+                except requests.exceptions.ConnectionError:
+                    return None
+                except Exception:
+                    return None
         else:
             params_request = []
             if params is not None:
@@ -863,6 +890,8 @@ class Myjdapi:
                     data=encrypted_data,
                     timeout=timeout
                 )
+            except requests.exceptions.ConnectionError:
+                return None
             except Exception:
                 try:
                     encrypted_response = requests.post(
@@ -875,7 +904,9 @@ class Myjdapi:
                         timeout=timeout,
                         verify=False
                     )
-                    debug("Could not establish secure connection to JDownloader.")
+                    debug("Could not establish secure connection to JDownloader. Is your time / timezone correct?")
+                except requests.exceptions.ConnectionError:
+                    return None
                 except Exception:
                     return None
         if encrypted_response.status_code == 403:

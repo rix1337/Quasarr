@@ -188,6 +188,7 @@ def connect_device():
 
 def get_device():
     attempts = 0
+    last_backoff_change = 0  # Track when we last changed backoff strategy
 
     while True:
         try:
@@ -199,13 +200,29 @@ def get_device():
 
         update("device", False)
 
-        if attempts % 10 == 0:
-            info(
-                f"WARNING: {attempts} consecutive JDownloader connection errors. Please check your credentials!")
-        time.sleep(3)
+        # Determine sleep time based on failure count
+        if attempts <= 10:
+            # First 10 failures: 3 seconds
+            sleep_time = 3
+            if attempts == 10:
+                info(f"WARNING: {attempts} consecutive JDownloader connection errors. Switching to 1-minute intervals.")
+        elif attempts <= 15:
+            # Next 5 failures (11-15): 1 minute
+            sleep_time = 60
+            if attempts % 10 == 0:
+                info(f"WARNING: {attempts} consecutive JDownloader connection errors. Please check your credentials!")
+            if attempts == 15:
+                info(f"WARNING: Still failing after {attempts} attempts. Switching to 5-minute intervals.")
+        else:
+            # After 15 failures: 5 minutes
+            sleep_time = 300
+            if attempts % 10 == 0:
+                info(f"WARNING: {attempts} consecutive JDownloader connection errors. Please check your credentials!")
 
         if connect_device():
             break
+
+        time.sleep(sleep_time)
 
     return values["device"]
 
@@ -607,7 +624,6 @@ def is_valid_release(title: str,
             if not search_string_in_sanitized_title(search_string, title):
                 debug(f"Skipping {title!r} as it doesn't match sanitized search string: {search_string!r}")
                 return False
-
 
         # if it's a movie search, don't allow any TV show titles (check for NO season or episode tags in the title)
         if is_movie_search:
