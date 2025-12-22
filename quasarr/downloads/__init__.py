@@ -220,6 +220,36 @@ def handle_wd(shared_state, title, password, package_id, imdb_id, url, mirror, s
     )
 
 
+def handle_wx(shared_state, title, password, package_id, imdb_id, url, mirror, size_mb):
+    links = get_wx_download_links(shared_state, url, mirror, title)
+    if not links:
+        fail(title, package_id, shared_state,
+             reason=f'Offline / no links found for "{title}" on WX - "{url}"')
+        return {"success": False, "title": title}
+
+    decrypted = decrypt_links_if_hide(shared_state, links)
+    if decrypted and decrypted.get("status") != "none":
+        status = decrypted.get("status", "error")
+        links = decrypted.get("results", [])
+        if status == "success":
+            return handle_unprotected(
+                shared_state, title, password, package_id, imdb_id, url,
+                links=links, label='WX'
+            )
+        else:
+            fail(title, package_id, shared_state,
+                 reason=f'Error decrypting hide.cx links for "{title}" on WX - "{url}"')
+            return {"success": False, "title": title}
+
+    return handle_protected(
+        shared_state, title, password, package_id, imdb_id, url,
+        mirror=mirror,
+        size_mb=size_mb,
+        func=lambda ss, u, m, t: links,
+        label='WX'
+    )
+
+
 def download(shared_state, request_from, title, url, mirror, size_mb, password, imdb_id=None):
     if "lazylibrarian" in request_from.lower():
         category = "docs"
@@ -269,7 +299,7 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
         (flags['SJ'], lambda *a: handle_protected(*a, func=get_sj_download_links, label='SJ')),
         (flags['SL'], handle_sl),
         (flags['WD'], handle_wd),
-        (flags['WX'], lambda *a: handle_protected(*a, func=get_wx_download_links, label='WX')),
+        (flags['WX'], handle_wx),
     ]
 
     for flag, fn in handlers:

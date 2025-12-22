@@ -36,8 +36,8 @@ def extract_password_from_post(soup, host):
 
     # Strategy 2: Look for explicit "no password" indicators (only if no valid password found)
     no_password_patterns = [
-        r'(?:passwort|password|pass|pw)[\s:]*(?:kein|none|no|nicht|not|nein|-|–|—)',
-        r'(?:kein|none|no|nicht|not|nein)\s*(?:passwort|password|pass|pw)',
+        r'(?:passwort|password|pass|pw)[\s:]*(?:kein(?:es)?|none|no|nicht|not|nein|-|–|—)',
+        r'(?:kein(?:es)?|none|no|nicht|not|nein)\s*(?:passwort|password|pass|pw)',
     ]
 
     for pattern in no_password_patterns:
@@ -51,6 +51,47 @@ def extract_password_from_post(soup, host):
     return default_password
 
 
+def extract_mirror_name_from_link(link_element):
+    """
+    Extract the mirror/hoster name from the link text or nearby text.
+    Returns the extracted name or None.
+    """
+    # Get the link text
+    link_text = link_element.get_text(strip=True)
+
+    # Try to extract a meaningful name from the link text
+    # Look for text that looks like a hoster name (alphanumeric, may contain numbers/dashes)
+    # Filter out common non-hoster words
+    common_non_hosters = {'download', 'mirror', 'link', 'hier', 'click', 'klick', 'code', 'spoiler'}
+
+    # Clean and extract potential mirror name
+    if link_text and len(link_text) > 2:
+        # Remove common symbols and whitespace
+        cleaned = re.sub(r'[^\w\s-]', '', link_text).strip().lower()
+
+        # If it's a single word or hyphenated word and not in common non-hosters
+        if cleaned and cleaned not in common_non_hosters:
+            # Extract the main part (first word if multiple)
+            main_part = cleaned.split()[0] if ' ' in cleaned else cleaned
+            if len(main_part) > 2:  # Must be at least 3 characters
+                return main_part
+
+    # Check if there's a bold tag or nearby text in parent
+    parent = link_element.parent
+    if parent:
+        parent_text = parent.get_text(strip=True)
+        # Look for text before the link that might be the mirror name
+        for sibling in link_element.previous_siblings:
+            if hasattr(sibling, 'get_text'):
+                sibling_text = sibling.get_text(strip=True).lower()
+                if sibling_text and len(sibling_text) > 2 and sibling_text not in common_non_hosters:
+                    cleaned = re.sub(r'[^\w\s-]', '', sibling_text).strip()
+                    if cleaned:
+                        return cleaned.split()[0] if ' ' in cleaned else cleaned
+
+    return None
+
+
 def extract_links_and_password_from_post(post_content, host):
     """
     Extract download links and password from a forum post.
@@ -58,7 +99,7 @@ def extract_links_and_password_from_post(post_content, host):
 
     Returns:
         tuple of (links, password) where:
-        - links: list of [url, hostname] pairs
+        - links: list of [url, mirror_name] pairs where mirror_name is the actual hoster
         - password: extracted password string
     """
     links = []
@@ -71,16 +112,30 @@ def extract_links_and_password_from_post(post_content, host):
         if href.startswith('/') or host in href:
             continue
 
-        # Check supported links
+        # Check supported link crypters
+        crypter_type = None
         if re.search(r'filecrypt\.', href, re.IGNORECASE):
-            if [href, "filecrypt"] not in links:
-                links.append([href, "filecrypt"])
+            crypter_type = "filecrypt"
         elif re.search(r'hide\.', href, re.IGNORECASE):
-            if [href, "hide"] not in links:
-                links.append([href, "hide"])
+            crypter_type = "hide"
         else:
             debug(f"Unsupported link crypter/hoster found: {href}")
             debug(f"Currently only filecrypt and hide are supported. Other crypters may be added later.")
+            continue
+
+        # Extract mirror name from link text or nearby context
+        mirror_name = extract_mirror_name_from_link(link)
+
+        # Use mirror name if found, otherwise fall back to crypter type
+        identifier = mirror_name if mirror_name else crypter_type
+
+        # Avoid duplicates
+        if [href, identifier] not in links:
+            links.append([href, identifier])
+            if mirror_name:
+                debug(f"Found {crypter_type} link for mirror: {mirror_name}")
+            else:
+                debug(f"Found {crypter_type} link (no mirror name detected)")
 
     # Only extract password if we found links
     password = ""
@@ -96,7 +151,7 @@ def get_dl_download_links(shared_state, url, mirror, title):
 
     Returns:
         tuple of (links, password) where:
-        - links: list of [url, hostname] pairs
+        - links: list of [url, mirror_name] pairs
         - password: extracted password string
     """
     host = shared_state.values["config"]("Hostnames").get(hostname)

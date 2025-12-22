@@ -98,7 +98,7 @@ def wx_feed(shared_state, start_time, request_from, mirror=None):
                 mb = 0
                 size = 0
                 imdb_id = None
-                password = f"www.{host}"
+                password = host.upper()
 
                 payload = urlsafe_b64encode(
                     f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id or ''}".encode("utf-8")
@@ -243,8 +243,6 @@ def wx_search(shared_state, start_time, request_from, search_string, mirror=None
                     title = title.replace(' ', '.')
 
                     if shared_state.is_valid_release(title, request_from, search_string, season, episode):
-                        info(f"{hostname.upper()}: ✓ Adding main release: {title}")
-
                         published = detail_item.get('updated_at') or detail_item.get('created_at')
                         if not published:
                             published = datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0000")
@@ -285,8 +283,6 @@ def wx_search(shared_state, start_time, request_from, search_string, mirror=None
                                                                  episode):
                                 debug(f"{hostname.upper()}: ✗ Release filtered out: {release_title}")
                                 continue
-
-                            info(f"{hostname.upper()}: ✓ Adding release: {release_title}")
 
                             release_uid = release.get('uid')
                             if release_uid:
