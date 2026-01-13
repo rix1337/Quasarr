@@ -19,19 +19,29 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
-        run: pip install requests
-
       - name: Validate version bump
         run: |
           python - <<'EOF'
           import importlib.util
+          import os
           import re
           import subprocess
           import sys
           from pathlib import Path
 
           VERSION_FILE = Path("quasarr/providers/version.py")
+          GITHUB_STEP_SUMMARY = os.environ.get("GITHUB_STEP_SUMMARY", "")
+
+          def write_summary(content: str):
+              if GITHUB_STEP_SUMMARY:
+                  with open(GITHUB_STEP_SUMMARY, "a") as f:
+                      f.write(content + "\n")
+
+          def gh_error(msg: str):
+              print(f"::error::{msg}")
+
+          def gh_notice(msg: str):
+              print(f"::notice::{msg}")
 
           def load_version_from_path(path: Path):
               spec = importlib.util.spec_from_file_location("version", path)
@@ -44,11 +54,15 @@ jobs:
               if not m:
                   raise ValueError(f"Invalid version: {v}")
               major, minor, patch, alpha = m.groups()
-              # No alpha suffix = release = higher than any alpha
               alpha_num = int(alpha) if alpha else float('inf')
               return (int(major), int(minor), int(patch), alpha_num)
 
-          subprocess.run(["git", "fetch", "origin"], check=True)
+          def format_version_type(v):
+              if "a" in v:
+                  return f"`{v}` (alpha)"
+              return f"`{v}` (release)"
+
+          subprocess.run(["git", "fetch", "origin"], check=True, capture_output=True)
 
           base_ref = subprocess.check_output(
               ["git", "merge-base", "HEAD", "origin/main"],
@@ -57,21 +71,51 @@ jobs:
 
           subprocess.run(
               ["git", "checkout", base_ref, "--", str(VERSION_FILE)],
-              check=True
+              check=True,
+              capture_output=True
           )
 
           base_version = load_version_from_path(VERSION_FILE)
 
-          subprocess.run(["git", "checkout", "HEAD", "--", str(VERSION_FILE)], check=True)
+          subprocess.run(
+              ["git", "checkout", "HEAD", "--", str(VERSION_FILE)],
+              check=True,
+              capture_output=True
+          )
 
           pr_version = load_version_from_path(VERSION_FILE)
 
           print(f"Base version: {base_version}")
           print(f"PR version:   {pr_version}")
 
-          if parse(pr_version) <= parse(base_version):
-              print("❌ Version was not increased")
+          base_parsed = parse(base_version)
+          pr_parsed = parse(pr_version)
+
+          if pr_parsed <= base_parsed:
+              gh_error(f"Version not bumped: {base_version} → {pr_version}")
+              
+              write_summary("## ❌ Version Bump Check Failed\n")
+              write_summary(f"| Branch | Version |")
+              write_summary(f"|--------|---------|")
+              write_summary(f"| `main` | {format_version_type(base_version)} |")
+              write_summary(f"| PR | {format_version_type(pr_version)} |")
+              write_summary("")
+              
+              if pr_parsed == base_parsed:
+                  write_summary(f"**Problem:** Version unchanged at `{pr_version}`")
+              else:
+                  write_summary(f"**Problem:** PR version `{pr_version}` is lower than base `{base_version}`")
+              
+              write_summary("")
+              write_summary("Please update `quasarr/providers/version.py` with an incremented version.")
+              
               sys.exit(1)
 
-          print("✅ Version bump validated")
+          gh_notice(f"Version bumped: {base_version} → {pr_version}")
+          
+          write_summary("## ✅ Version Bump Check Passed\n")
+          write_summary(f"| Branch | Version |")
+          write_summary(f"|--------|---------|")
+          write_summary(f"| `main` | {format_version_type(base_version)} |")
+          write_summary(f"| PR | {format_version_type(pr_version)} |")
           EOF
