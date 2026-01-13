@@ -31,10 +31,12 @@ jobs:
           python-version: '3.12'
       - name: Get Version
         id: version
-        run: echo "version=$(python quasarr/providers/version.py)" >> $GITHUB_OUTPUT
+        run: |
+          pip install requests
+          echo "version=$(python quasarr/providers/version.py)" >> $GITHUB_OUTPUT
 
-  build-wheel-amd64:
-    name: Build Wheel (AMD64)
+  build-wheel:
+    name: Build Wheel
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -54,26 +56,7 @@ jobs:
         run: python setup.py sdist bdist_wheel
       - uses: actions/upload-artifact@v4
         with:
-          name: wheel-amd64
-          path: ./dist/*
-
-  build-wheel-arm64:
-    name: Build Wheel (ARM64)
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install dependencies
-        run: |
-          pip install wheel pyinstaller
-          pip install -r requirements.txt
-      - name: Build wheel
-        run: python setup.py sdist bdist_wheel --plat-name=manylinux2014_aarch64
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheel-arm64
+          name: wheel
           path: ./dist/*
 
   build-exe:
@@ -95,7 +78,9 @@ jobs:
           pip install wheel pyinstaller
           pip install -r requirements.txt
       - name: Build exe
-        run: pyinstaller --onefile -y --version-file "file_version_info.txt" "Quasarr.py" -n "quasarr-${{ needs.version.outputs.version }}-standalone-win64"
+        run: |
+          python quasarr/providers/version.py
+          pyinstaller --onefile -y --version-file "file_version_info.txt" "Quasarr.py" -n "quasarr-${{ needs.version.outputs.version }}-standalone-win64"
       - uses: actions/upload-artifact@v4
         with:
           name: exe-amd64
@@ -104,12 +89,12 @@ jobs:
   build-docker-amd64:
     name: Build Docker (AMD64)
     runs-on: ubuntu-latest
-    needs: [version, build-wheel-amd64]
+    needs: [version, build-wheel]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v4
         with:
-          name: wheel-amd64
+          name: wheel
           path: ./docker/dist
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -139,12 +124,12 @@ jobs:
   build-docker-arm64:
     name: Build Docker (ARM64)
     runs-on: ubuntu-24.04-arm
-    needs: [version, build-wheel-arm64]
+    needs: [version, build-wheel]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v4
         with:
-          name: wheel-arm64
+          name: wheel
           path: ./docker/dist
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -172,7 +157,7 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [version, build-wheel-amd64, build-wheel-arm64, build-exe, build-docker-amd64, build-docker-arm64]
+    needs: [version, build-wheel, build-exe, build-docker-amd64, build-docker-arm64]
     permissions:
       contents: write
     steps:
@@ -190,7 +175,7 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "./wheel-amd64/*.whl,./wheel-arm64/*.whl,./exe-amd64/*.exe"
+          artifacts: "./wheel/*.whl,./exe-amd64/*.exe"
           artifactErrorsFailBuild: true
           bodyFile: ".github/Changelog.md"
           tag: v.${{ needs.version.outputs.version }}
@@ -198,4 +183,4 @@ jobs:
         if: ${{ !inputs.skip_pypi }}
         run: |
           pip install -U twine packaging
-          python -m twine upload ./wheel-amd64/* ./wheel-arm64/*.whl -u __token__ -p ${{ secrets.PYPI_TOKEN }}
+          python -m twine upload ./wheel/* -u __token__ -p ${{ secrets.PYPI_TOKEN }}
