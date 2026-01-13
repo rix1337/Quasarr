@@ -17,12 +17,16 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
 
       - name: Validate version bump
         run: |
           python - <<'EOF'
           import importlib.util
+          import re
           import subprocess
           import sys
           from pathlib import Path
@@ -36,7 +40,13 @@ jobs:
               return module.get_version()
 
           def parse(v):
-              return tuple(int(p) for p in v.split("."))
+              m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:a(\d+))?$", v)
+              if not m:
+                  raise ValueError(f"Invalid version: {v}")
+              major, minor, patch, alpha = m.groups()
+              # No alpha suffix = release = higher than any alpha
+              alpha_num = int(alpha) if alpha else float('inf')
+              return (int(major), int(minor), int(patch), alpha_num)
 
           subprocess.run(["git", "fetch", "origin"], check=True)
 
@@ -52,7 +62,7 @@ jobs:
 
           base_version = load_version_from_path(VERSION_FILE)
 
-          subprocess.run(["git", "checkout", "--", str(VERSION_FILE)], check=True)
+          subprocess.run(["git", "checkout", "HEAD", "--", str(VERSION_FILE)], check=True)
 
           pr_version = load_version_from_path(VERSION_FILE)
 

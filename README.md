@@ -18,8 +18,6 @@ Quasarr will confidently handle the rest. Some CAPTCHA types require [Tampermonk
 
 # Instructions
 
-# Instructions
-
 1. Set up and run [JDownloader 2](https://jdownloader.org/download/index)
 2. Configure the integrations below
 3. (Optional) Set up [FlareSolverr 3](https://github.com/FlareSolverr/FlareSolverr) for sites that require it

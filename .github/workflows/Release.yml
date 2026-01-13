@@ -31,7 +31,9 @@ jobs:
           python-version: '3.12'
       - name: Get Version
         id: version
-        run: echo "version=$(python quasarr/providers/version.py)" >> $GITHUB_OUTPUT
+        run: |
+          pip install requests
+          echo "version=$(python quasarr/providers/version.py)" >> $GITHUB_OUTPUT
 
   build-wheel-amd64:
     name: Build Wheel (AMD64)
@@ -95,7 +97,9 @@ jobs:
           pip install wheel pyinstaller
           pip install -r requirements.txt
       - name: Build exe
-        run: pyinstaller --onefile -y --version-file "file_version_info.txt" "Quasarr.py" -n "quasarr-${{ needs.version.outputs.version }}-standalone-win64"
+        run: |
+          python quasarr/providers/version.py
+          pyinstaller --onefile -y --version-file "file_version_info.txt" "Quasarr.py" -n "quasarr-${{ needs.version.outputs.version }}-standalone-win64"
       - uses: actions/upload-artifact@v4
         with:
           name: exe-amd64
