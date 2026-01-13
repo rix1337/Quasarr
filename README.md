@@ -28,6 +28,7 @@ Quasarr will confidently handle the rest. Some CAPTCHA types require [Tampermonk
 ---
 
 ## FlareSolverr (Optional)
+test
 
 FlareSolverr is **optional** but **required for some sites** (e.g., AL) that use Cloudflare protection. You can skip FlareSolverr during setup and configure it later via the web UI.
 
