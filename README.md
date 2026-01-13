@@ -17,6 +17,7 @@ Alternatively, follow the link from the console output (or discord notification)
 Quasarr will confidently handle the rest. Some CAPTCHA types require [Tampermonkey](https://www.tampermonkey.net/) to be installed in your browser.
 
 # Instructions
+TEST
 
 1. Set up and run [JDownloader 2](https://jdownloader.org/download/index)
 2. Configure the integrations below
