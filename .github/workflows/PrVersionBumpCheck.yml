@@ -1,0 +1,67 @@
+name: PR Version Bump Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate version bump
+        run: |
+          python - <<'EOF'
+          import importlib.util
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          VERSION_FILE = Path("quasarr/providers/version.py")
+
+          def load_version_from_path(path: Path):
+              spec = importlib.util.spec_from_file_location("version", path)
+              module = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(module)
+              return module.get_version()
+
+          def parse(v):
+              return tuple(int(p) for p in v.split("."))
+
+          subprocess.run(["git", "fetch", "origin"], check=True)
+
+          base_ref = subprocess.check_output(
+              ["git", "merge-base", "HEAD", "origin/main"],
+              text=True
+          ).strip()
+
+          subprocess.run(
+              ["git", "checkout", base_ref, "--", str(VERSION_FILE)],
+              check=True
+          )
+
+          base_version = load_version_from_path(VERSION_FILE)
+
+          subprocess.run(["git", "checkout", "--", str(VERSION_FILE)], check=True)
+
+          pr_version = load_version_from_path(VERSION_FILE)
+
+          print(f"Base version: {base_version}")
+          print(f"PR version:   {pr_version}")
+
+          if parse(pr_version) <= parse(base_version):
+              print("❌ Version was not increased")
+              sys.exit(1)
+
+          print("✅ Version bump validated")
+          EOF
