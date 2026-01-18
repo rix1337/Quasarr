@@ -560,6 +560,55 @@ def hostname_form_html(shared_state, message, show_restart_button=False, show_sk
     attempt();
   }}
 </script>
+<script>
+    function showStatusDetail(id, label, status, message) {{
+        if (document.getElementById('status-modal-overlay')) return;
+    
+        var statusTextMap = {{
+            ok: 'Working normally',
+            error: 'Error',
+            unset: 'Not configured',
+            skipped: 'Login skipped'
+        }};
+    
+        var emojiMap = {{
+            ok: '🟢',
+            error: '🔴',
+            unset: '🟡',
+            skipped: '🟡'
+        }};
+    
+        var overlay = document.createElement('div');
+        overlay.id = 'status-modal-overlay';
+        overlay.className = 'status-modal-overlay';
+    
+        overlay.innerHTML =
+            '<div class="status-modal">' +
+                '<h3>' +
+                    '<span>' + (emojiMap[status] || 'ℹ️') + '</span>' +
+                    label +
+                '</h3>' +
+                '<p><strong>Status:</strong> ' + (statusTextMap[status] || status) + '</p>' +
+                '<p>' + (message || 'No additional details available.') + '</p>' +
+                '<div class="btn-row">' +
+                    '<button class="btn-secondary" id="statusModalClose">Close</button>' +
+                '</div>' +
+            '</div>';
+    
+        overlay.addEventListener('click', function(e) {{
+            if (e.target === overlay) closeStatusModal();
+        }});
+    
+        document.body.appendChild(overlay);
+    
+        document.getElementById('statusModalClose').addEventListener('click', closeStatusModal);
+    
+        function closeStatusModal() {{
+            var el = document.getElementById('status-modal-overlay');
+            if (el) el.remove();
+        }}
+    }}
+</script>
 """
     return template.format(
         message=message,
