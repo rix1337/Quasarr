@@ -314,7 +314,7 @@ def get_dl_download_links(shared_state, url, mirror, title, password):
     sess = retrieve_and_validate_session(shared_state)
     if not sess:
         info(f"Could not retrieve valid session for {host}")
-        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
+        mark_hostname_issue(hostname, "download", "Session error")
         return {"links": [], "password": ""}
 
     try:

@@ -83,8 +83,6 @@ def he_search(shared_state, start_time, request_from, search_string="", mirror=N
             local_title = get_localized_title(shared_state, imdb_id, 'en')
             if not local_title:
                 info(f"{hostname}: no title for IMDb {imdb_id}")
-                # todo
-                mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
                 return releases
             source_search = local_title
         else:

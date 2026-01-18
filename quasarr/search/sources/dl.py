@@ -315,7 +315,6 @@ def dl_search(shared_state, start_time, request_from, search_string,
         title = get_localized_title(shared_state, imdb_id, 'de')
         if not title:
             info(f"{hostname}: no title for IMDb {imdb_id}")
-            mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
             return releases
         search_string = title
 
