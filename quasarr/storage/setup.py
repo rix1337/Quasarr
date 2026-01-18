@@ -24,6 +24,7 @@ from quasarr.providers.utils import extract_kv_pairs, extract_allowed_keys, FALL
 from quasarr.providers.web_server import Server
 from quasarr.storage.config import Config
 from quasarr.storage.sqlite_database import DataBase
+from quasarr.providers.hostname_issues import get_hostname_issue, get_all_hostname_issues
 
 
 def render_reconnect_success(message, countdown_seconds=3):
@@ -158,7 +159,12 @@ def path_config(shared_state):
 
 def hostname_form_html(shared_state, message, show_restart_button=False, show_skip_management=False):
     hostname_fields = '''
-    <label for="{id}" style="display:inline-flex; align-items:center; gap:4px;">{label}{img_html}</label>
+    <label for="{id}" style="display:inline-flex; align-items:center; gap:4px;">
+        <span class="status-indicator" id="status-{id}" data-status="{status}" data-message="{status_message}" 
+              onclick="showStatusDetail(\'{id}\', \'{label}\', \'{status}\', this.dataset.message)" 
+              style="cursor:pointer; font-size:1rem;" title="{status_title}">{status_emoji}</span>
+        {label}{img_html}
+    </label>
     <input type="text" id="{id}" name="{id}" placeholder="example.com" autocorrect="off" autocomplete="off" value="{value}"><br>
     '''
 
@@ -172,6 +178,7 @@ def hostname_form_html(shared_state, message, show_restart_button=False, show_sk
     field_html = []
     hostnames = Config('Hostnames')  # Load once outside the loop
     skip_login_db = DataBase("skip_login")
+    hostname_issues = get_all_hostname_issues()
     login_required_sites = ['al', 'dd', 'dl', 'nx']
 
     for label in shared_state.values["sites"]:
@@ -189,11 +196,42 @@ def hostname_form_html(shared_state, message, show_restart_button=False, show_sk
         if not current_value:
             current_value = ''  # Ensure it's empty if None or ""
 
+        # Determine traffic light status
+        is_login_skipped = field_id in login_required_sites and skip_login_db.retrieve(field_id)
+        issue = hostname_issues.get(field_id)
+
+        if not current_value:
+            status = "unset"
+            status_emoji = "🟡"
+            status_title = "Hostname not configured"
+            status_message = "This hostname is not configured."
+        elif is_login_skipped:
+            status = "skipped"
+            status_emoji = "🟡"
+            status_title = "Login was skipped"
+            status_message = "Login was skipped for this site."
+        elif issue:
+            status = "error"
+            status_emoji = "🔴"
+            operation = issue.get("operation", "unknown")
+            error_msg = issue.get("error", "Unknown error")[:200]
+            status_title = f"Error during {operation}"
+            status_message = f"Error during {operation}: {error_msg}"
+        else:
+            status = "ok"
+            status_emoji = "🟢"
+            status_title = "Working normally"
+            status_message = "Configured and working normally."
+
         field_html.append(hostname_fields.format(
             id=field_id,
             label=label,
             img_html=img_html,
-            value=current_value
+            value=current_value,
+            status=status,
+            status_emoji=status_emoji,
+            status_title=status_title,
+            status_message=status_message.replace('"', '&quot;').replace("'", "&#39;")
         ))
 
         # Add skip indicator for login-required sites if skip management is enabled
@@ -254,6 +292,47 @@ def hostname_form_html(shared_state, message, show_restart_button=False, show_sk
     .import-status.success {{ color: #198754; }}
     .import-status.error {{ color: #dc3545; }}
     .import-status.loading {{ color: var(--secondary, #6c757d); }}
+    .status-indicator {{
+        transition: transform 0.1s ease;
+    }}
+    .status-indicator:hover {{
+        transform: scale(1.2);
+    }}
+    .status-modal-overlay {{
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }}
+    .status-modal {{
+        background: var(--card-bg, #fff);
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        max-width: 400px;
+        width: 90%;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }}
+    .status-modal h3 {{
+        margin: 0 0 1rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }}
+    .status-modal p {{
+        margin: 0 0 1rem 0;
+        word-break: break-word;
+    }}
+    .status-modal .btn-row {{
+        display: flex;
+        gap: 0.5rem;
+        justify-content: flex-end;
+    }}
     .btn-subtle {{
         background: transparent;
         color: var(--fg-color, #212529);
