@@ -297,7 +297,7 @@ def _search_single_page(shared_state, host, search_string, search_id, page_num, 
 
     except Exception as e:
         info(f"{hostname}: [Page {page_num}] error: {e}")
-        mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
+        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
         return page_releases, None
 
 

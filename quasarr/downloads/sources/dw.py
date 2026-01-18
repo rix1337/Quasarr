@@ -7,7 +7,10 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.log import info, debug
+
+hostname = "dw"
 
 
 def get_dw_download_links(shared_state, url, mirror, title, password):
@@ -30,8 +33,9 @@ def get_dw_download_links(shared_state, url, mirror, title, password):
         request = session.get(url, headers=headers, timeout=10)
         content = BeautifulSoup(request.text, "html.parser")
         download_buttons = content.find_all("button", {"class": "show_link"})
-    except:
+    except Exception as e:
         info(f"DW site has been updated. Grabbing download links for {title} not possible!")
+        mark_hostname_issue(hostname, "download", str(e))
         return {"links": []}
 
     download_links = []
@@ -46,6 +50,7 @@ def get_dw_download_links(shared_state, url, mirror, title, password):
             response = session.post(ajax_url, payload, headers=headers, timeout=10)
             if response.status_code != 200:
                 info(f"DW site has been updated. Grabbing download links for {title} not possible!")
+                mark_hostname_issue(hostname, "download", f"HTTP {response.status_code}")
                 continue
             else:
                 response = response.json()
@@ -64,8 +69,10 @@ def get_dw_download_links(shared_state, url, mirror, title, password):
                     continue
 
                 download_links.append([link, hoster])
-    except:
+    except Exception as e:
         info(f"DW site has been updated. Parsing download links for {title} not possible!")
-        pass
+        mark_hostname_issue(hostname, "download", str(e))
 
+    if download_links:
+        clear_hostname_issue(hostname)
     return {"links": download_links}

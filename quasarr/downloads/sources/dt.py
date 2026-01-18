@@ -8,19 +8,22 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.log import info
+
+hostname = "dt"
 
 
 def derive_mirror_from_url(url):
     """Extract hoster name from URL hostname."""
     try:
-        hostname = urlparse(url).netloc.lower()
-        if hostname.startswith('www.'):
-            hostname = hostname[4:]
-        parts = hostname.split('.')
+        host = urlparse(url).netloc.lower()
+        if host.startswith('www.'):
+            host = host[4:]
+        parts = host.split('.')
         if len(parts) >= 2:
             return parts[-2]
-        return hostname
+        return host
     except:
         return "unknown"
 
@@ -42,18 +45,21 @@ def get_dt_download_links(shared_state, url, mirror, title, password):
         article = soup.find("article")
         if not article:
             info(f"Could not find article block on DT page for {title}")
-            return None
+            mark_hostname_issue(hostname, "download", "Could not find article block")
+            return {"links": []}
 
         body = article.find("div", class_="card-body")
         if not body:
             info(f"Could not find download section for {title}")
-            return None
+            mark_hostname_issue(hostname, "download", "Could not find download section")
+            return {"links": []}
 
         anchors = body.find_all("a", href=True)
 
     except Exception as e:
         info(f"DT site has been updated. Grabbing download links for {title} not possible! ({e})")
-        return None
+        mark_hostname_issue(hostname, "download", str(e))
+        return {"links": []}
 
     filtered = []
     for a in anchors:
@@ -85,4 +91,6 @@ def get_dt_download_links(shared_state, url, mirror, title, password):
                         mirror_name = derive_mirror_from_url(u)
                         filtered.append([u, mirror_name])
 
-    return {"links": filtered} if filtered else None
+    if filtered:
+        clear_hostname_issue(hostname)
+    return {"links": filtered}

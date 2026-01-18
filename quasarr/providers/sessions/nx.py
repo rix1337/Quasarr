@@ -7,7 +7,7 @@ import pickle
 
 import requests
 
-from quasarr.providers.hostname_issues import mark_hostname_issue
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.log import info, debug
 from quasarr.providers.utils import is_site_usable
 
@@ -38,18 +38,18 @@ def create_and_persist_session(shared_state):
             response_data = nx_response.json()
             if response_data.get('err', {}).get('status') == 403:
                 info("Invalid NX credentials provided.")
-                mark_hostname_issue(hostname, "session", "Session/login error")
+                mark_hostname_issue(hostname, "session", "Invalid credentials")
                 error = True
             elif response_data.get('user').get('username') != shared_state.values["config"]("NX").get("user"):
                 info("Invalid NX response on login.")
-                mark_hostname_issue(hostname, "session", "Session/login error")
+                mark_hostname_issue(hostname, "session", "Invalid login response")
                 error = True
             else:
                 sessiontoken = response_data.get('user').get('sessiontoken')
                 nx_session.cookies.set('sessiontoken', sessiontoken, domain=nx)
         except ValueError:
             info("Could not parse NX response on login.")
-            mark_hostname_issue(hostname, "session", "Session/login error")
+            mark_hostname_issue(hostname, "session", "Could not parse login response")
             error = True
 
         if error:
@@ -60,10 +60,11 @@ def create_and_persist_session(shared_state):
         serialized_session = pickle.dumps(nx_session)
         session_string = base64.b64encode(serialized_session).decode('utf-8')
         shared_state.values["database"]("sessions").update_store("nx", session_string)
+        clear_hostname_issue(hostname)
         return nx_session
     else:
         info("Could not create NX session")
-        mark_hostname_issue(hostname, "session", "Session/login error")
+        mark_hostname_issue(hostname, "session", f"HTTP {nx_response.status_code}")
         return None
 
 
@@ -83,7 +84,7 @@ def retrieve_and_validate_session(shared_state):
                 raise ValueError("Retrieved object is not a valid requests.Session instance.")
         except Exception as e:
             info(f"Session retrieval failed: {e}")
-            mark_hostname_issue(hostname, "session", str(e) if "e" in dir() else "Session error")
+            mark_hostname_issue(hostname, "session", str(e))
             nx_session = create_and_persist_session(shared_state)
 
     return nx_session

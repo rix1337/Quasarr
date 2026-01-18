@@ -7,7 +7,10 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.log import info, debug
+
+hostname = "mb"
 
 
 def get_mb_download_links(shared_state, url, mirror, title, password):
@@ -26,6 +29,7 @@ def get_mb_download_links(shared_state, url, mirror, title, password):
         response.raise_for_status()
     except Exception as e:
         info(f"Failed to fetch page for {title or url}: {e}")
+        mark_hostname_issue(hostname, "download", str(e))
         return {"links": []}
 
     soup = BeautifulSoup(response.text, "html.parser")
@@ -48,6 +52,8 @@ def get_mb_download_links(shared_state, url, mirror, title, password):
 
     if not download_links:
         info(f"No download links found for {title}. Site structure may have changed. - {url}")
+        mark_hostname_issue(hostname, "download", "No download links found - site structure may have changed")
         return {"links": []}
 
+    clear_hostname_issue(hostname)
     return {"links": download_links}

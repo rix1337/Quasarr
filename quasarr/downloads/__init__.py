@@ -24,6 +24,7 @@ from quasarr.downloads.sources.sj import get_sj_download_links
 from quasarr.downloads.sources.sl import get_sl_download_links
 from quasarr.downloads.sources.wd import get_wd_download_links
 from quasarr.downloads.sources.wx import get_wx_download_links
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.log import info
 from quasarr.providers.notifications import send_discord_message
 from quasarr.providers.statistics import StatsHelper
@@ -345,7 +346,14 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
     for key, getter in SOURCE_GETTERS.items():
         hostname = config.get(key)
         if hostname and hostname.lower() in url.lower():
-            source_result = getter(shared_state, url, mirror, title, password)
+            try:
+                source_result = getter(shared_state, url, mirror, title, password)
+                if source_result and source_result.get("links"):
+                    clear_hostname_issue(key)
+            except Exception as e:
+                info(f"Error getting download links from {key.upper()}: {e}")
+                mark_hostname_issue(key, "download", str(e))
+                source_result = None
             label = key.upper()
             detected_source_key = key
             break

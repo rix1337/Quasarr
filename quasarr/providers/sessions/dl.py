@@ -8,7 +8,7 @@ import pickle
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.hostname_issues import mark_hostname_issue
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.log import info, debug
 from quasarr.providers.utils import is_site_usable
 
@@ -56,7 +56,7 @@ def create_and_persist_session(shared_state):
 
         if login_page.status_code != 200:
             info(f'Failed to load login page for: "{hostname}" - Status {login_page.status_code}')
-            mark_hostname_issue(hostname, "session", "Session/login error")
+            mark_hostname_issue(hostname, "session", f"Failed to load login page - HTTP {login_page.status_code}")
             return None
 
         # Extract CSRF token from login form
@@ -65,7 +65,7 @@ def create_and_persist_session(shared_state):
 
         if not csrf_input or not csrf_input.get('value'):
             info(f'Could not find CSRF token on login page for: "{hostname}"')
-            mark_hostname_issue(hostname, "session", "Session/login error")
+            mark_hostname_issue(hostname, "session", "Could not find CSRF token")
             return None
 
         csrf_token = csrf_input['value']
@@ -88,13 +88,13 @@ def create_and_persist_session(shared_state):
 
         if 'data-logged-in="true"' not in verify_response.text:
             info(f'Login verification failed for: "{hostname}" - invalid credentials or login failed')
-            mark_hostname_issue(hostname, "session", "Login failed")
+            mark_hostname_issue(hostname, "session", "Login verification failed")
             return None
 
         info(f'Session successfully created for: "{hostname}" using user/password')
     except Exception as e:
         info(f'Failed to create session for: "{hostname}" - {e}')
-        mark_hostname_issue(hostname, "session", "Session/login error")
+        mark_hostname_issue(hostname, "session", str(e))
         return None
 
     # Persist session to database
@@ -102,6 +102,7 @@ def create_and_persist_session(shared_state):
     token = base64.b64encode(blob).decode("utf-8")
     shared_state.values["database"]("sessions").update_store(hostname, token)
 
+    clear_hostname_issue(hostname)
     return sess
 
 
