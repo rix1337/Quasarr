@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info, debug
 
 
@@ -90,6 +91,7 @@ def get_by_download_links(shared_state, url, mirror, title, password):
                 return r.url
             except Exception as e:
                 info(f"Error resolving link for {hostname}: {e}")
+                mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
                 return None
 
         for pair in url_hosters:
@@ -108,5 +110,7 @@ def get_by_download_links(shared_state, url, mirror, title, password):
 
     except Exception as e:
         info(f"Error loading BY download links: {e}")
+        # todo
+        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
 
     return {"links": links}

@@ -6,6 +6,7 @@ import re
 
 import requests
 
+from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info, debug
 from quasarr.providers.utils import check_links_online_status
 
@@ -165,4 +166,5 @@ def get_wx_download_links(shared_state, url, mirror, title, password):
 
     except Exception as e:
         info(f"{hostname.upper()}: Error extracting download links from {url}: {e}")
+        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
         return {"links": []}

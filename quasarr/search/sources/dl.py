@@ -10,6 +10,7 @@ from html import unescape
 
 from bs4 import BeautifulSoup
 
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title
 from quasarr.providers.log import info, debug
 from quasarr.providers.sessions.dl import retrieve_and_validate_session, invalidate_session, fetch_via_requests_session
@@ -147,10 +148,14 @@ def dl_feed(shared_state, start_time, request_from, mirror=None):
 
     except Exception as e:
         info(f"{hostname}: Forum feed error: {e}")
+        mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
         invalidate_session(shared_state)
 
     elapsed = time.time() - start_time
     debug(f"Time taken: {elapsed:.2f}s ({hostname})")
+
+    if releases:
+        clear_hostname_issue(hostname)
     return releases
 
 
@@ -292,6 +297,7 @@ def _search_single_page(shared_state, host, search_string, search_id, page_num, 
 
     except Exception as e:
         info(f"{hostname}: [Page {page_num}] error: {e}")
+        mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
         return page_releases, None
 
 
@@ -309,6 +315,7 @@ def dl_search(shared_state, start_time, request_from, search_string,
         title = get_localized_title(shared_state, imdb_id, 'de')
         if not title:
             info(f"{hostname}: no title for IMDb {imdb_id}")
+            mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
             return releases
         search_string = title
 
@@ -355,6 +362,7 @@ def dl_search(shared_state, start_time, request_from, search_string,
 
     except Exception as e:
         info(f"{hostname}: search error: {e}")
+        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
         invalidate_session(shared_state)
 
     debug(f"{hostname}: FINAL - Found {len(releases)} valid releases - providing to {request_from}")
@@ -362,4 +370,6 @@ def dl_search(shared_state, start_time, request_from, search_string,
     elapsed = time.time() - start_time
     debug(f"Time taken: {elapsed:.2f}s ({hostname})")
 
+    if releases:
+        clear_hostname_issue(hostname)
     return releases

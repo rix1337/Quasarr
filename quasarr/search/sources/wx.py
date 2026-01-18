@@ -13,6 +13,7 @@ import requests
 from bs4 import BeautifulSoup
 from bs4 import XMLParsedAsHTMLWarning
 
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title
 from quasarr.providers.log import info, debug
 
@@ -120,11 +121,14 @@ def wx_feed(shared_state, start_time, request_from, mirror=None):
 
     except Exception as e:
         info(f"Error loading {hostname.upper()} feed: {e}")
+        mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
         return releases
 
     elapsed_time = time.time() - start_time
     debug(f"Time taken: {elapsed_time:.2f}s ({hostname})")
 
+    if releases:
+        clear_hostname_issue(hostname)
     return releases
 
 
@@ -344,6 +348,7 @@ def wx_search(shared_state, start_time, request_from, search_string, mirror=None
 
     except Exception as e:
         info(f"Error in {hostname.upper()} search: {e}")
+        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
 
         debug(f"{hostname.upper()}: {traceback.format_exc()}")
         return releases
@@ -351,4 +356,6 @@ def wx_search(shared_state, start_time, request_from, search_string, mirror=None
     elapsed_time = time.time() - start_time
     debug(f"Time taken: {elapsed_time:.2f}s ({hostname})")
 
+    if releases:
+        clear_hostname_issue(hostname)
     return releases

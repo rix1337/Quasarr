@@ -16,6 +16,7 @@ import quasarr.providers.sessions.dd
 import quasarr.providers.sessions.dl
 import quasarr.providers.sessions.nx
 from quasarr.providers.auth import add_auth_routes, add_auth_hook
+from quasarr.providers.hostname_issues import get_all_hostname_issues
 from quasarr.providers.html_templates import render_button, render_form, render_success, render_fail, \
     render_centered_html
 from quasarr.providers.log import info
@@ -24,7 +25,6 @@ from quasarr.providers.utils import extract_kv_pairs, extract_allowed_keys, FALL
 from quasarr.providers.web_server import Server
 from quasarr.storage.config import Config
 from quasarr.storage.sqlite_database import DataBase
-from quasarr.providers.hostname_issues import get_hostname_issue, get_all_hostname_issues
 
 
 def render_reconnect_success(message, countdown_seconds=3):

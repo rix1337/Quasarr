@@ -5,6 +5,7 @@
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info
 
 hostname = "nk"
@@ -30,6 +31,7 @@ def get_nk_download_links(shared_state, url, mirror, title, password):
         soup = BeautifulSoup(resp.text, 'html.parser')
     except Exception as e:
         info(f"{hostname}: could not fetch release page for {title}: {e}")
+        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
         return {"links": []}
 
     anchors = soup.select('a.btn-orange')
@@ -50,6 +52,7 @@ def get_nk_download_links(shared_state, url, mirror, title, password):
             href = requests.head(href, headers=headers, allow_redirects=True, timeout=20).url
         except Exception as e:
             info(f"{hostname}: could not resolve download link for {title}: {e}")
+            mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
             continue
 
         candidates.append([href, mirror])

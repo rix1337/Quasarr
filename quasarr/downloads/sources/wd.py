@@ -9,6 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from quasarr.providers.cloudflare import flaresolverr_get, is_cloudflare_challenge
+from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info, debug
 from quasarr.providers.utils import is_flaresolverr_available
 
@@ -32,6 +33,8 @@ def resolve_wd_redirect(url, user_agent):
             info(f"WD blocked attempt to resolve {url}. Your IP may be banned. Try again later.")
     except Exception as e:
         info(f"Error fetching redirected URL for {url}: {e}")
+        # todo
+        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
     return None
 
 

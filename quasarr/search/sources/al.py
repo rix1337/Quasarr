@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 
 from quasarr.downloads.sources.al import (guess_title,
                                           parse_info_from_feed_entry, parse_info_from_download_item)
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title
 from quasarr.providers.log import info, debug
 from quasarr.providers.sessions.al import invalidate_session, fetch_via_requests_session
@@ -140,6 +141,7 @@ def al_feed(shared_state, start_time, request_from, mirror=None):
         r.raise_for_status()
     except Exception as e:
         info(f"{hostname}: could not fetch feed: {e}")
+        mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
         invalidate_session(shared_state)
         return releases
 
@@ -230,9 +232,13 @@ def al_feed(shared_state, start_time, request_from, mirror=None):
 
         except Exception as e:
             info(f"{hostname}: error parsing feed item: {e}")
+            mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
 
     elapsed = time.time() - start_time
     debug(f"Time taken: {elapsed:.2f}s ({hostname})")
+
+    if releases:
+        clear_hostname_issue(hostname)
     return releases
 
 
@@ -266,6 +272,7 @@ def al_search(shared_state, start_time, request_from, search_string,
         title = get_localized_title(shared_state, imdb_id, 'de')
         if not title:
             info(f"{hostname}: no title for IMDb {imdb_id}")
+            mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
             return releases
         search_string = title
 
@@ -279,6 +286,7 @@ def al_search(shared_state, start_time, request_from, search_string,
         r.raise_for_status()
     except Exception as e:
         info(f"{hostname}: search load error: {e}")
+        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
         invalidate_session(shared_state)
         return releases
 
@@ -440,7 +448,11 @@ def al_search(shared_state, start_time, request_from, search_string,
 
         except Exception as e:
             info(f"{hostname}: error parsing search item: {e}")
+            mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
 
     elapsed = time.time() - start_time
     debug(f"Time taken: {elapsed:.2f}s ({hostname})")
+
+    if releases:
+        clear_hostname_issue(hostname)
     return releases

@@ -6,6 +6,7 @@ import re
 
 from bs4 import BeautifulSoup, NavigableString
 
+from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info, debug
 from quasarr.providers.sessions.dl import retrieve_and_validate_session, fetch_via_requests_session, invalidate_session
 from quasarr.providers.utils import generate_status_url, check_links_online_status
@@ -313,6 +314,7 @@ def get_dl_download_links(shared_state, url, mirror, title, password):
     sess = retrieve_and_validate_session(shared_state)
     if not sess:
         info(f"Could not retrieve valid session for {host}")
+        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
         return {"links": [], "password": ""}
 
     try:
@@ -376,5 +378,6 @@ def get_dl_download_links(shared_state, url, mirror, title, password):
 
     except Exception as e:
         info(f"Error extracting download links from {url}: {e}")
+        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
         invalidate_session(shared_state)
         return {"links": [], "password": ""}

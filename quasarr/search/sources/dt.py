@@ -13,6 +13,7 @@ from urllib.parse import quote_plus
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title
 from quasarr.providers.log import info, debug
 
@@ -117,6 +118,7 @@ def dt_feed(shared_state, start_time, request_from, mirror=None):
 
             except Exception as e:
                 info(f"Error parsing {hostname.upper()} feed: {e}")
+                mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
                 continue
 
             releases.append({
@@ -135,9 +137,13 @@ def dt_feed(shared_state, start_time, request_from, mirror=None):
 
     except Exception as e:
         info(f"Error loading {hostname.upper()} feed: {e}")
+        mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
 
     elapsed = time.time() - start_time
     debug(f"Time taken: {elapsed:.2f}s ({hostname})")
+
+    if releases:
+        clear_hostname_issue(hostname)
     return releases
 
 
@@ -241,6 +247,7 @@ def dt_search(shared_state, start_time, request_from, search_string, mirror=None
 
             except Exception as e:
                 info(f"Error parsing {hostname.upper()} search item: {e}")
+                mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
                 continue
 
             releases.append({
@@ -259,7 +266,11 @@ def dt_search(shared_state, start_time, request_from, search_string, mirror=None
 
     except Exception as e:
         info(f"Error loading {hostname.upper()} search page: {e}")
+        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
 
     elapsed = time.time() - start_time
     debug(f"Search time: {elapsed:.2f}s ({hostname})")
+
+    if releases:
+        clear_hostname_issue(hostname)
     return releases

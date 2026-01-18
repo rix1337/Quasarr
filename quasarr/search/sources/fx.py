@@ -9,6 +9,7 @@ from base64 import urlsafe_b64encode
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.log import info, debug
 
 hostname = "fx"
@@ -51,6 +52,7 @@ def fx_feed(shared_state, start_time, request_from, mirror=None):
         items = feed.find_all("article")
     except Exception as e:
         info(f"Error loading {hostname.upper()} feed: {e}")
+        mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
         return releases
 
     if items:
@@ -109,10 +111,13 @@ def fx_feed(shared_state, start_time, request_from, mirror=None):
 
             except Exception as e:
                 info(f"Error parsing {hostname.upper()} feed: {e}")
+                mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
 
     elapsed_time = time.time() - start_time
     debug(f"Time taken: {elapsed_time:.2f}s ({hostname})")
 
+    if releases:
+        clear_hostname_issue(hostname)
     return releases
 
 
@@ -142,6 +147,7 @@ def fx_search(shared_state, start_time, request_from, search_string, mirror=None
 
     except Exception as e:
         info(f"Error loading {hostname.upper()} feed: {e}")
+        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
         return releases
 
     if results:
@@ -153,6 +159,7 @@ def fx_search(shared_state, start_time, request_from, search_string, mirror=None
                 items = feed.find_all("article")
             except Exception as e:
                 info(f"Error loading {hostname.upper()} feed: {e}")
+                mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
                 return releases
 
             for item in items:
@@ -216,8 +223,11 @@ def fx_search(shared_state, start_time, request_from, search_string, mirror=None
 
                 except Exception as e:
                     info(f"Error parsing {hostname.upper()} search: {e}")
+                    mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
 
     elapsed_time = time.time() - start_time
     debug(f"Time taken: {elapsed_time:.2f}s ({hostname})")
 
+    if releases:
+        clear_hostname_issue(hostname)
     return releases

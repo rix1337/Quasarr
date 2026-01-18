@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title
 from quasarr.providers.log import info, debug
 
@@ -44,6 +45,7 @@ def dj_feed(shared_state, start_time, request_from, mirror=None):
         data = json.loads(r.content)
     except Exception as e:
         info(f"{hostname.upper()}: feed load error: {e}")
+        mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
         return releases
 
     for release in data:
@@ -92,6 +94,9 @@ def dj_feed(shared_state, start_time, request_from, mirror=None):
             continue
 
     debug(f"Time taken: {time.time() - start_time:.2f}s ({hostname})")
+
+    if releases:
+        clear_hostname_issue(hostname)
     return releases
 
 
@@ -124,6 +129,7 @@ def dj_search(shared_state, start_time, request_from, search_string, mirror=None
         results = soup.find_all("a", href=re.compile(r"^/serie/"))
     except Exception as e:
         info(f"{hostname.upper()}: search load error: {e}")
+        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
         return releases
 
     one_hour_ago = (datetime.now() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
@@ -210,4 +216,7 @@ def dj_search(shared_state, start_time, request_from, search_string, mirror=None
             continue
 
     debug(f"Time taken: {time.time() - start_time:.2f}s ({hostname})")
+
+    if releases:
+        clear_hostname_issue(hostname)
     return releases

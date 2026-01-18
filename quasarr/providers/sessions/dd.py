@@ -7,6 +7,7 @@ import pickle
 
 import requests
 
+from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info, debug
 from quasarr.providers.utils import is_site_usable
 
@@ -39,15 +40,18 @@ def create_and_persist_session(shared_state):
             response_data = dd_response.json()
             if not response_data.get('loggedin'):
                 info("DD rejected login.")
+                mark_hostname_issue(hostname, "session", "Session/login error")
                 raise ValueError
             session_id = dd_response.cookies.get("PHPSESSID")
             if session_id:
                 dd_session.cookies.set('PHPSESSID', session_id, domain=dd)
             else:
                 info("Invalid DD response on login.")
+                mark_hostname_issue(hostname, "session", "Session/login error")
                 error = True
         except ValueError:
             info("Could not parse DD response on login.")
+            mark_hostname_issue(hostname, "session", "Session/login error")
             error = True
 
         if error:
@@ -61,6 +65,7 @@ def create_and_persist_session(shared_state):
         return dd_session
     else:
         info("Could not create DD session")
+        mark_hostname_issue(hostname, "session", "Session/login error")
         return None
 
 
@@ -80,6 +85,7 @@ def retrieve_and_validate_session(shared_state):
                 raise ValueError("Retrieved object is not a valid requests.Session instance.")
         except Exception as e:
             info(f"Session retrieval failed: {e}")
+            mark_hostname_issue(hostname, "session", str(e) if "e" in dir() else "Session error")
             dd_session = create_and_persist_session(shared_state)
 
     return dd_session

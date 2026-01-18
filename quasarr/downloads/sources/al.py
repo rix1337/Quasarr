@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
 from quasarr.downloads.linkcrypters.al import decrypt_content, solve_captcha
+from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info, debug
 from quasarr.providers.sessions.al import retrieve_and_validate_session, invalidate_session, unwrap_flaresolverr_body, \
     fetch_via_flaresolverr, fetch_via_requests_session
@@ -525,6 +526,7 @@ def check_release(shared_state, details_html, release_id, title, episode_in_titl
                     return guessed_title, release_id
         except Exception as e:
             info(f"Error guessing release title from release: {e}")
+            mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
 
     return title, release_id
 
@@ -566,6 +568,7 @@ def get_al_download_links(shared_state, url, mirror, title, password):
     sess = retrieve_and_validate_session(shared_state)
     if not sess:
         info(f"Could not retrieve valid session for {al}")
+        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
         return {}
 
     details_page = fetch_via_flaresolverr(shared_state, "GET", url, timeout=30)
@@ -693,6 +696,7 @@ def get_al_download_links(shared_state, url, mirror, title, password):
 
                     except RuntimeError as e:
                         info(f"Error solving CAPTCHA: {e}")
+                        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
                     else:
                         info(f"CAPTCHA solver returned invalid solution, retrying... (attempt {tries})")
 
@@ -710,8 +714,10 @@ def get_al_download_links(shared_state, url, mirror, title, password):
                 debug(f"Decrypted URLs: {links}")
             except Exception as e:
                 info(f"Error during decryption: {e}")
+                mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
     except Exception as e:
         info(f"Error loading AL download: {e}")
+        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
         invalidate_session(shared_state)
 
     success = bool(links)

@@ -11,6 +11,7 @@ from html import unescape
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title
 from quasarr.providers.log import info, debug
 
@@ -82,6 +83,8 @@ def he_search(shared_state, start_time, request_from, search_string="", mirror=N
             local_title = get_localized_title(shared_state, imdb_id, 'en')
             if not local_title:
                 info(f"{hostname}: no title for IMDb {imdb_id}")
+                # todo
+                mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
                 return releases
             source_search = local_title
         else:
@@ -107,6 +110,7 @@ def he_search(shared_state, start_time, request_from, search_string="", mirror=N
         results = soup.find_all('div', class_='item')
     except Exception as e:
         info(f"{hostname}: search load error: {e}")
+        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
         return releases
 
     if not results:
@@ -199,4 +203,7 @@ def he_search(shared_state, start_time, request_from, search_string="", mirror=N
 
     elapsed = time.time() - start_time
     debug(f"Time taken: {elapsed:.2f}s ({hostname})")
+
+    if releases:
+        clear_hostname_issue(hostname)
     return releases

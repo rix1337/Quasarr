@@ -12,6 +12,7 @@ from urllib.parse import quote_plus
 import requests
 from bs4 import BeautifulSoup
 
+from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title
 from quasarr.providers.log import info, debug
 
@@ -156,8 +157,12 @@ def mb_feed(shared_state, start_time, request_from, mirror=None):
         releases = _parse_posts(soup, shared_state, password, mirror_filter=mirror)
     except Exception as e:
         info(f"Error loading {hostname.upper()} feed: {e}")
+        mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
         releases = []
     debug(f"Time taken: {time.time() - start_time:.2f}s ({hostname})")
+
+    if releases:
+        clear_hostname_issue(hostname)
     return releases
 
 
@@ -190,6 +195,10 @@ def mb_search(shared_state, start_time, request_from, search_string, mirror=None
         )
     except Exception as e:
         info(f"Error loading {hostname.upper()} search: {e}")
+        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
         releases = []
     debug(f"Time taken: {time.time() - start_time:.2f}s ({hostname})")
+
+    if releases:
+        clear_hostname_issue(hostname)
     return releases

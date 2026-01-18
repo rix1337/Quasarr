@@ -12,6 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 from requests.exceptions import Timeout, RequestException
 
+from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info, debug
 from quasarr.providers.utils import is_site_usable, is_flaresolverr_available
 
@@ -113,10 +114,12 @@ def create_and_persist_session(shared_state):
 
         if r.status_code != 200 or "invalid" in r.text.lower():
             info(f'Login failed: "{hostname}" - {r.status_code} - {r.text}')
+            mark_hostname_issue(hostname, "session", "Login failed")
             return None
         info(f'Login successful: "{hostname}"')
     else:
         info(f'Missing credentials for: "{hostname}" - skipping login')
+        mark_hostname_issue(hostname, "session", "Missing credentials")
         return None
 
     _persist_session_to_db(shared_state, sess)
@@ -130,6 +133,7 @@ def retrieve_and_validate_session(shared_state):
     # AL requires FlareSolverr - check availability
     if not is_flaresolverr_available(shared_state):
         info(f'"{hostname.upper()}" requires FlareSolverr which is not configured')
+        mark_hostname_issue(hostname, "session", "FlareSolverr required")
         return None
 
     db = shared_state.values["database"]("sessions")
@@ -292,6 +296,7 @@ def fetch_via_flaresolverr(shared_state,
         resp.raise_for_status()
     except requests.exceptions.RequestException as e:
         info(f"Could not reach FlareSolverr: {e}")
+        mark_hostname_issue(hostname, "session", "FlareSolverr required")
         return {
             "status_code": None,
             "headers": {},
