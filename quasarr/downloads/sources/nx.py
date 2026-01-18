@@ -11,6 +11,8 @@ from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info
 from quasarr.providers.sessions.nx import retrieve_and_validate_session
 
+hostname = "nx"
+
 
 def derive_mirror_from_url(url):
     """Extract hoster name from URL hostname."""

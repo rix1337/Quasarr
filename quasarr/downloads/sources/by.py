@@ -13,6 +13,8 @@ from bs4 import BeautifulSoup
 from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info, debug
 
+hostname = "by"
+
 
 def get_by_download_links(shared_state, url, mirror, title, password):
     """
@@ -71,14 +73,14 @@ def get_by_download_links(shared_state, url, mirror, title, password):
                 continue
 
             href = link["href"]
-            hostname = link.text.strip().replace(" ", "")
-            hostname_lower = hostname.lower()
+            link_hostname = link.text.strip().replace(" ", "")
+            hostname_lower = link_hostname.lower()
 
             if mirror_lower and mirror_lower not in hostname_lower:
-                debug(f'Skipping link from "{hostname}" (not the desired mirror "{mirror}")!')
+                debug(f'Skipping link from "{link_hostname}" (not the desired mirror "{mirror}")!')
                 continue
 
-            url_hosters.append((href, hostname))
+            url_hosters.append((href, link_hostname))
 
         def resolve_redirect(href_hostname):
             href, hostname = href_hostname
@@ -96,21 +98,21 @@ def get_by_download_links(shared_state, url, mirror, title, password):
 
         for pair in url_hosters:
             resolved_url = resolve_redirect(pair)
-            hostname = pair[1]
+            link_hostname = pair[1]
 
-            if not hostname:
-                hostname = urlparse(resolved_url).hostname
+            if not link_hostname:
+                link_hostname = urlparse(resolved_url).hostname
 
-            if resolved_url and hostname and hostname.startswith(("ddownload", "rapidgator", "turbobit", "filecrypt")):
-                if "rapidgator" in hostname:
-                    links.insert(0, [resolved_url, hostname])
+            if resolved_url and link_hostname and link_hostname.startswith(
+                    ("ddownload", "rapidgator", "turbobit", "filecrypt")):
+                if "rapidgator" in link_hostname:
+                    links.insert(0, [resolved_url, link_hostname])
                 else:
-                    links.append([resolved_url, hostname])
+                    links.append([resolved_url, link_hostname])
 
 
     except Exception as e:
         info(f"Error loading BY download links: {e}")
-        # todo
         mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
 
     return {"links": links}

@@ -12,6 +12,8 @@ from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info, debug
 from quasarr.search.sources.sf import parse_mirrors
 
+hostname = "sf"
+
 
 def is_last_section_integer(url):
     last_section = url.rstrip('/').split('/')[-1]
@@ -36,7 +38,6 @@ def resolve_sf_redirect(url, user_agent):
             info(f"SF blocked attempt to resolve {url}. Your IP may be banned. Try again later.")
     except Exception as e:
         info(f"Error fetching redirected URL for {url}: {e}")
-        # todo
         mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
     return None
 

@@ -6,6 +6,8 @@ from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info, debug
 from quasarr.providers.sessions.dd import create_and_persist_session, retrieve_and_validate_session
 
+hostname = "dd"
+
 
 def get_dd_download_links(shared_state, url, mirror, title, password):
     """
@@ -78,13 +80,11 @@ def get_dd_download_links(shared_state, url, mirror, title, password):
                     break
             except Exception as e:
                 info(f"Error parsing DD download: {e}")
-                # todo
                 mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
                 continue
 
     except Exception as e:
         info(f"Error loading DD download: {e}")
-        # todo
         mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
 
     return {"links": links}
