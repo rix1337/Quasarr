@@ -28,15 +28,6 @@ def setup_config(app, shared_state):
         from quasarr.providers.hostname_issues import get_all_hostname_issues
         return {"issues": get_all_hostname_issues()}
 
-    @app.delete("/api/hostname-issues/<shorthand>")
-    def clear_hostname_issue_api(shorthand):
-        response.content_type = 'application/json'
-        from quasarr.providers.hostname_issues import clear_hostname_issue
-        shorthand = shorthand.lower()
-        clear_hostname_issue(shorthand)
-        info(f'Hostname issue cleared for "{shorthand.upper()}"')
-        return {"success": True}
-
     @app.get('/hostnames')
     def hostnames_ui():
         message = """<p>

@@ -202,7 +202,7 @@ def hostname_form_html(shared_state, message, show_restart_button=False, show_sk
 
         if not current_value:
             status = "unset"
-            status_emoji = "🟡"
+            status_emoji = "⚫️"
             status_title = "Hostname not configured"
             status_message = "This hostname is not configured."
         elif is_login_skipped:
@@ -353,7 +353,7 @@ def hostname_form_html(shared_state, message, show_restart_button=False, show_sk
 <div class="url-import-section">
     <h3>📥 Import from URL</h3>
     <div class="url-import-row">
-        <input type="text" id="hostnamesUrl" placeholder="https://quasarr-host.name/ini?token=123..." value="{stored_url}" autocorrect="off" autocomplete="off" onfocus="onHostnameFieldFocus()">
+        <input type="url" id="hostnamesUrl" placeholder="https://quasarr-host.name/ini?token=123..." value="{stored_url}" autocorrect="off" autocomplete="off" onfocus="onHostnameFieldFocus()">
         <button type="button" class="btn-secondary" id="importBtn" onclick="importHostnames()">Import</button>
     </div>
     <div id="importStatus" class="import-status"></div>
@@ -574,7 +574,7 @@ def hostname_form_html(shared_state, message, show_restart_button=False, show_sk
         var emojiMap = {{
             ok: '🟢',
             error: '🔴',
-            unset: '🟡',
+            unset: '⚫️',
             skipped: '🟡'
         }};
     

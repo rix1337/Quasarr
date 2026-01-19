@@ -17,13 +17,13 @@ hostname = "dt"
 def derive_mirror_from_url(url):
     """Extract hoster name from URL hostname."""
     try:
-        host = urlparse(url).netloc.lower()
-        if host.startswith('www.'):
-            host = host[4:]
-        parts = host.split('.')
+        mirror_hostname = urlparse(url).netloc.lower()
+        if mirror_hostname.startswith('www.'):
+            mirror_hostname = mirror_hostname[4:]
+        parts = mirror_hostname.split('.')
         if len(parts) >= 2:
             return parts[-2]
-        return host
+        return mirror_hostname
     except:
         return "unknown"
 
