@@ -78,8 +78,9 @@ def dw_feed(shared_state, start_time, request_from, mirror=None):
     }
 
     try:
-        request = requests.get(url, headers=headers, timeout=10).content
-        feed = BeautifulSoup(request, "html.parser")
+        r = requests.get(url, headers=headers, timeout=30)
+        r.raise_for_status()
+        feed = BeautifulSoup(r.content, "html.parser")
         articles = feed.find_all('h4')
 
         for article in articles:
@@ -156,8 +157,9 @@ def dw_search(shared_state, start_time, request_from, search_string, mirror=None
     }
 
     try:
-        request = requests.get(url, headers=headers, timeout=10).content
-        search = BeautifulSoup(request, "html.parser")
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status()
+        search = BeautifulSoup(r.content, "html.parser")
         results = search.find_all('h4')
 
     except Exception as e:

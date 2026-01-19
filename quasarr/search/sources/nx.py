@@ -39,8 +39,9 @@ def nx_feed(shared_state, start_time, request_from, mirror=None):
     }
 
     try:
-        response = requests.get(url, headers, timeout=10)
-        feed = response.json()
+        r = requests.get(url, headers, timeout=30)
+        r.raise_for_status()
+        feed = r.json()
     except Exception as e:
         info(f"Error loading {hostname.upper()} feed: {e}")
         mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
@@ -134,8 +135,9 @@ def nx_search(shared_state, start_time, request_from, search_string, mirror=None
     }
 
     try:
-        response = requests.get(url, headers, timeout=10)
-        feed = response.json()
+        r = requests.get(url, headers, timeout=10)
+        r.raise_for_status()
+        feed = r.json()
     except Exception as e:
         info(f"Error loading {hostname.upper()} search: {e}")
         mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")

@@ -61,8 +61,9 @@ def sl_feed(shared_state, start_time, request_from, mirror=None):
     headers = {'User-Agent': shared_state.values['user_agent']}
 
     try:
-        xml_text = requests.get(url, headers=headers, timeout=10).text
-        root = ET.fromstring(xml_text)
+        r = requests.get(url, headers=headers, timeout=30)
+        r.raise_for_status()
+        root = ET.fromstring(r.text)
 
         for item in root.find('channel').findall('item'):
             try:

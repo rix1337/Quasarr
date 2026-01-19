@@ -183,11 +183,13 @@ def fetch_via_requests_session(shared_state, method: str, target_url: str, post_
 
     # Execute request
     if method.upper() == "GET":
-        resp = sess.get(target_url, params=get_params, timeout=timeout)
+        r = sess.get(target_url, params=get_params, timeout=timeout)
     else:  # POST
-        resp = sess.post(target_url, data=post_data, timeout=timeout)
+        r = sess.post(target_url, data=post_data, timeout=timeout)
+
+    r.raise_for_status()
 
     # Re-persist cookies, since the site might have modified them during the request
     _persist_session_to_db(shared_state, sess)
 
-    return resp
+    return r

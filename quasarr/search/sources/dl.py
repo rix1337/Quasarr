@@ -76,13 +76,10 @@ def dl_feed(shared_state, start_time, request_from, mirror=None):
             return releases
 
         forum_url = f'https://www.{host}/forums/{forum}/?order=post_date&direction=desc'
-        response = sess.get(forum_url, timeout=30)
+        r = sess.get(forum_url, timeout=30)
+        r.raise_for_status()
 
-        if response.status_code != 200:
-            info(f"{hostname}: Forum request failed with {response.status_code}")
-            return releases
-
-        soup = BeautifulSoup(response.content, 'html.parser')
+        soup = BeautifulSoup(r.content, 'html.parser')
 
         # Find all thread items in the forum
         items = soup.select('div.structItem.structItem--thread')

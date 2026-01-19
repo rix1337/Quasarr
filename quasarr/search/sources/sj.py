@@ -41,7 +41,8 @@ def sj_feed(shared_state, start_time, request_from, mirror=None):
     headers = {"User-Agent": shared_state.values["user_agent"]}
 
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=30)
+        r.raise_for_status()
         data = json.loads(r.content)
     except Exception as e:
         info(f"{hostname.upper()}: feed load error: {e}")
@@ -125,6 +126,7 @@ def sj_search(shared_state, start_time, request_from, search_string, mirror=None
 
     try:
         r = requests.get(search_url, headers=headers, params=params, timeout=10)
+        r.raise_for_status()
         soup = BeautifulSoup(r.content, "html.parser")
         results = soup.find_all("a", href=re.compile(r"^/serie/"))
     except Exception as e:
@@ -157,6 +159,7 @@ def sj_search(shared_state, start_time, request_from, search_string, mirror=None
             series_url = f"https://{sj_host}{result['href']}"
 
             r = requests.get(series_url, headers=headers, timeout=10)
+            r.raise_for_status()
             media_id_match = re.search(r'data-mediaid="([^"]+)"', r.text)
             if not media_id_match:
                 debug(f"{hostname.upper()}: no media id for {result_title}")
@@ -166,6 +169,7 @@ def sj_search(shared_state, start_time, request_from, search_string, mirror=None
             api_url = f"https://{sj_host}/api/media/{media_id}/releases"
 
             r = requests.get(api_url, headers=headers, timeout=10)
+            r.raise_for_status()
             data = json.loads(r.content)
 
             for season_block in data.values():

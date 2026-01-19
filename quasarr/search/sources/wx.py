@@ -40,13 +40,10 @@ def wx_feed(shared_state, start_time, request_from, mirror=None):
     }
 
     try:
-        response = requests.get(rss_url, headers=headers, timeout=10)
+        r = requests.get(rss_url, headers=headers, timeout=10)
+        r.raise_for_status()
 
-        if response.status_code != 200:
-            info(f"{hostname.upper()}: RSS feed returned status {response.status_code}")
-            return releases
-
-        soup = BeautifulSoup(response.content, 'html.parser')
+        soup = BeautifulSoup(r.content, 'html.parser')
         items = soup.find_all('entry')
 
         if not items:
@@ -187,13 +184,10 @@ def wx_search(shared_state, start_time, request_from, search_string, mirror=None
     debug(f"{hostname.upper()}: Searching: '{search_string}'")
 
     try:
-        response = requests.get(api_url, headers=headers, params=params, timeout=10)
+        r = requests.get(api_url, headers=headers, params=params, timeout=10)
+        r.raise_for_status()
 
-        if response.status_code != 200:
-            debug(f"{hostname.upper()}: Search API returned status {response.status_code}")
-            return releases
-
-        data = response.json()
+        data = r.json()
 
         if 'items' in data and 'data' in data['items']:
             items = data['items']['data']
@@ -219,13 +213,10 @@ def wx_search(shared_state, start_time, request_from, search_string, mirror=None
                 debug(f"{hostname.upper()}: Fetching details for UID: {uid}")
 
                 detail_url = f'https://api.{host}/start/d/{uid}'
-                detail_response = requests.get(detail_url, headers=headers, timeout=10)
+                detail_r = requests.get(detail_url, headers=headers, timeout=10)
+                detail_r.raise_for_status()
 
-                if detail_response.status_code != 200:
-                    debug(f"{hostname.upper()}: Detail API returned {detail_response.status_code} for {uid}")
-                    continue
-
-                detail_data = detail_response.json()
+                detail_data = detail_r.json()
 
                 if 'item' in detail_data:
                     detail_item = detail_data['item']

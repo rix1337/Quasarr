@@ -41,7 +41,8 @@ def dj_feed(shared_state, start_time, request_from, mirror=None):
     headers = {"User-Agent": shared_state.values["user_agent"]}
 
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=30)
+        r.raise_for_status()
         data = json.loads(r.content)
     except Exception as e:
         info(f"{hostname.upper()}: feed load error: {e}")
@@ -166,6 +167,7 @@ def dj_search(shared_state, start_time, request_from, search_string, mirror=None
             api_url = f"https://{sj_host}/api/media/{media_id}/releases"
 
             r = requests.get(api_url, headers=headers, timeout=10)
+            r.raise_for_status()
             data = json.loads(r.content)
 
             for season_block in data.values():

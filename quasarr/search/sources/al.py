@@ -137,7 +137,7 @@ def al_feed(shared_state, start_time, request_from, mirror=None):
         return releases
 
     try:
-        r = fetch_via_requests_session(shared_state, method="GET", target_url=f'https://www.{host}/', timeout=10)
+        r = fetch_via_requests_session(shared_state, method="GET", target_url=f'https://www.{host}/', timeout=30)
         r.raise_for_status()
     except Exception as e:
         info(f"{hostname}: could not fetch feed: {e}")

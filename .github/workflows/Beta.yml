@@ -81,3 +81,5 @@ jobs:
             ${{ env.GHCR_ENDPOINT }}:beta-amd64
             ${{ env.GHCR_ENDPOINT }}:${{ needs.version.outputs.version }}-beta-amd64
           build-args: VS=${{ needs.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

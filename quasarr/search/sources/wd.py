@@ -166,8 +166,9 @@ def wd_feed(shared_state, start_time, request_from, mirror=None):
     url = f"https://{wd}/{feed_type}"
     headers = {'User-Agent': shared_state.values["user_agent"]}
     try:
-        response = requests.get(url, headers=headers, timeout=10).content
-        soup = BeautifulSoup(response, "html.parser")
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.content, "html.parser")
         releases = _parse_rows(soup, shared_state, wd, password, mirror)
     except Exception as e:
         info(f"Error loading {hostname.upper()} feed: {e}")
@@ -198,8 +199,9 @@ def wd_search(shared_state, start_time, request_from, search_string, mirror=None
     headers = {'User-Agent': shared_state.values["user_agent"]}
 
     try:
-        response = requests.get(url, headers=headers, timeout=10).content
-        soup = BeautifulSoup(response, "html.parser")
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.content, "html.parser")
         releases = _parse_rows(
             soup, shared_state, wd, password, mirror,
             request_from=request_from,

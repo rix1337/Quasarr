@@ -164,8 +164,9 @@ def by_feed(shared_state, start_time, request_from, mirror=None):
     url = f"{base_url}/{feed_type}"
     headers = {'User-Agent': shared_state.values['user_agent']}
     try:
-        html_doc = requests.get(url, headers=headers, timeout=10).content
-        soup = BeautifulSoup(html_doc, 'html.parser')
+        r = requests.get(url, headers=headers, timeout=30)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.content, 'html.parser')
         releases = _parse_posts(soup, shared_state, base_url, password, request_from=request_from, mirror_filter=mirror)
     except Exception as e:
         info(f"Error loading {hostname.upper()} feed: {e}")
@@ -195,8 +196,9 @@ def by_search(shared_state, start_time, request_from, search_string, mirror=None
     url = f"{base_url}/?q={q}"
     headers = {'User-Agent': shared_state.values['user_agent']}
     try:
-        html_doc = requests.get(url, headers=headers, timeout=10).content
-        soup = BeautifulSoup(html_doc, 'html.parser')
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.content, 'html.parser')
         releases = _parse_posts(
             soup, shared_state, base_url, password, mirror_filter=mirror,
             is_search=True, request_from=request_from,

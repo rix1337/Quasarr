@@ -58,6 +58,13 @@ def dd_search(shared_state, start_time, request_from, search_string="", mirror=N
             return releases
         search_string = html.unescape(search_string)
 
+    if not search_string:
+        search_type = "feed"
+        timeout = 30
+    else:
+        search_type = "search"
+        timeout = 10
+
     qualities = [
         "disk-480p",
         "web-480p",
@@ -79,7 +86,9 @@ def dd_search(shared_state, start_time, request_from, search_string="", mirror=N
         for page in range(0, 100, 20):
             url = f'https://{dd}/index/search/keyword/{search_string}/qualities/{','.join(qualities)}/from/{page}/search'
 
-            releases_on_page = dd_session.get(url, headers=headers, timeout=10).json()
+            r = dd_session.get(url, headers=headers, timeout=timeout)
+            r.raise_for_status()
+            releases_on_page = r.json()
             if releases_on_page:
                 release_list.extend(releases_on_page)
 
@@ -130,8 +139,8 @@ def dd_search(shared_state, start_time, request_from, search_string="", mirror=N
                 continue
 
     except Exception as e:
-        info(f"Error loading {hostname.upper()} feed: {e}")
-        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
+        info(f"Error loading {hostname.upper()} {search_type}: {e}")
+        mark_hostname_issue(hostname, search_type, str(e) if "e" in dir() else "Error occurred")
 
     elapsed_time = time.time() - start_time
     debug(f"Time taken: {elapsed_time:.2f}s ({hostname})")
