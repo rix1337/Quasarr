@@ -197,17 +197,6 @@ def render_centered_html(inner_content, footer_content=""):
                 width: 100%;
                 max-width: fit-content;
             }
-            /* No padding on the sides for captcha view on small screens */
-            @media (max-width: 600px) {
-                body:has(iframe) .outer {
-                    padding-left: 0;
-                    padding-right: 0;
-                }
-                body:has(iframe) .inner {
-                    padding-left: 0;
-                    padding-right: 0;
-                }
-            }
             h2 {
                 margin-top: var(--spacing);
                 margin-bottom: 0.75rem;

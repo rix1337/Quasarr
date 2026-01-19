@@ -13,9 +13,11 @@ from quasarr.api.sponsors_helper import setup_sponsors_helper_routes
 from quasarr.api.statistics import setup_statistics
 from quasarr.providers import shared_state
 from quasarr.providers.auth import add_auth_routes, add_auth_hook, show_logout_link
+from quasarr.providers.hostname_issues import get_all_hostname_issues
 from quasarr.providers.html_templates import render_button, render_centered_html
 from quasarr.providers.web_server import Server
 from quasarr.storage.config import Config
+from quasarr.storage.sqlite_database import DataBase
 
 
 def get_api(shared_state_dict, shared_state_lock):
@@ -49,6 +51,50 @@ def get_api(shared_state_dict, shared_state_lock):
         except:
             jd_connected = False
 
+        # Calculate hostname status
+        hostnames_config = Config('Hostnames')
+        skip_login_db = DataBase("skip_login")
+        hostname_issues = get_all_hostname_issues()
+        login_required_sites = ['al', 'dd', 'dl', 'nx']
+
+        working_count = 0
+        total_count = 0
+
+        for site_key in shared_state.values["sites"]:
+            shorthand = site_key.lower()
+            current_value = hostnames_config.get(shorthand)
+
+            # Skip unset hostnames and skipped logins
+            if not current_value:
+                continue
+            if shorthand in login_required_sites and skip_login_db.retrieve(shorthand):
+                continue
+
+            # This hostname counts toward total
+            total_count += 1
+
+            # Check if it's working (no issues)
+            if shorthand not in hostname_issues:
+                working_count += 1
+
+        # Determine status
+        if total_count == 0:
+            hostname_status_class = 'error'
+            hostname_status_emoji = '⚫️'
+            hostname_status_text = 'No hostnames configured'
+        elif working_count == 0:
+            hostname_status_class = 'error'
+            hostname_status_emoji = '🔴'
+            hostname_status_text = f'0/{total_count} hostnames working'
+        elif working_count < total_count:
+            hostname_status_class = 'warning'
+            hostname_status_emoji = '🟡'
+            hostname_status_text = f'{working_count}/{total_count} hostnames working'
+        else:
+            hostname_status_class = 'success'
+            hostname_status_emoji = '🟢'
+            hostname_status_text = f'{working_count}/{total_count} hostnames working'
+
         # CAPTCHA banner
         captcha_hint = ""
         if protected:
@@ -66,11 +112,14 @@ def get_api(shared_state_dict, shared_state_lock):
             </div>
             """
 
-        # JDownloader status
-        jd_status = f"""
+        # Status bars
+        status_bars = f"""
             <div class="status-bar">
                 <span class="status-pill {'success' if jd_connected else 'error'}">
-                    {'✅' if jd_connected else '❌'} JDownloader {'Connected' if jd_connected else 'Disconnected'}
+                    {'✅' if jd_connected else '❌'} JDownloader {'connected' if jd_connected else 'disconnected'}
+                </span>
+                <span class="status-pill {hostname_status_class}">
+                    {hostname_status_emoji} {hostname_status_text}
                 </span>
             </div>
         """
@@ -78,7 +127,7 @@ def get_api(shared_state_dict, shared_state_lock):
         info = f"""
         <h1><img src="{images.logo}" type="image/png" alt="Quasarr logo" class="logo"/>Quasarr</h1>
 
-        {jd_status}
+        {status_bars}
         {captcha_hint}
 
         <div class="quick-actions">
@@ -144,14 +193,27 @@ def get_api(shared_state_dict, shared_state_lock):
                 margin-bottom: 20px;
                 flex-wrap: wrap;
             }}
-            .status-item {{
+            .status-pill {{
                 font-size: 0.9em;
-                padding: 6px 12px;
-                border-radius: 20px;
-                background: var(--status-bg, #f5f5f5);
+                padding: 8px 16px;
+                border-radius: 0.5rem;
+                font-weight: 500;
             }}
-            .status-ok {{ color: var(--status-ok, #2e7d32); }}
-            .status-error {{ color: var(--status-error, #c62828); }}
+            .status-pill.success {{
+                background: var(--status-success-bg, #e8f5e9);
+                color: var(--status-success-color, #2e7d32);
+                border: 1px solid var(--status-success-border, #a5d6a7);
+            }}
+            .status-pill.warning {{
+                background: var(--status-warning-bg, #fff3e0);
+                color: var(--status-warning-color, #f57c00);
+                border: 1px solid var(--status-warning-border, #ffb74d);
+            }}
+            .status-pill.error {{
+                background: var(--status-error-bg, #ffebee);
+                color: var(--status-error-color, #c62828);
+                border: 1px solid var(--status-error-border, #ef9a9a);
+            }}
 
             .alert {{
                 display: flex;
@@ -294,9 +356,15 @@ def get_api(shared_state_dict, shared_state_lock):
             /* Dark mode */
             @media (prefers-color-scheme: dark) {{
                 :root {{
-                    --status-bg: #2d3748;
-                    --status-ok: #68d391;
-                    --status-error: #fc8181;
+                    --status-success-bg: #1b5e20;
+                    --status-success-color: #a5d6a7;
+                    --status-success-border: #2e7d32;
+                    --status-warning-bg: #3d3520;
+                    --status-warning-color: #ffb74d;
+                    --status-warning-border: #d69e2e;
+                    --status-error-bg: #b71c1c;
+                    --status-error-color: #ef9a9a;
+                    --status-error-border: #c62828;
                     --alert-warning-bg: #3d3520;
                     --alert-warning-border: #d69e2e;
                     --card-bg: #2d3748;
