@@ -33,6 +33,7 @@ def get_by_download_links(shared_state, url, mirror, title, password):
 
     try:
         resp = requests.get(url, headers=headers, timeout=10)
+        # todo raise for status everywhere
         page_content = resp.text
         soup = BeautifulSoup(page_content, "html.parser")
         frames = [iframe.get("src") for iframe in soup.find_all("iframe") if iframe.get("src")]
