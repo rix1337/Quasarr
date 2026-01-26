@@ -12,33 +12,49 @@ from urllib.parse import urlparse
 import requests
 from bottle import request, response
 
-from quasarr.providers.html_templates import render_form, render_button, render_fail
+from quasarr.providers.html_templates import render_button, render_fail, render_form
 from quasarr.providers.log import info
 from quasarr.providers.shared_state import extract_valid_hostname
-from quasarr.providers.utils import extract_kv_pairs, extract_allowed_keys, check_flaresolverr
+from quasarr.providers.utils import (
+    check_flaresolverr,
+    extract_allowed_keys,
+    extract_kv_pairs,
+)
 from quasarr.storage.config import Config
-from quasarr.storage.setup import hostname_form_html, save_hostnames, render_reconnect_success
+from quasarr.storage.setup import (
+    hostname_form_html,
+    render_reconnect_success,
+    save_hostnames,
+)
 from quasarr.storage.sqlite_database import DataBase
 
 
 def setup_config(app, shared_state):
     @app.get("/api/hostname-issues")
     def get_hostname_issues_api():
-        response.content_type = 'application/json'
+        response.content_type = "application/json"
         from quasarr.providers.hostname_issues import get_all_hostname_issues
+
         return {"issues": get_all_hostname_issues()}
 
-    @app.get('/hostnames')
+    @app.get("/hostnames")
     def hostnames_ui():
         message = """<p>
             At least one hostname must be kept.
         </p>"""
-        back_button = f'''<p>
+        back_button = f"""<p>
                         {render_button("Back", "secondary", {"onclick": "location.href='/'"})}
-                    </p>'''
-        return render_form("Hostnames",
-                           hostname_form_html(shared_state, message, show_restart_button=True,
-                                              show_skip_management=True) + back_button)
+                    </p>"""
+        return render_form(
+            "Hostnames",
+            hostname_form_html(
+                shared_state,
+                message,
+                show_restart_button=True,
+                show_skip_management=True,
+            )
+            + back_button,
+        )
 
     @app.post("/api/hostnames")
     def hostnames_api():
@@ -47,10 +63,10 @@ def setup_config(app, shared_state):
     @app.post("/api/hostnames/import-url")
     def import_hostnames_from_url():
         """Fetch URL and parse hostnames, return JSON for JS to populate fields."""
-        response.content_type = 'application/json'
+        response.content_type = "application/json"
         try:
             data = request.json
-            url = data.get('url', '').strip()
+            url = data.get("url", "").strip()
 
             if not url:
                 return {"success": False, "error": "No URL provided"}
@@ -67,33 +83,44 @@ def setup_config(app, shared_state):
                 content = resp.text
             except requests.RequestException as e:
                 info(f"Failed to fetch hostnames URL: {e}")
-                return {"success": False, "error": "Failed to fetch URL. Check the console log for details."}
+                return {
+                    "success": False,
+                    "error": "Failed to fetch URL. Check the console log for details.",
+                }
 
             # Parse hostnames
-            allowed_keys = extract_allowed_keys(Config._DEFAULT_CONFIG, 'Hostnames')
+            allowed_keys = extract_allowed_keys(Config._DEFAULT_CONFIG, "Hostnames")
             results = extract_kv_pairs(content, allowed_keys)
 
             if not results:
-                return {"success": False, "error": "No hostnames found in the provided URL"}
+                return {
+                    "success": False,
+                    "error": "No hostnames found in the provided URL",
+                }
 
             # Validate each hostname
             valid_hostnames = {}
             invalid_hostnames = {}
             for shorthand, hostname in results.items():
                 domain_check = extract_valid_hostname(hostname, shorthand)
-                domain = domain_check.get('domain')
+                domain = domain_check.get("domain")
                 if domain:
                     valid_hostnames[shorthand] = domain
                 else:
-                    invalid_hostnames[shorthand] = domain_check.get('message', 'Invalid')
+                    invalid_hostnames[shorthand] = domain_check.get(
+                        "message", "Invalid"
+                    )
 
             if not valid_hostnames:
-                return {"success": False, "error": "No valid hostnames found in the provided URL"}
+                return {
+                    "success": False,
+                    "error": "No valid hostnames found in the provided URL",
+                }
 
             return {
                 "success": True,
                 "hostnames": valid_hostnames,
-                "errors": invalid_hostnames
+                "errors": invalid_hostnames,
             }
 
         except Exception as e:
@@ -102,9 +129,9 @@ def setup_config(app, shared_state):
     @app.get("/api/skip-login")
     def get_skip_login():
         """Return list of hostnames with skipped login."""
-        response.content_type = 'application/json'
+        response.content_type = "application/json"
         skip_db = DataBase("skip_login")
-        login_required_sites = ['al', 'dd', 'dl', 'nx']
+        login_required_sites = ["al", "dd", "dl", "nx"]
         skipped = []
         for site in login_required_sites:
             if skip_db.retrieve(site):
@@ -114,9 +141,9 @@ def setup_config(app, shared_state):
     @app.delete("/api/skip-login/<shorthand>")
     def clear_skip_login(shorthand):
         """Clear skip login preference for a hostname."""
-        response.content_type = 'application/json'
+        response.content_type = "application/json"
         shorthand = shorthand.lower()
-        login_required_sites = ['al', 'dd', 'dl', 'nx']
+        login_required_sites = ["al", "dd", "dl", "nx"]
         if shorthand not in login_required_sites:
             return {"success": False, "error": f"Invalid shorthand: {shorthand}"}
 
@@ -125,23 +152,23 @@ def setup_config(app, shared_state):
         info(f'Skip login preference cleared for "{shorthand.upper()}"')
         return {"success": True}
 
-    @app.get('/flaresolverr')
+    @app.get("/flaresolverr")
     def flaresolverr_ui():
         """Web UI page for configuring FlareSolverr."""
         skip_db = DataBase("skip_flaresolverr")
         is_skipped = skip_db.retrieve("skipped")
-        current_url = Config('FlareSolverr').get('url') or ""
+        current_url = Config("FlareSolverr").get("url") or ""
 
         skip_indicator = ""
         if is_skipped:
-            skip_indicator = '''
+            skip_indicator = """
             <div class="skip-indicator" style="margin-bottom:1rem; padding:0.75rem; background:var(--code-bg, #f8f9fa); border-radius:0.25rem; font-size:0.875rem;">
                 <span style="color:#dc3545;">⚠️ FlareSolverr setup was skipped</span>
                 <p style="margin:0.5rem 0 0 0; font-size:0.75rem; color:var(--secondary, #6c757d);">
                     Some sites (like AL) won't work until FlareSolverr is configured.
                 </p>
             </div>
-            '''
+            """
 
         form_content = f'''
         {skip_indicator}
@@ -151,7 +178,7 @@ def setup_config(app, shared_state):
         <input type="text" id="url" name="url" placeholder="http://192.168.0.1:8191/v1" value="{current_url}"><br>
         '''
 
-        form_html = f'''
+        form_html = f"""
         <form action="/api/flaresolverr" method="post" onsubmit="return handleSubmit(this)">
             {form_content}
             {render_button("Save", "primary", {"type": "submit", "id": "submitBtn"})}
@@ -245,13 +272,13 @@ def setup_config(app, shared_state):
             attempt();
         }}
         </script>
-        '''
+        """
         return render_form("FlareSolverr", form_html)
 
-    @app.post('/api/flaresolverr')
+    @app.post("/api/flaresolverr")
     def set_flaresolverr_url():
         """Save FlareSolverr URL from web UI."""
-        url = request.forms.get('url', '').strip()
+        url = request.forms.get("url", "").strip()
         config = Config("FlareSolverr")
 
         if not url:
@@ -262,14 +289,16 @@ def setup_config(app, shared_state):
 
         # Validate URL format
         if not re.search(r"/v\d+$", url):
-            return render_fail("FlareSolverr URL must end with /v1 (or similar version path).")
+            return render_fail(
+                "FlareSolverr URL must end with /v1 (or similar version path)."
+            )
 
         try:
             headers = {"Content-Type": "application/json"}
             data = {
                 "cmd": "request.get",
                 "url": "http://www.google.com/",
-                "maxTimeout": 30000
+                "maxTimeout": 30000,
             }
             resp = requests.post(url, headers=headers, json=data, timeout=30)
             if resp.status_code == 200:
@@ -285,46 +314,47 @@ def setup_config(app, shared_state):
                         shared_state.update("user_agent", solution_ua)
                     info(f'FlareSolverr URL configured: "{url}"')
                     return render_reconnect_success(
-                        "FlareSolverr URL saved successfully! A restart is recommended.")
+                        "FlareSolverr URL saved successfully! A restart is recommended."
+                    )
                 else:
-                    return render_fail(f"FlareSolverr returned unexpected status: {json_data.get('status')}")
+                    return render_fail(
+                        f"FlareSolverr returned unexpected status: {json_data.get('status')}"
+                    )
         except requests.RequestException:
             return render_fail(f"Could not reach FlareSolverr!")
 
-        return render_fail("Could not reach FlareSolverr at that URL (expected HTTP 200).")
+        return render_fail(
+            "Could not reach FlareSolverr at that URL (expected HTTP 200)."
+        )
 
     @app.get("/api/flaresolverr/status")
     def get_flaresolverr_status():
         """Return FlareSolverr configuration status."""
-        response.content_type = 'application/json'
+        response.content_type = "application/json"
         skip_db = DataBase("skip_flaresolverr")
         is_skipped = bool(skip_db.retrieve("skipped"))
-        current_url = Config('FlareSolverr').get('url') or ""
+        current_url = Config("FlareSolverr").get("url") or ""
 
         # Test connection if URL is set
         is_working = False
         if current_url and not is_skipped:
             is_working = check_flaresolverr(shared_state, current_url)
 
-        return {
-            "skipped": is_skipped,
-            "url": current_url,
-            "working": is_working
-        }
+        return {"skipped": is_skipped, "url": current_url, "working": is_working}
 
     @app.delete("/api/skip-flaresolverr")
     def clear_skip_flaresolverr():
         """Clear skip FlareSolverr preference."""
-        response.content_type = 'application/json'
+        response.content_type = "application/json"
         skip_db = DataBase("skip_flaresolverr")
         skip_db.delete("skipped")
-        info('Skip FlareSolverr preference cleared')
+        info("Skip FlareSolverr preference cleared")
         return {"success": True}
 
     @app.post("/api/restart")
     def restart_quasarr():
         """Restart Quasarr. In Docker with the restart loop, exit(0) triggers restart."""
-        response.content_type = 'application/json'
+        response.content_type = "application/json"
         info("Restart requested via web UI")
 
         def delayed_exit():

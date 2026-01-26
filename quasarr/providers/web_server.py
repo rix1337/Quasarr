@@ -3,8 +3,8 @@
 # Project by https://github.com/rix1337
 
 import time
-from socketserver import ThreadingMixIn, TCPServer
-from wsgiref.simple_server import WSGIServer, WSGIRequestHandler, make_server
+from socketserver import TCPServer, ThreadingMixIn
+from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
 temp_server_success = False
 
@@ -26,12 +26,17 @@ class NoLoggingWSGIRequestHandler(WSGIRequestHandler):
 
 
 class Server:
-    def __init__(self, wsgi_app, listen='127.0.0.1', port=8080):
+    def __init__(self, wsgi_app, listen="127.0.0.1", port=8080):
         self.wsgi_app = wsgi_app
         self.listen = listen
         self.port = port
-        self.server = make_server(self.listen, self.port, self.wsgi_app,
-                                  ThreadingWSGIServer, handler_class=NoLoggingWSGIRequestHandler)
+        self.server = make_server(
+            self.listen,
+            self.port,
+            self.wsgi_app,
+            ThreadingWSGIServer,
+            handler_class=NoLoggingWSGIRequestHandler,
+        )
 
     def serve_temporarily(self):
         global temp_server_success

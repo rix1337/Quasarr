@@ -62,7 +62,7 @@ def extract_kv_pairs(input_text, allowed_keys):
     """
     kv_pattern = re.compile(rf"^({'|'.join(map(re.escape, allowed_keys))})\s*=\s*(.*)$")
     kv_pairs = {}
-    debug = os.getenv('DEBUG')
+    debug = os.getenv("DEBUG")
 
     for line in input_text.splitlines():
         match = kv_pattern.match(line.strip())
@@ -73,7 +73,9 @@ def extract_kv_pairs(input_text, allowed_keys):
             pass
         else:
             if debug:
-                print(f"Skipping line because it does not contain any supported hostname: {line}")
+                print(
+                    f"Skipping line because it does not contain any supported hostname: {line}"
+                )
 
     return kv_pairs
 
@@ -81,10 +83,10 @@ def extract_kv_pairs(input_text, allowed_keys):
 def check_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(('10.255.255.255', 0))
+        s.connect(("10.255.255.255", 0))
         ip = s.getsockname()[0]
     except:
-        ip = '127.0.0.1'
+        ip = "127.0.0.1"
     finally:
         s.close()
     return ip
@@ -98,14 +100,12 @@ def check_flaresolverr(shared_state, flaresolverr_url):
 
     # Try sending a simple test request
     headers = {"Content-Type": "application/json"}
-    data = {
-        "cmd": "request.get",
-        "url": "http://www.google.com/",
-        "maxTimeout": 10000
-    }
+    data = {"cmd": "request.get", "url": "http://www.google.com/", "maxTimeout": 10000}
 
     try:
-        response = requests.post(flaresolverr_url, headers=headers, json=data, timeout=10)
+        response = requests.post(
+            flaresolverr_url, headers=headers, json=data, timeout=10
+        )
         response.raise_for_status()
         json_data = response.json()
 
@@ -132,7 +132,8 @@ def validate_address(address, name):
     colon_count = address.count(":")
     if colon_count < 1 or colon_count > 2:
         sys.exit(
-            f"Error: {name} '{address}' is invalid. It must contain 1 or 2 colons, but it has {colon_count}.")
+            f"Error: {name} '{address}' is invalid. It must contain 1 or 2 colons, but it has {colon_count}."
+        )
 
 
 def is_flaresolverr_available(shared_state):
@@ -147,7 +148,7 @@ def is_flaresolverr_available(shared_state):
         return False
 
     # Check if FlareSolverr URL is configured
-    flaresolverr_url = shared_state.values["config"]('FlareSolverr').get('url')
+    flaresolverr_url = shared_state.values["config"]("FlareSolverr").get("url")
     if not flaresolverr_url:
         return False
 
@@ -172,11 +173,11 @@ def is_site_usable(shared_state, shorthand):
     shorthand = shorthand.lower()
 
     # Check if hostname is set
-    hostname = shared_state.values["config"]('Hostnames').get(shorthand)
+    hostname = shared_state.values["config"]("Hostnames").get(shorthand)
     if not hostname:
         return False
 
-    login_required_sites = ['al', 'dd', 'dl', 'nx']
+    login_required_sites = ["al", "dd", "dl", "nx"]
     if shorthand not in login_required_sites:
         return True  # No login needed, hostname is enough
 
@@ -186,8 +187,8 @@ def is_site_usable(shared_state, shorthand):
 
     # Check for credentials
     config = shared_state.values["config"](shorthand.upper())
-    user = config.get('user')
-    password = config.get('password')
+    user = config.get("user")
+    password = config.get("password")
 
     return bool(user and password)
 
@@ -196,6 +197,7 @@ def is_site_usable(shared_state, shorthand):
 # LINK STATUS CHECKING
 # =============================================================================
 
+
 def generate_status_url(href, crypter_type):
     """
     Generate a status URL for crypters that support it.
@@ -203,14 +205,16 @@ def generate_status_url(href, crypter_type):
     """
     if crypter_type == "hide":
         # hide.cx links: https://hide.cx/folder/{UUID} or /container/{UUID} → https://hide.cx/state/{UUID}
-        match = re.search(r'hide\.cx/(?:folder/|container/)?([a-f0-9-]{36})', href, re.IGNORECASE)
+        match = re.search(
+            r"hide\.cx/(?:folder/|container/)?([a-f0-9-]{36})", href, re.IGNORECASE
+        )
         if match:
             uuid = match.group(1)
             return f"https://hide.cx/state/{uuid}"
 
     elif crypter_type == "tolink":
         # tolink links: https://tolink.to/f/{ID} → https://tolink.to/f/{ID}/s/status.png
-        match = re.search(r'tolink\.to/f/([a-zA-Z0-9]+)', href, re.IGNORECASE)
+        match = re.search(r"tolink\.to/f/([a-zA-Z0-9]+)", href, re.IGNORECASE)
         if match:
             link_id = match.group(1)
             return f"https://tolink.to/f/{link_id}/s/status.png"
@@ -221,13 +225,13 @@ def generate_status_url(href, crypter_type):
 def detect_crypter_type(url):
     """Detect crypter type from URL for status checking."""
     url_lower = url.lower()
-    if 'hide.' in url_lower:
+    if "hide." in url_lower:
         return "hide"
-    elif 'tolink.' in url_lower:
+    elif "tolink." in url_lower:
         return "tolink"
-    elif 'filecrypt.' in url_lower:
+    elif "filecrypt." in url_lower:
         return "filecrypt"
-    elif 'keeplinks.' in url_lower:
+    elif "keeplinks." in url_lower:
         return "keeplinks"
     return None
 
@@ -240,9 +244,9 @@ def image_has_green(image_data):
     try:
         img = Image.open(BytesIO(image_data))
         # Convert palette images with transparency to RGBA first to avoid warning
-        if img.mode == 'P' and 'transparency' in img.info:
-            img = img.convert('RGBA')
-        img = img.convert('RGB')
+        if img.mode == "P" and "transparency" in img.info:
+            img = img.convert("RGBA")
+        img = img.convert("RGB")
 
         pixels = list(img.getdata())
 
@@ -297,9 +301,11 @@ def check_links_online_status(links_with_status, shared_state=None):
 
     batch_size = 10
     for i in range(0, len(status_urls), batch_size):
-        batch = status_urls[i:i + batch_size]
+        batch = status_urls[i : i + batch_size]
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
-            futures = [executor.submit(fetch_status_image, url, shared_state) for url in batch]
+            futures = [
+                executor.submit(fetch_status_image, url, shared_state) for url in batch
+            ]
             for future in as_completed(futures):
                 try:
                     status_url, image_data = future.result()

@@ -7,14 +7,19 @@ import os
 import re
 import time
 import traceback
-from datetime import datetime, timedelta, date
+import unicodedata
+from datetime import date, datetime, timedelta
 from urllib import parse
 
-import unicodedata
-
 import quasarr
-from quasarr.providers.log import info, debug
-from quasarr.providers.myjd_api import Myjdapi, TokenExpiredException, RequestTimeoutException, MYJDException, Jddevice
+from quasarr.providers.log import debug, info
+from quasarr.providers.myjd_api import (
+    Jddevice,
+    Myjdapi,
+    MYJDException,
+    RequestTimeoutException,
+    TokenExpiredException,
+)
 from quasarr.storage.config import Config
 from quasarr.storage.sqlite_database import DataBase
 
@@ -22,9 +27,13 @@ values = {}
 lock = None
 
 # regex to detect season/episode tags for series filtering during search
-SEASON_EP_REGEX = re.compile(r"(?i)(?:S\d{1,3}(?:E\d{1,3}(?:-\d{1,3})?)?|S\d{1,3}-\d{1,3})")
+SEASON_EP_REGEX = re.compile(
+    r"(?i)(?:S\d{1,3}(?:E\d{1,3}(?:-\d{1,3})?)?|S\d{1,3}-\d{1,3})"
+)
 # regex to filter out season/episode tags for movies
-MOVIE_REGEX = re.compile(r"^(?!.*(?:S\d{1,3}(?:E\d{1,3}(?:-\d{1,3})?)?|S\d{1,3}-\d{1,3})).*$", re.IGNORECASE)
+MOVIE_REGEX = re.compile(
+    r"^(?!.*(?:S\d{1,3}(?:E\d{1,3}(?:-\d{1,3})?)?|S\d{1,3}-\d{1,3})).*$", re.IGNORECASE
+)
 # List of known file hosters that should not be used as search/feed sites
 SHARE_HOSTERS = {
     "rapidgator",
@@ -74,18 +83,18 @@ def set_files(config_path):
 
 def generate_api_key():
     api_key = os.urandom(32).hex()
-    Config('API').save("key", api_key)
+    Config("API").save("key", api_key)
     info(f'API Key replaced with: "{api_key}!"')
     return api_key
 
 
 def extract_valid_hostname(url, shorthand):
     try:
-        if '://' not in url:
-            url = 'http://' + url
+        if "://" not in url:
+            url = "http://" + url
         result = parse.urlparse(url)
         domain = result.netloc
-        parts = domain.split('.')
+        parts = domain.split(".")
 
         if domain.startswith(".") or domain.endswith(".") or "." not in domain[1:-1]:
             message = f'Error: "{domain}" must contain a "." somewhere in the middle – you need to provide a full domain name!'
@@ -122,13 +131,17 @@ def connect_to_jd(jd, user, password, device_name):
         info("Error connecting to JDownloader: " + str(e).strip())
         return False
     if not device or not isinstance(device, (type, Jddevice)):
-        info(f'Device "{device_name}" not found. Available devices may differ or be offline.')
+        info(
+            f'Device "{device_name}" not found. Available devices may differ or be offline.'
+        )
         return False
     else:
         device.downloadcontroller.get_current_state()  # request forces direct_connection info update
         connection_info = device.check_direct_connection()
         if connection_info["status"]:
-            info(f'Direct connection to JDownloader established: "{connection_info['ip']}"')
+            info(
+                f'Direct connection to JDownloader established: "{connection_info["ip"]}"'
+            )
         else:
             info("Could not establish direct connection to JDownloader.")
         update("device", device)
@@ -137,42 +150,50 @@ def connect_to_jd(jd, user, password, device_name):
 
 def set_device(user, password, device):
     jd = Myjdapi()
-    jd.set_app_key('Quasarr')
+    jd.set_app_key("Quasarr")
     return connect_to_jd(jd, user, password, device)
 
 
 def set_device_from_config():
-    config = Config('JDownloader')
-    user = str(config.get('user'))
-    password = str(config.get('password'))
-    device = str(config.get('device'))
+    config = Config("JDownloader")
+    user = str(config.get("user"))
+    password = str(config.get("password"))
+    device = str(config.get("device"))
 
     update("device", device)
 
     if user and password and device:
         jd = Myjdapi()
-        jd.set_app_key('Quasarr')
+        jd.set_app_key("Quasarr")
         return connect_to_jd(jd, user, password, device)
     return False
 
 
 def check_device(device):
     try:
-        valid = isinstance(device,
-                           (type, Jddevice)) and device.downloadcontroller.get_current_state()
-    except (AttributeError, KeyError, TokenExpiredException, RequestTimeoutException, MYJDException):
+        valid = (
+            isinstance(device, (type, Jddevice))
+            and device.downloadcontroller.get_current_state()
+        )
+    except (
+        AttributeError,
+        KeyError,
+        TokenExpiredException,
+        RequestTimeoutException,
+        MYJDException,
+    ):
         valid = False
     return valid
 
 
 def connect_device():
-    config = Config('JDownloader')
-    user = str(config.get('user'))
-    password = str(config.get('password'))
-    device = str(config.get('device'))
+    config = Config("JDownloader")
+    user = str(config.get("user"))
+    password = str(config.get("password"))
+    device = str(config.get("device"))
 
     jd = Myjdapi()
-    jd.set_app_key('Quasarr')
+    jd.set_app_key("Quasarr")
 
     if user and password and device:
         try:
@@ -197,7 +218,13 @@ def get_device():
         try:
             if check_device(values["device"]):
                 break
-        except (AttributeError, KeyError, TokenExpiredException, RequestTimeoutException, MYJDException):
+        except (
+            AttributeError,
+            KeyError,
+            TokenExpiredException,
+            RequestTimeoutException,
+            MYJDException,
+        ):
             pass
         attempts += 1
 
@@ -208,19 +235,27 @@ def get_device():
             # First 10 failures: 3 seconds
             sleep_time = 3
             if attempts == 10:
-                info(f"WARNING: {attempts} consecutive JDownloader connection errors. Switching to 1-minute intervals.")
+                info(
+                    f"WARNING: {attempts} consecutive JDownloader connection errors. Switching to 1-minute intervals."
+                )
         elif attempts <= 15:
             # Next 5 failures (11-15): 1 minute
             sleep_time = 60
             if attempts % 10 == 0:
-                info(f"WARNING: {attempts} consecutive JDownloader connection errors. Please check your credentials!")
+                info(
+                    f"WARNING: {attempts} consecutive JDownloader connection errors. Please check your credentials!"
+                )
             if attempts == 15:
-                info(f"WARNING: Still failing after {attempts} attempts. Switching to 5-minute intervals.")
+                info(
+                    f"WARNING: Still failing after {attempts} attempts. Switching to 5-minute intervals."
+                )
         else:
             # After 15 failures: 5 minutes
             sleep_time = 300
             if attempts % 10 == 0:
-                info(f"WARNING: {attempts} consecutive JDownloader connection errors. Please check your credentials!")
+                info(
+                    f"WARNING: {attempts} consecutive JDownloader connection errors. Please check your credentials!"
+                )
 
         if connect_device():
             break
@@ -232,7 +267,7 @@ def get_device():
 
 def get_devices(user, password):
     jd = Myjdapi()
-    jd.set_app_key('Quasarr')
+    jd.set_app_key("Quasarr")
     try:
         jd.connect(user, password)
         jd.update_devices()
@@ -342,46 +377,96 @@ def set_device_settings():
             "storage": "cfg/org.jdownloader.extensions.extraction.ExtractionExtension",
             "setting": "BlacklistPatterns",
             "expected_values": [
-                '.*sample/.*',
-                '.*Sample/.*',
-                '.*\\.jpe?g',
-                '.*\\.idx',
-                '.*\\.sub',
-                '.*\\.srt',
-                '.*\\.nfo',
-                '.*\\.bat',
-                '.*\\.txt',
-                '.*\\.exe',
-                '.*\\.sfv'
-            ]
+                ".*sample/.*",
+                ".*Sample/.*",
+                ".*\\.jpe?g",
+                ".*\\.idx",
+                ".*\\.sub",
+                ".*\\.srt",
+                ".*\\.nfo",
+                ".*\\.bat",
+                ".*\\.txt",
+                ".*\\.exe",
+                ".*\\.sfv",
+            ],
         },
         {
             "namespace": "org.jdownloader.controlling.filter.LinkFilterSettings",
             "storage": "null",
             "setting": "FilterList",
             "expected_values": [
-                {'conditionFilter':
-                     {'conditions': [], 'enabled': False, 'matchType': 'IS_TRUE'}, 'created': 0,
-                 'enabled': True,
-                 'filenameFilter': {
-                     'enabled': True,
-                     'matchType': 'CONTAINS',
-                     'regex': '.*\\.(sfv|jpe?g|idx|srt|nfo|bat|txt|exe)',
-                     'useRegex': True
-                 },
-                 'filesizeFilter': {'enabled': False, 'from': 0, 'matchType': 'BETWEEN', 'to': 0},
-                 'filetypeFilter': {'archivesEnabled': False, 'audioFilesEnabled': False, 'customs': None,
-                                    'docFilesEnabled': False, 'enabled': False, 'exeFilesEnabled': False,
-                                    'hashEnabled': False, 'imagesEnabled': False, 'matchType': 'IS',
-                                    'subFilesEnabled': False, 'useRegex': False, 'videoFilesEnabled': False},
-                 'hosterURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
-                 'matchAlwaysFilter': {'enabled': False}, 'name': 'Quasarr_Block_Files',
-                 'onlineStatusFilter': {'enabled': False, 'matchType': 'IS', 'onlineStatus': 'OFFLINE'},
-                 'originFilter': {'enabled': False, 'matchType': 'IS', 'origins': []},
-                 'packagenameFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
-                 'pluginStatusFilter': {'enabled': False, 'matchType': 'IS', 'pluginStatus': 'PREMIUM'},
-                 'sourceURLFilter': {'enabled': False, 'matchType': 'CONTAINS', 'regex': '', 'useRegex': False},
-                 'testUrl': ''}]
+                {
+                    "conditionFilter": {
+                        "conditions": [],
+                        "enabled": False,
+                        "matchType": "IS_TRUE",
+                    },
+                    "created": 0,
+                    "enabled": True,
+                    "filenameFilter": {
+                        "enabled": True,
+                        "matchType": "CONTAINS",
+                        "regex": ".*\\.(sfv|jpe?g|idx|srt|nfo|bat|txt|exe)",
+                        "useRegex": True,
+                    },
+                    "filesizeFilter": {
+                        "enabled": False,
+                        "from": 0,
+                        "matchType": "BETWEEN",
+                        "to": 0,
+                    },
+                    "filetypeFilter": {
+                        "archivesEnabled": False,
+                        "audioFilesEnabled": False,
+                        "customs": None,
+                        "docFilesEnabled": False,
+                        "enabled": False,
+                        "exeFilesEnabled": False,
+                        "hashEnabled": False,
+                        "imagesEnabled": False,
+                        "matchType": "IS",
+                        "subFilesEnabled": False,
+                        "useRegex": False,
+                        "videoFilesEnabled": False,
+                    },
+                    "hosterURLFilter": {
+                        "enabled": False,
+                        "matchType": "CONTAINS",
+                        "regex": "",
+                        "useRegex": False,
+                    },
+                    "matchAlwaysFilter": {"enabled": False},
+                    "name": "Quasarr_Block_Files",
+                    "onlineStatusFilter": {
+                        "enabled": False,
+                        "matchType": "IS",
+                        "onlineStatus": "OFFLINE",
+                    },
+                    "originFilter": {
+                        "enabled": False,
+                        "matchType": "IS",
+                        "origins": [],
+                    },
+                    "packagenameFilter": {
+                        "enabled": False,
+                        "matchType": "CONTAINS",
+                        "regex": "",
+                        "useRegex": False,
+                    },
+                    "pluginStatusFilter": {
+                        "enabled": False,
+                        "matchType": "IS",
+                        "pluginStatus": "PREMIUM",
+                    },
+                    "sourceURLFilter": {
+                        "enabled": False,
+                        "matchType": "CONTAINS",
+                        "regex": "",
+                        "useRegex": False,
+                    },
+                    "testUrl": "",
+                }
+            ],
         },
     ]
 
@@ -418,7 +503,9 @@ def update_jdownloader():
                 is_collecting = device.linkgrabber.is_collecting()
                 update_available = device.update.update_available()
 
-                if (current_state.lower() == "idle") and (not is_collecting and update_available):
+                if (current_state.lower() == "idle") and (
+                    not is_collecting and update_available
+                ):
                     info("JDownloader update ready. Starting update...")
                     device.update.restart_and_update()
             except quasarr.providers.myjd_api.TokenExpiredException:
@@ -454,21 +541,23 @@ def get_db(table):
 
 
 def convert_to_mb(item):
-    size = float(item['size'])
-    unit = item['sizeunit'].upper()
+    size = float(item["size"])
+    unit = item["sizeunit"].upper()
 
-    if unit == 'B':
+    if unit == "B":
         size_b = size
-    elif unit == 'KB':
+    elif unit == "KB":
         size_b = size * 1024
-    elif unit == 'MB':
+    elif unit == "MB":
         size_b = size * 1024 * 1024
-    elif unit == 'GB':
+    elif unit == "GB":
         size_b = size * 1024 * 1024 * 1024
-    elif unit == 'TB':
+    elif unit == "TB":
         size_b = size * 1024 * 1024 * 1024 * 1024
     else:
-        raise ValueError(f"Unsupported size unit {item['name']} {item['size']} {item['sizeunit']}")
+        raise ValueError(
+            f"Unsupported size unit {item['name']} {item['size']} {item['sizeunit']}"
+        )
 
     size_mb = size_b / (1024 * 1024)
     return int(size_mb)
@@ -476,10 +565,13 @@ def convert_to_mb(item):
 
 def sanitize_title(title: str) -> str:
     umlaut_map = {
-        "Ä": "Ae", "ä": "ae",
-        "Ö": "Oe", "ö": "oe",
-        "Ü": "Ue", "ü": "ue",
-        "ß": "ss"
+        "Ä": "Ae",
+        "ä": "ae",
+        "Ö": "Oe",
+        "ö": "oe",
+        "Ü": "Ue",
+        "ü": "ue",
+        "ß": "ss",
     }
     for umlaut, replacement in umlaut_map.items():
         title = title.replace(umlaut, replacement)
@@ -503,32 +595,32 @@ def sanitize_string(s):
     s = s.lower()
 
     # Remove dots / pluses
-    s = s.replace('.', ' ')
-    s = s.replace('+', ' ')
-    s = s.replace('_', ' ')
-    s = s.replace('-', ' ')
+    s = s.replace(".", " ")
+    s = s.replace("+", " ")
+    s = s.replace("_", " ")
+    s = s.replace("-", " ")
 
     # Umlauts
-    s = re.sub(r'ä', 'ae', s)
-    s = re.sub(r'ö', 'oe', s)
-    s = re.sub(r'ü', 'ue', s)
-    s = re.sub(r'ß', 'ss', s)
+    s = re.sub(r"ä", "ae", s)
+    s = re.sub(r"ö", "oe", s)
+    s = re.sub(r"ü", "ue", s)
+    s = re.sub(r"ß", "ss", s)
 
     # Remove special characters
-    s = re.sub(r'[^a-zA-Z0-9\s]', '', s)
+    s = re.sub(r"[^a-zA-Z0-9\s]", "", s)
 
     # Remove season and episode patterns
-    s = re.sub(r'\bs\d{1,3}(e\d{1,3})?\b', '', s)
+    s = re.sub(r"\bs\d{1,3}(e\d{1,3})?\b", "", s)
 
     # Remove German and English articles
-    articles = r'\b(?:der|die|das|ein|eine|einer|eines|einem|einen|the|a|an|and)\b'
-    s = re.sub(articles, '', s, re.IGNORECASE)
+    articles = r"\b(?:der|die|das|ein|eine|einer|eines|einem|einen|the|a|an|and)\b"
+    s = re.sub(articles, "", s, re.IGNORECASE)
 
     # Replace obsolete titles
-    s = s.replace('navy cis', 'ncis')
+    s = s.replace("navy cis", "ncis")
 
     # Remove extra whitespace
-    s = ' '.join(s.split())
+    s = " ".join(s.split())
 
     return s
 
@@ -538,11 +630,15 @@ def search_string_in_sanitized_title(search_string, title):
     sanitized_title = sanitize_string(title)
 
     # Use word boundaries to ensure full word/phrase match
-    if re.search(rf'\b{re.escape(sanitized_search_string)}\b', sanitized_title):
-        debug(f"Matched search string: {sanitized_search_string} with title: {sanitized_title}")
+    if re.search(rf"\b{re.escape(sanitized_search_string)}\b", sanitized_title):
+        debug(
+            f"Matched search string: {sanitized_search_string} with title: {sanitized_title}"
+        )
         return True
     else:
-        debug(f"Skipping {title} as it doesn't match search string: {sanitized_search_string}")
+        debug(
+            f"Skipping {title} as it doesn't match search string: {sanitized_search_string}"
+        )
         return False
 
 
@@ -602,11 +698,13 @@ def match_in_title(title: str, season: int = None, episode: int = None) -> bool:
     return False
 
 
-def is_valid_release(title: str,
-                     request_from: str,
-                     search_string: str,
-                     season: int = None,
-                     episode: int = None) -> bool:
+def is_valid_release(
+    title: str,
+    request_from: str,
+    search_string: str,
+    season: int = None,
+    episode: int = None,
+) -> bool:
     """
     Return True if the given release title is valid for the given search parameters.
     - title: the release title to test
@@ -618,20 +716,24 @@ def is_valid_release(title: str,
     try:
         # Determine whether this is a movie or TV search
         rf = request_from.lower()
-        is_movie_search = 'radarr' in rf
-        is_tv_search = 'sonarr' in rf
-        is_docs_search = 'lazylibrarian' in rf
+        is_movie_search = "radarr" in rf
+        is_tv_search = "sonarr" in rf
+        is_docs_search = "lazylibrarian" in rf
 
         # if search string is NOT an imdb id check search_string_in_sanitized_title - if not match, its not valid
         if not is_docs_search and not is_imdb_id(search_string):
             if not search_string_in_sanitized_title(search_string, title):
-                debug(f"Skipping {title!r} as it doesn't match sanitized search string: {search_string!r}")
+                debug(
+                    f"Skipping {title!r} as it doesn't match sanitized search string: {search_string!r}"
+                )
                 return False
 
         # if it's a movie search, don't allow any TV show titles (check for NO season or episode tags in the title)
         if is_movie_search:
             if not MOVIE_REGEX.match(title):
-                debug(f"Skipping {title!r} as title doesn't match movie regex: {MOVIE_REGEX.pattern}")
+                debug(
+                    f"Skipping {title!r} as title doesn't match movie regex: {MOVIE_REGEX.pattern}"
+                )
                 return False
             return True
 
@@ -639,12 +741,16 @@ def is_valid_release(title: str,
         if is_tv_search:
             # must have some S/E tag present
             if not SEASON_EP_REGEX.search(title):
-                debug(f"Skipping {title!r} as title doesn't match TV show regex: {SEASON_EP_REGEX.pattern}")
+                debug(
+                    f"Skipping {title!r} as title doesn't match TV show regex: {SEASON_EP_REGEX.pattern}"
+                )
                 return False
             # if caller specified a season or episode, double‑check the match
             if season is not None or episode is not None:
                 if not match_in_title(title, season, episode):
-                    debug(f"Skipping {title!r} as it doesn't match season {season} and episode {episode}")
+                    debug(
+                        f"Skipping {title!r} as it doesn't match season {season} and episode {episode}"
+                    )
                     return False
             return True
 
@@ -652,7 +758,9 @@ def is_valid_release(title: str,
         if is_docs_search:
             # must NOT have any S/E tag present
             if SEASON_EP_REGEX.search(title):
-                debug(f"Skipping {title!r} as title matches TV show regex: {SEASON_EP_REGEX.pattern}")
+                debug(
+                    f"Skipping {title!r} as title matches TV show regex: {SEASON_EP_REGEX.pattern}"
+                )
                 return False
             return True
 
@@ -663,10 +771,12 @@ def is_valid_release(title: str,
     except Exception as e:
         # log exception message and short stack trace
         tb = traceback.format_exc()
-        debug(f"Exception in is_valid_release: {e!r}\n{tb}"
-              f"is_valid_release called with "
-              f"title={title!r}, request_from={request_from!r}, "
-              f"search_string={search_string!r}, season={season!r}, episode={episode!r}")
+        debug(
+            f"Exception in is_valid_release: {e!r}\n{tb}"
+            f"is_valid_release called with "
+            f"title={title!r}, request_from={request_from!r}, "
+            f"search_string={search_string!r}, season={season!r}, episode={episode!r}"
+        )
         return False
 
 
@@ -724,7 +834,7 @@ def normalize_magazine_title(title: str) -> str:
         r"\b(?:vom\s*)?(\d{1,2})\.?\s+([A-Za-zÄÖÜäöüß]+)\s+(\d{4})\b",
         repl_dmony,
         title,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     # 3) MonthName YYYY -> "YYYY MM"
@@ -740,7 +850,9 @@ def normalize_magazine_title(title: str) -> str:
                 pass
         return match.group(0)
 
-    title = re.sub(r"\b([A-Za-zÄÖÜäöüß]+)\s+(\d{4})\b", repl_mony, title, flags=re.IGNORECASE)
+    title = re.sub(
+        r"\b([A-Za-zÄÖÜäöüß]+)\s+(\d{4})\b", repl_mony, title, flags=re.IGNORECASE
+    )
 
     # 4) YYYYMMDD -> "YYYY MM DD"
     def repl_ymd(match):
@@ -753,7 +865,9 @@ def normalize_magazine_title(title: str) -> str:
         except ValueError:
             return match.group(0)
 
-    title = re.sub(r"\b(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\b", repl_ymd, title)
+    title = re.sub(
+        r"\b(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\b", repl_ymd, title
+    )
 
     # 5) YYYYMM -> "YYYY MM"
     def repl_ym(match):
@@ -798,7 +912,7 @@ def normalize_magazine_title(title: str) -> str:
         r"\b(?:No|Nr|Sonderheft)\s*(\d{1,2})\.(\d{4})\b",
         repl_nmy,
         title,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
 
     return title
@@ -808,11 +922,44 @@ def normalize_magazine_title(title: str) -> str:
 def _month_num(name: str) -> int:
     name = name.lower()
     mmap = {
-        'januar': 1, 'jan': 1, 'februar': 2, 'feb': 2, 'märz': 3, 'maerz': 3, 'mär': 3, 'mrz': 3, 'mae': 3,
-        'april': 4, 'apr': 4, 'mai': 5, 'juni': 6, 'jun': 6, 'juli': 7, 'jul': 7, 'august': 8, 'aug': 8,
-        'september': 9, 'sep': 9, 'oktober': 10, 'okt': 10, 'november': 11, 'nov': 11, 'dezember': 12, 'dez': 12,
-        'january': 1, 'february': 2, 'march': 3, 'april': 4, 'may': 5, 'june': 6, 'july': 7, 'august': 8,
-        'september': 9, 'october': 10, 'november': 11, 'december': 12
+        "januar": 1,
+        "jan": 1,
+        "februar": 2,
+        "feb": 2,
+        "märz": 3,
+        "maerz": 3,
+        "mär": 3,
+        "mrz": 3,
+        "mae": 3,
+        "april": 4,
+        "apr": 4,
+        "mai": 5,
+        "juni": 6,
+        "jun": 6,
+        "juli": 7,
+        "jul": 7,
+        "august": 8,
+        "aug": 8,
+        "september": 9,
+        "sep": 9,
+        "oktober": 10,
+        "okt": 10,
+        "november": 11,
+        "nov": 11,
+        "dezember": 12,
+        "dez": 12,
+        "january": 1,
+        "february": 2,
+        "march": 3,
+        "april": 4,
+        "may": 5,
+        "june": 6,
+        "july": 7,
+        "august": 8,
+        "september": 9,
+        "october": 10,
+        "november": 11,
+        "december": 12,
     }
     return mmap.get(name)
 
@@ -820,7 +967,11 @@ def _month_num(name: str) -> int:
 def get_recently_searched(shared_state, context, timeout_seconds):
     recently_searched = shared_state.values.get(context, {})
     threshold = datetime.now() - timedelta(seconds=timeout_seconds)
-    keys_to_remove = [key for key, value in recently_searched.items() if value["timestamp"] <= threshold]
+    keys_to_remove = [
+        key
+        for key, value in recently_searched.items()
+        if value["timestamp"] <= threshold
+    ]
     for key in keys_to_remove:
         debug(f"Removing '{key}' from recently searched memory ({context})...")
         del recently_searched[key]
@@ -831,19 +982,21 @@ def download_package(links, title, password, package_id):
     links = [sanitize_url(link) for link in links]
 
     device = get_device()
-    downloaded = device.linkgrabber.add_links(params=[
-        {
-            "autostart": False,
-            "links": json.dumps(links),
-            "packageName": title,
-            "extractPassword": password,
-            "priority": "DEFAULT",
-            "downloadPassword": password,
-            "destinationFolder": "Quasarr/<jd:packagename>",
-            "comment": package_id,
-            "overwritePackagizerRules": True
-        }
-    ])
+    downloaded = device.linkgrabber.add_links(
+        params=[
+            {
+                "autostart": False,
+                "links": json.dumps(links),
+                "packageName": title,
+                "extractPassword": password,
+                "priority": "DEFAULT",
+                "downloadPassword": password,
+                "destinationFolder": "Quasarr/<jd:packagename>",
+                "comment": package_id,
+                "overwritePackagizerRules": True,
+            }
+        ]
+    )
     return downloaded
 
 
@@ -852,12 +1005,10 @@ def sanitize_url(url: str) -> str:
     url = unicodedata.normalize("NFKC", url)
 
     # 1) real control characters (U+0000–U+001F, U+007F–U+009F)
-    _REAL_CTRL_RE = re.compile(r'[\u0000-\u001f\u007f-\u009f]')
+    _REAL_CTRL_RE = re.compile(r"[\u0000-\u001f\u007f-\u009f]")
 
     # 2) *literal* escaped unicode junk: \u0010, \x10, repeated variants
-    _ESCAPED_CTRL_RE = re.compile(
-        r'(?:\\u00[0-1][0-9a-fA-F]|\\x[0-1][0-9a-fA-F])'
-    )
+    _ESCAPED_CTRL_RE = re.compile(r"(?:\\u00[0-1][0-9a-fA-F]|\\x[0-1][0-9a-fA-F])")
 
     # remove literal escaped control sequences like "\u0010"
     url = _ESCAPED_CTRL_RE.sub("", url)

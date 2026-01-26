@@ -9,14 +9,14 @@ import requests
 from bs4 import BeautifulSoup
 
 from quasarr.providers.hostname_issues import mark_hostname_issue
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 from quasarr.search.sources.sf import parse_mirrors
 
 hostname = "sf"
 
 
 def is_last_section_integer(url):
-    last_section = url.rstrip('/').split('/')[-1]
+    last_section = url.rstrip("/").split("/")[-1]
     if last_section.isdigit() and len(last_section) <= 3:
         return int(last_section)
     return None
@@ -25,7 +25,9 @@ def is_last_section_integer(url):
 def resolve_sf_redirect(url, user_agent):
     """Follow redirects and return final URL or None if 404."""
     try:
-        r = requests.get(url, allow_redirects=True, timeout=10, headers={'User-Agent': user_agent})
+        r = requests.get(
+            url, allow_redirects=True, timeout=10, headers={"User-Agent": user_agent}
+        )
         r.raise_for_status()
         if r.history:
             for resp in r.history:
@@ -35,10 +37,14 @@ def resolve_sf_redirect(url, user_agent):
                 return None
             return r.url
         else:
-            info(f"SF blocked attempt to resolve {url}. Your IP may be banned. Try again later.")
+            info(
+                f"SF blocked attempt to resolve {url}. Your IP may be banned. Try again later."
+            )
     except Exception as e:
         info(f"Error fetching redirected URL for {url}: {e}")
-        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
+        mark_hostname_issue(
+            hostname, "download", str(e) if "e" in dir() else "Download error"
+        )
     return None
 
 
@@ -61,7 +67,7 @@ def get_sf_download_links(shared_state, url, mirror, title, password):
 
     # Handle series page URLs - need to find the right release
     release_pattern = re.compile(
-        r'''
+        r"""
           ^                                   
           (?P<name>.+?)\.                     
           S(?P<season>\d+)                    
@@ -72,8 +78,8 @@ def get_sf_download_links(shared_state, url, mirror, title, password):
           \..+?                               
           -(?P<group>\w+)                     
           $                                   
-        ''',
-        re.IGNORECASE | re.VERBOSE
+        """,
+        re.IGNORECASE | re.VERBOSE,
     )
 
     release_match = release_pattern.match(title)
@@ -87,7 +93,7 @@ def get_sf_download_links(shared_state, url, mirror, title, password):
         if not season:
             season = "ALL"
 
-        headers = {'User-Agent': user_agent}
+        headers = {"User-Agent": user_agent}
         r = requests.get(url, headers=headers, timeout=10)
         r.raise_for_status()
         series_page = r.text
@@ -103,16 +109,30 @@ def get_sf_download_links(shared_state, url, mirror, title, password):
                 debug(f"Found IMDb id: {imdb_id}")
 
         season_id = re.findall(r"initSeason\('(.+?)\',", series_page)[0]
-        epoch = str(datetime.now().timestamp()).replace('.', '')[:-3]
-        api_url = 'https://' + sf + '/api/v1/' + season_id + f'/season/{season}?lang=ALL&_=' + epoch
+        epoch = str(datetime.now().timestamp()).replace(".", "")[:-3]
+        api_url = (
+            "https://"
+            + sf
+            + "/api/v1/"
+            + season_id
+            + f"/season/{season}?lang=ALL&_="
+            + epoch
+        )
 
         r = requests.get(api_url, headers=headers, timeout=10)
         r.raise_for_status()
         try:
             data = r.json()["html"]
         except ValueError:
-            epoch = str(datetime.now().timestamp()).replace('.', '')[:-3]
-            api_url = 'https://' + sf + '/api/v1/' + season_id + f'/season/ALL?lang=ALL&_=' + epoch
+            epoch = str(datetime.now().timestamp()).replace(".", "")[:-3]
+            api_url = (
+                "https://"
+                + sf
+                + "/api/v1/"
+                + season_id
+                + f"/season/ALL?lang=ALL&_="
+                + epoch
+            )
             r = requests.get(api_url, headers=headers, timeout=10)
             r.raise_for_status()
             data = r.json()["html"]
@@ -126,8 +146,8 @@ def get_sf_download_links(shared_state, url, mirror, title, password):
                 name = details.find("small").text.strip()
 
                 result_pattern = re.compile(
-                    r'^(?P<name>.+?)\.S(?P<season>\d+)(?:E\d+)?\..*?(?P<resolution>\d+p)\..+?-(?P<group>[\w/-]+)$',
-                    re.IGNORECASE
+                    r"^(?P<name>.+?)\.S(?P<season>\d+)(?:E\d+)?\..*?(?P<resolution>\d+p)\..+?-(?P<group>[\w/-]+)$",
+                    re.IGNORECASE,
                 )
                 result_match = result_pattern.match(name)
 
@@ -136,12 +156,17 @@ def get_sf_download_links(shared_state, url, mirror, title, password):
 
                 result_parts = result_match.groupdict()
 
-                name_match = release_parts['name'].lower() == result_parts['name'].lower()
-                season_match = release_parts['season'] == result_parts['season']
-                resolution_match = release_parts['resolution'].lower() == result_parts['resolution'].lower()
+                name_match = (
+                    release_parts["name"].lower() == result_parts["name"].lower()
+                )
+                season_match = release_parts["season"] == result_parts["season"]
+                resolution_match = (
+                    release_parts["resolution"].lower()
+                    == result_parts["resolution"].lower()
+                )
 
-                result_groups = {g.lower() for g in result_parts['group'].split('/')}
-                release_groups = {g.lower() for g in release_parts['group'].split('/')}
+                result_groups = {g.lower() for g in result_parts["group"].split("/")}
+                release_groups = {g.lower() for g in release_parts["group"].split("/")}
                 group_match = not result_groups.isdisjoint(release_groups)
 
                 if name_match and season_match and resolution_match and group_match:

@@ -36,17 +36,15 @@ def is_cloudflare_challenge(html: str) -> bool:
     return False
 
 
-def update_session_via_flaresolverr(info,
-                                    shared_state,
-                                    sess,
-                                    target_url: str,
-                                    timeout: int = 60):
+def update_session_via_flaresolverr(
+    info, shared_state, sess, target_url: str, timeout: int = 60
+):
     # Check if FlareSolverr is available
     if not is_flaresolverr_available(shared_state):
         info("FlareSolverr is not configured. Cannot bypass Cloudflare protection.")
         return False
 
-    flaresolverr_url = shared_state.values["config"]('FlareSolverr').get('url')
+    flaresolverr_url = shared_state.values["config"]("FlareSolverr").get("url")
     if not flaresolverr_url:
         info("Cannot proceed without FlareSolverr. Please configure it in the web UI!")
         return False
@@ -61,10 +59,7 @@ def update_session_via_flaresolverr(info,
     fs_headers = {"Content-Type": "application/json"}
     try:
         resp = requests.post(
-            flaresolverr_url,
-            headers=fs_headers,
-            json=fs_payload,
-            timeout=timeout + 10
+            flaresolverr_url, headers=fs_headers, json=fs_payload, timeout=timeout + 10
         )
         resp.raise_for_status()
     except requests.exceptions.RequestException as e:
@@ -75,14 +70,16 @@ def update_session_via_flaresolverr(info,
             "json": None,
             "text": "",
             "cookies": [],
-            "error": f"FlareSolverr request failed: {e}"
+            "error": f"FlareSolverr request failed: {e}",
         }
     except Exception as e:
         raise RuntimeError(f"Could not reach FlareSolverr: {e}")
 
     fs_json = resp.json()
     if fs_json.get("status") != "ok" or "solution" not in fs_json:
-        raise RuntimeError(f"FlareSolverr did not return a valid solution: {fs_json.get('message', '<no message>')}")
+        raise RuntimeError(
+            f"FlareSolverr did not return a valid solution: {fs_json.get('message', '<no message>')}"
+        )
 
     solution = fs_json["solution"]
 
@@ -93,7 +90,7 @@ def update_session_via_flaresolverr(info,
             ck.get("name"),
             ck.get("value"),
             domain=ck.get("domain"),
-            path=ck.get("path", "/")
+            path=ck.get("path", "/"),
         )
     return {"session": sess, "user_agent": solution.get("userAgent", None)}
 
@@ -113,12 +110,18 @@ def ensure_session_cf_bypassed(info, shared_state, session, url, headers):
     if resp.status_code == 403 or is_cloudflare_challenge(resp.text):
         # Check if FlareSolverr is available before attempting bypass
         if not is_flaresolverr_available(shared_state):
-            info("Cloudflare protection detected but FlareSolverr is not configured. "
-                 "Please configure FlareSolverr in the web UI to access this site.")
+            info(
+                "Cloudflare protection detected but FlareSolverr is not configured. "
+                "Please configure FlareSolverr in the web UI to access this site."
+            )
             return None, None, None
 
-        info("Encountered Cloudflare protection. Solving challenge with FlareSolverr...")
-        flaresolverr_result = update_session_via_flaresolverr(info, shared_state, session, url)
+        info(
+            "Encountered Cloudflare protection. Solving challenge with FlareSolverr..."
+        )
+        flaresolverr_result = update_session_via_flaresolverr(
+            info, shared_state, session, url
+        )
         if not flaresolverr_result:
             info("FlareSolverr did not return a result.")
             return None, None, None
@@ -129,7 +132,7 @@ def ensure_session_cf_bypassed(info, shared_state, session, url, headers):
         if user_agent and user_agent != shared_state.values.get("user_agent"):
             info("Updating User-Agent from FlareSolverr solution: " + user_agent)
             shared_state.update("user_agent", user_agent)
-            headers = {'User-Agent': shared_state.values["user_agent"]}
+            headers = {"User-Agent": shared_state.values["user_agent"]}
 
         # re-fetch using the new session/headers
         try:
@@ -174,24 +177,22 @@ def flaresolverr_get(shared_state, url, timeout=60):
     """
     # Check if FlareSolverr is available
     if not is_flaresolverr_available(shared_state):
-        raise RuntimeError("FlareSolverr is not configured. Please configure it in the web UI.")
+        raise RuntimeError(
+            "FlareSolverr is not configured. Please configure it in the web UI."
+        )
 
-    flaresolverr_url = shared_state.values["config"]('FlareSolverr').get('url')
+    flaresolverr_url = shared_state.values["config"]("FlareSolverr").get("url")
     if not flaresolverr_url:
         raise RuntimeError("FlareSolverr URL not configured in shared_state.")
 
-    payload = {
-        "cmd": "request.get",
-        "url": url,
-        "maxTimeout": timeout * 1000
-    }
+    payload = {"cmd": "request.get", "url": url, "maxTimeout": timeout * 1000}
 
     try:
         resp = requests.post(
             flaresolverr_url,
             json=payload,
             headers={"Content-Type": "application/json"},
-            timeout=timeout + 10
+            timeout=timeout + 10,
         )
         resp.raise_for_status()
     except Exception as e:
@@ -216,8 +217,5 @@ def flaresolverr_get(shared_state, url, timeout=60):
         shared_state.update("user_agent", user_agent)
 
     return FlareSolverrResponse(
-        url=url,
-        status_code=status_code,
-        headers=fs_headers,
-        text=html
+        url=url, status_code=status_code, headers=fs_headers, text=html
     )

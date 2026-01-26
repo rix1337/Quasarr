@@ -8,8 +8,8 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
-from quasarr.providers.log import info, debug
+from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
+from quasarr.providers.log import debug, info
 
 hostname = "sl"
 supported_mirrors = ["nitroflare", "ddownload"]
@@ -20,7 +20,7 @@ def derive_mirror_from_host(host):
     for m in supported_mirrors:
         if host.startswith(m + "."):
             return m
-    return host.split('.')[0] if host else "unknown"
+    return host.split(".")[0] if host else "unknown"
 
 
 def get_sl_download_links(shared_state, url, mirror, title, password):
@@ -41,7 +41,9 @@ def get_sl_download_links(shared_state, url, mirror, title, password):
         entry = soup.find("div", class_="entry")
         if not entry:
             info(f"Could not find main content section for {title}")
-            mark_hostname_issue(hostname, "download", "Could not find main content section")
+            mark_hostname_issue(
+                hostname, "download", "Could not find main content section"
+            )
             return {"links": [], "imdb_id": None}
 
         imdb_id = None
@@ -66,7 +68,9 @@ def get_sl_download_links(shared_state, url, mirror, title, password):
             anchors = entry.find_all("a", href=True)
 
     except Exception as e:
-        info(f"SL site has been updated. Grabbing download links for {title} not possible! ({e})")
+        info(
+            f"SL site has been updated. Grabbing download links for {title} not possible! ({e})"
+        )
         mark_hostname_issue(hostname, "download", str(e))
         return {"links": [], "imdb_id": None}
 

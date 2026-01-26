@@ -3,16 +3,49 @@
 # Project by https://github.com/rix1337
 
 from quasarr.providers.log import debug
-from quasarr.providers.myjd_api import TokenExpiredException, RequestTimeoutException, MYJDException
+from quasarr.providers.myjd_api import (
+    MYJDException,
+    RequestTimeoutException,
+    TokenExpiredException,
+)
 
 # Known archive extensions for fallback detection
-ARCHIVE_EXTENSIONS = frozenset([
-    '.rar', '.zip', '.7z', '.tar', '.gz', '.bz2', '.xz',
-    '.001', '.002', '.003', '.004', '.005', '.006', '.007', '.008', '.009',
-    '.r00', '.r01', '.r02', '.r03', '.r04', '.r05', '.r06', '.r07', '.r08', '.r09',
-    '.part1.rar', '.part01.rar', '.part001.rar',
-    '.part2.rar', '.part02.rar', '.part002.rar',
-])
+ARCHIVE_EXTENSIONS = frozenset(
+    [
+        ".rar",
+        ".zip",
+        ".7z",
+        ".tar",
+        ".gz",
+        ".bz2",
+        ".xz",
+        ".001",
+        ".002",
+        ".003",
+        ".004",
+        ".005",
+        ".006",
+        ".007",
+        ".008",
+        ".009",
+        ".r00",
+        ".r01",
+        ".r02",
+        ".r03",
+        ".r04",
+        ".r05",
+        ".r06",
+        ".r07",
+        ".r08",
+        ".r09",
+        ".part1.rar",
+        ".part01.rar",
+        ".part001.rar",
+        ".part2.rar",
+        ".part02.rar",
+        ".part002.rar",
+    ]
+)
 
 
 class JDPackageCache:
@@ -43,8 +76,12 @@ class JDPackageCache:
 
     def get_stats(self):
         """Return cache statistics string."""
-        pkg_count = len(self._downloader_packages or []) + len(self._linkgrabber_packages or [])
-        link_count = len(self._downloader_links or []) + len(self._linkgrabber_links or [])
+        pkg_count = len(self._downloader_packages or []) + len(
+            self._linkgrabber_packages or []
+        )
+        link_count = len(self._downloader_links or []) + len(
+            self._linkgrabber_links or []
+        )
         return f"{self._api_calls} API calls | {pkg_count} packages, {link_count} links cached"
 
     @property
@@ -54,13 +91,17 @@ class JDPackageCache:
             self._api_calls += 1
             try:
                 self._linkgrabber_packages = self._device.linkgrabber.query_packages()
-                debug(f"JDPackageCache: Retrieved {len(self._linkgrabber_packages)} linkgrabber packages")
+                debug(
+                    f"JDPackageCache: Retrieved {len(self._linkgrabber_packages)} linkgrabber packages"
+                )
             except (TokenExpiredException, RequestTimeoutException, MYJDException) as e:
                 debug(f"JDPackageCache: Failed to fetch linkgrabber_packages: {e}")
                 self._linkgrabber_packages = []
         else:
             self._cache_hits += 1
-            debug(f"JDPackageCache: Using cached linkgrabber_packages ({len(self._linkgrabber_packages)} packages)")
+            debug(
+                f"JDPackageCache: Using cached linkgrabber_packages ({len(self._linkgrabber_packages)} packages)"
+            )
         return self._linkgrabber_packages
 
     @property
@@ -70,13 +111,17 @@ class JDPackageCache:
             self._api_calls += 1
             try:
                 self._linkgrabber_links = self._device.linkgrabber.query_links()
-                debug(f"JDPackageCache: Retrieved {len(self._linkgrabber_links)} linkgrabber links")
+                debug(
+                    f"JDPackageCache: Retrieved {len(self._linkgrabber_links)} linkgrabber links"
+                )
             except (TokenExpiredException, RequestTimeoutException, MYJDException) as e:
                 debug(f"JDPackageCache: Failed to fetch linkgrabber_links: {e}")
                 self._linkgrabber_links = []
         else:
             self._cache_hits += 1
-            debug(f"JDPackageCache: Using cached linkgrabber_links ({len(self._linkgrabber_links)} links)")
+            debug(
+                f"JDPackageCache: Using cached linkgrabber_links ({len(self._linkgrabber_links)} links)"
+            )
         return self._linkgrabber_links
 
     @property
@@ -86,13 +131,17 @@ class JDPackageCache:
             self._api_calls += 1
             try:
                 self._downloader_packages = self._device.downloads.query_packages()
-                debug(f"JDPackageCache: Retrieved {len(self._downloader_packages)} downloader packages")
+                debug(
+                    f"JDPackageCache: Retrieved {len(self._downloader_packages)} downloader packages"
+                )
             except (TokenExpiredException, RequestTimeoutException, MYJDException) as e:
                 debug(f"JDPackageCache: Failed to fetch downloader_packages: {e}")
                 self._downloader_packages = []
         else:
             self._cache_hits += 1
-            debug(f"JDPackageCache: Using cached downloader_packages ({len(self._downloader_packages)} packages)")
+            debug(
+                f"JDPackageCache: Using cached downloader_packages ({len(self._downloader_packages)} packages)"
+            )
         return self._downloader_packages
 
     @property
@@ -102,13 +151,17 @@ class JDPackageCache:
             self._api_calls += 1
             try:
                 self._downloader_links = self._device.downloads.query_links()
-                debug(f"JDPackageCache: Retrieved {len(self._downloader_links)} downloader links")
+                debug(
+                    f"JDPackageCache: Retrieved {len(self._downloader_links)} downloader links"
+                )
             except (TokenExpiredException, RequestTimeoutException, MYJDException) as e:
                 debug(f"JDPackageCache: Failed to fetch downloader_links: {e}")
                 self._downloader_links = []
         else:
             self._cache_hits += 1
-            debug(f"JDPackageCache: Using cached downloader_links ({len(self._downloader_links)} links)")
+            debug(
+                f"JDPackageCache: Using cached downloader_links ({len(self._downloader_links)} links)"
+            )
         return self._downloader_links
 
     @property
@@ -137,7 +190,8 @@ class JDPackageCache:
             for ext in ARCHIVE_EXTENSIONS:
                 if name_lower.endswith(ext):
                     debug(
-                        f"JDPackageCache: Found archive extension '{ext}' in file '{name}' for package {package_uuid}")
+                        f"JDPackageCache: Found archive extension '{ext}' in file '{name}' for package {package_uuid}"
+                    )
                     return True
         return False
 
@@ -153,16 +207,22 @@ class JDPackageCache:
         confirmed_archives = set()
 
         if not package_uuids:
-            debug("JDPackageCache: _bulk_detect_archives called with empty package_uuids")
+            debug(
+                "JDPackageCache: _bulk_detect_archives called with empty package_uuids"
+            )
             return confirmed_archives, True
 
         package_list = list(package_uuids)
-        debug(f"JDPackageCache: Bulk archive detection for {len(package_list)} packages")
+        debug(
+            f"JDPackageCache: Bulk archive detection for {len(package_list)} packages"
+        )
 
         try:
             self._api_calls += 1
             archive_infos = self._device.extraction.get_archive_info([], package_list)
-            debug(f"JDPackageCache: get_archive_info returned {len(archive_infos) if archive_infos else 0} results")
+            debug(
+                f"JDPackageCache: get_archive_info returned {len(archive_infos) if archive_infos else 0} results"
+            )
 
             if archive_infos:
                 for i, archive_info in enumerate(archive_infos):
@@ -171,20 +231,27 @@ class JDPackageCache:
                         # Try to get packageUUID from response
                         pkg_uuid = archive_info.get("packageUUID")
                         if pkg_uuid:
-                            debug(f"JDPackageCache: Confirmed archive via packageUUID: {pkg_uuid}")
+                            debug(
+                                f"JDPackageCache: Confirmed archive via packageUUID: {pkg_uuid}"
+                            )
                             confirmed_archives.add(pkg_uuid)
                         else:
                             # Log what fields ARE available for debugging
                             debug(
-                                f"JDPackageCache: archive_info has no packageUUID, available keys: {list(archive_info.keys())}")
+                                f"JDPackageCache: archive_info has no packageUUID, available keys: {list(archive_info.keys())}"
+                            )
                     else:
                         debug(f"JDPackageCache: archive_info[{i}] is empty/None")
 
-            debug(f"JDPackageCache: Bulk detection confirmed {len(confirmed_archives)} archives: {confirmed_archives}")
+            debug(
+                f"JDPackageCache: Bulk detection confirmed {len(confirmed_archives)} archives: {confirmed_archives}"
+            )
             return confirmed_archives, True
 
         except Exception as e:
-            debug(f"JDPackageCache: Bulk archive detection API FAILED: {type(e).__name__}: {e}")
+            debug(
+                f"JDPackageCache: Bulk archive detection API FAILED: {type(e).__name__}: {e}"
+            )
             return confirmed_archives, False
 
     def detect_all_archives(self, packages, links):
@@ -206,11 +273,17 @@ class JDPackageCache:
             return set()
 
         all_package_uuids = {p.get("uuid") for p in packages if p.get("uuid")}
-        debug(f"JDPackageCache: detect_all_archives for {len(all_package_uuids)} packages")
+        debug(
+            f"JDPackageCache: detect_all_archives for {len(all_package_uuids)} packages"
+        )
 
         # ONE bulk API call for all packages
-        confirmed_archives, api_succeeded = self._bulk_detect_archives(all_package_uuids)
-        debug(f"JDPackageCache: Bulk API succeeded={api_succeeded}, confirmed={len(confirmed_archives)} archives")
+        confirmed_archives, api_succeeded = self._bulk_detect_archives(
+            all_package_uuids
+        )
+        debug(
+            f"JDPackageCache: Bulk API succeeded={api_succeeded}, confirmed={len(confirmed_archives)} archives"
+        )
 
         # For packages NOT confirmed as archives, apply safety fallbacks
         unconfirmed = all_package_uuids - confirmed_archives
@@ -219,21 +292,28 @@ class JDPackageCache:
         for pkg_uuid in unconfirmed:
             # Fallback 1: Check file extensions
             if self._has_archive_extension(pkg_uuid, links):
-                debug(f"JDPackageCache: Package {pkg_uuid} confirmed as archive via extension fallback")
+                debug(
+                    f"JDPackageCache: Package {pkg_uuid} confirmed as archive via extension fallback"
+                )
                 confirmed_archives.add(pkg_uuid)
             # Fallback 2: If bulk API failed completely, assume archive (safe)
             elif not api_succeeded:
-                debug(f"JDPackageCache: SAFETY - Bulk API failed, assuming package {pkg_uuid} is archive")
+                debug(
+                    f"JDPackageCache: SAFETY - Bulk API failed, assuming package {pkg_uuid} is archive"
+                )
                 confirmed_archives.add(pkg_uuid)
             else:
-                debug(f"JDPackageCache: Package {pkg_uuid} confirmed as NON-archive (API worked, no extension match)")
+                debug(
+                    f"JDPackageCache: Package {pkg_uuid} confirmed as NON-archive (API worked, no extension match)"
+                )
 
         # Cache results for is_package_archive() lookups
         for pkg_uuid in all_package_uuids:
             self._archive_cache[pkg_uuid] = pkg_uuid in confirmed_archives
 
         debug(
-            f"JDPackageCache: Final archive detection: {len(confirmed_archives)}/{len(all_package_uuids)} packages are archives")
+            f"JDPackageCache: Final archive detection: {len(confirmed_archives)}/{len(all_package_uuids)} packages are archives"
+        )
         return confirmed_archives
 
     def is_package_archive(self, package_uuid, links=None):
@@ -253,10 +333,14 @@ class JDPackageCache:
         if package_uuid in self._archive_cache:
             self._cache_hits += 1
             cached = self._archive_cache[package_uuid]
-            debug(f"JDPackageCache: is_package_archive({package_uuid}) = {cached} (cached)")
+            debug(
+                f"JDPackageCache: is_package_archive({package_uuid}) = {cached} (cached)"
+            )
             return cached
 
-        debug(f"JDPackageCache: is_package_archive({package_uuid}) - cache miss, querying API")
+        debug(
+            f"JDPackageCache: is_package_archive({package_uuid}) - cache miss, querying API"
+        )
 
         # Single package lookup (fallback if detect_all_archives wasn't called)
         is_archive = None
@@ -271,19 +355,27 @@ class JDPackageCache:
             debug(f"JDPackageCache: API says is_archive = {is_archive}")
         except Exception as e:
             api_failed = True
-            debug(f"JDPackageCache: Single archive detection API FAILED for {package_uuid}: {type(e).__name__}: {e}")
+            debug(
+                f"JDPackageCache: Single archive detection API FAILED for {package_uuid}: {type(e).__name__}: {e}"
+            )
 
         # Fallback: check file extensions if API failed or returned False
         if (api_failed or not is_archive) and links:
             if self._has_archive_extension(package_uuid, links):
-                debug(f"JDPackageCache: Package {package_uuid} confirmed as archive via extension fallback")
+                debug(
+                    f"JDPackageCache: Package {package_uuid} confirmed as archive via extension fallback"
+                )
                 is_archive = True
 
         # SAFETY: If API failed and no extension detected, assume archive (conservative)
         if is_archive is None:
-            debug(f"JDPackageCache: SAFETY - Detection uncertain for {package_uuid}, assuming archive")
+            debug(
+                f"JDPackageCache: SAFETY - Detection uncertain for {package_uuid}, assuming archive"
+            )
             is_archive = True
 
         self._archive_cache[package_uuid] = is_archive
-        debug(f"JDPackageCache: is_package_archive({package_uuid}) = {is_archive} (final)")
+        debug(
+            f"JDPackageCache: is_package_archive({package_uuid}) = {is_archive} (final)"
+        )
         return is_archive

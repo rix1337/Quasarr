@@ -13,6 +13,7 @@ from datetime import datetime
 def _get_db(table_name):
     """Lazy import to avoid circular dependency."""
     from quasarr.storage.sqlite_database import DataBase
+
     return DataBase(table_name)
 
 
@@ -23,7 +24,7 @@ def mark_hostname_issue(shorthand, operation, error_message):
     issue_data = {
         "operation": operation,
         "error": str(error_message)[:500],
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
     }
 
     db.update_store(shorthand, json.dumps(issue_data))

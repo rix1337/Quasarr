@@ -14,12 +14,15 @@ from urllib.parse import quote_plus
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
+from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 
 hostname = "sl"
-supported_mirrors = ["nitroflare", "ddownload"]  # ignoring captcha-protected multiup/mirrorace for now
+supported_mirrors = [
+    "nitroflare",
+    "ddownload",
+]  # ignoring captcha-protected multiup/mirrorace for now
 
 
 def extract_size(text):
@@ -36,7 +39,7 @@ def parse_pubdate_to_iso(pubdate_str):
     """
     Parse an RFC-822 pubDate from RSS into an ISO8601 string with timezone.
     """
-    dt = datetime.datetime.strptime(pubdate_str, '%a, %d %b %Y %H:%M:%S %z')
+    dt = datetime.datetime.strptime(pubdate_str, "%a, %d %b %Y %H:%M:%S %z")
     return dt.isoformat()
 
 
@@ -54,29 +57,33 @@ def sl_feed(shared_state, start_time, request_from, mirror=None):
         feed_type = "tv-shows"
 
     if mirror and mirror not in supported_mirrors:
-        debug(f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported: {supported_mirrors}. Skipping!')
+        debug(
+            f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported: {supported_mirrors}. Skipping!'
+        )
         return releases
 
-    url = f'https://{sl}/{feed_type}/feed/'
-    headers = {'User-Agent': shared_state.values['user_agent']}
+    url = f"https://{sl}/{feed_type}/feed/"
+    headers = {"User-Agent": shared_state.values["user_agent"]}
 
     try:
         r = requests.get(url, headers=headers, timeout=30)
         r.raise_for_status()
         root = ET.fromstring(r.text)
 
-        for item in root.find('channel').findall('item'):
+        for item in root.find("channel").findall("item"):
             try:
-                title = item.findtext('title').strip()
-                if 'lazylibrarian' in request_from.lower():
+                title = item.findtext("title").strip()
+                if "lazylibrarian" in request_from.lower():
                     # lazylibrarian can only detect specific date formats / issue numbering for magazines
                     title = shared_state.normalize_magazine_title(title)
 
-                source = item.findtext('link').strip()
+                source = item.findtext("link").strip()
 
-                desc = item.findtext('description') or ''
+                desc = item.findtext("description") or ""
 
-                size_match = re.search(r"Size:\s*([\d\.]+\s*(?:GB|MB|KB|TB))", desc, re.IGNORECASE)
+                size_match = re.search(
+                    r"Size:\s*([\d\.]+\s*(?:GB|MB|KB|TB))", desc, re.IGNORECASE
+                )
                 if not size_match:
                     debug(f"Size not found in RSS item: {title}")
                     continue
@@ -85,39 +92,47 @@ def sl_feed(shared_state, start_time, request_from, mirror=None):
                 mb = shared_state.convert_to_mb(size_item)
                 size = mb * 1024 * 1024
 
-                pubdate = item.findtext('pubDate').strip()
+                pubdate = item.findtext("pubDate").strip()
                 published = parse_pubdate_to_iso(pubdate)
 
                 m = re.search(r"https?://www\.imdb\.com/title/(tt\d+)", desc)
                 imdb_id = m.group(1) if m else None
 
                 payload = urlsafe_b64encode(
-                    f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}|{hostname}".encode("utf-8")
+                    f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}|{hostname}".encode(
+                        "utf-8"
+                    )
                 ).decode("utf-8")
                 link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
 
-                releases.append({
-                    "details": {
-                        "title": title,
-                        "hostname": hostname.lower(),
-                        "imdb_id": imdb_id,
-                        "link": link,
-                        "mirror": mirror,
-                        "size": size,
-                        "date": published,
-                        "source": source
-                    },
-                    "type": "protected"
-                })
+                releases.append(
+                    {
+                        "details": {
+                            "title": title,
+                            "hostname": hostname.lower(),
+                            "imdb_id": imdb_id,
+                            "link": link,
+                            "mirror": mirror,
+                            "size": size,
+                            "date": published,
+                            "source": source,
+                        },
+                        "type": "protected",
+                    }
+                )
 
             except Exception as e:
                 info(f"Error parsing {hostname.upper()} feed item: {e}")
-                mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
+                mark_hostname_issue(
+                    hostname, "feed", str(e) if "e" in dir() else "Error occurred"
+                )
                 continue
 
     except Exception as e:
         info(f"Error loading {hostname.upper()} feed: {e}")
-        mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
+        mark_hostname_issue(
+            hostname, "feed", str(e) if "e" in dir() else "Error occurred"
+        )
 
     elapsed = time.time() - start_time
     debug(f"Time taken: {elapsed:.2f}s ({hostname})")
@@ -127,7 +142,15 @@ def sl_feed(shared_state, start_time, request_from, mirror=None):
     return releases
 
 
-def sl_search(shared_state, start_time, request_from, search_string, mirror=None, season=None, episode=None):
+def sl_search(
+    shared_state,
+    start_time,
+    request_from,
+    search_string,
+    mirror=None,
+    season=None,
+    episode=None,
+):
     releases = []
     sl = shared_state.values["config"]("Hostnames").get(hostname.lower())
     password = sl
@@ -140,13 +163,15 @@ def sl_search(shared_state, start_time, request_from, search_string, mirror=None
         feed_type = "tv-shows"
 
     if mirror and mirror not in supported_mirrors:
-        debug(f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported: {supported_mirrors}. Skipping!')
+        debug(
+            f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported: {supported_mirrors}. Skipping!'
+        )
         return releases
 
     try:
         imdb_id = shared_state.is_imdb_id(search_string)
         if imdb_id:
-            search_string = get_localized_title(shared_state, imdb_id, 'en') or ''
+            search_string = get_localized_title(shared_state, imdb_id, "en") or ""
             search_string = html.unescape(search_string)
             if not search_string:
                 info(f"Could not extract title from IMDb-ID {imdb_id}")
@@ -154,11 +179,11 @@ def sl_search(shared_state, start_time, request_from, search_string, mirror=None
 
         # Build the list of URLs to search. For tv-shows also search the "foreign" section.
         q = quote_plus(search_string)
-        urls = [f'https://{sl}/{feed_type}/?s={q}']
+        urls = [f"https://{sl}/{feed_type}/?s={q}"]
         if feed_type == "tv-shows":
-            urls.append(f'https://{sl}/foreign/?s={q}')
+            urls.append(f"https://{sl}/foreign/?s={q}")
 
-        headers = {"User-Agent": shared_state.values['user_agent']}
+        headers = {"User-Agent": shared_state.values["user_agent"]}
 
         # Fetch pages in parallel (so we don't double the slow site latency)
         def fetch(url):
@@ -169,8 +194,10 @@ def sl_search(shared_state, start_time, request_from, search_string, mirror=None
                 return r.text
             except Exception as e:
                 info(f"Error fetching {hostname} url {url}: {e}")
-                mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
-                return ''
+                mark_hostname_issue(
+                    hostname, "search", str(e) if "e" in dir() else "Error occurred"
+                )
+                return ""
 
         html_texts = []
         with ThreadPoolExecutor(max_workers=len(urls)) as tpe:
@@ -180,7 +207,9 @@ def sl_search(shared_state, start_time, request_from, search_string, mirror=None
                     html_texts.append(future.result())
                 except Exception as e:
                     info(f"Error fetching {hostname} search page: {e}")
-                    mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
+                    mark_hostname_issue(
+                        hostname, "search", str(e) if "e" in dir() else "Error occurred"
+                    )
 
         # Parse each result and collect unique releases (dedupe by source link)
         seen_sources = set()
@@ -188,70 +217,85 @@ def sl_search(shared_state, start_time, request_from, search_string, mirror=None
             if not html_text:
                 continue
             try:
-                soup = BeautifulSoup(html_text, 'html.parser')
-                posts = soup.find_all('div', class_=lambda c: c and c.startswith('post-'))
+                soup = BeautifulSoup(html_text, "html.parser")
+                posts = soup.find_all(
+                    "div", class_=lambda c: c and c.startswith("post-")
+                )
 
                 for post in posts:
                     try:
-                        a = post.find('h1').find('a')
+                        a = post.find("h1").find("a")
                         title = a.get_text(strip=True)
 
-                        if not shared_state.is_valid_release(title,
-                                                             request_from,
-                                                             search_string,
-                                                             season,
-                                                             episode):
+                        if not shared_state.is_valid_release(
+                            title, request_from, search_string, season, episode
+                        ):
                             continue
 
-                        if 'lazylibrarian' in request_from.lower():
+                        if "lazylibrarian" in request_from.lower():
                             title = shared_state.normalize_magazine_title(title)
 
-                        source = a['href']
+                        source = a["href"]
                         # dedupe
                         if source in seen_sources:
                             continue
                         seen_sources.add(source)
 
                         # Published date
-                        time_tag = post.find('span', {'class': 'localtime'})
+                        time_tag = post.find("span", {"class": "localtime"})
                         published = None
-                        if time_tag and time_tag.has_attr('data-lttime'):
-                            published = time_tag['data-lttime']
-                        published = published or datetime.datetime.utcnow().isoformat() + '+00:00'
+                        if time_tag and time_tag.has_attr("data-lttime"):
+                            published = time_tag["data-lttime"]
+                        published = (
+                            published
+                            or datetime.datetime.utcnow().isoformat() + "+00:00"
+                        )
 
                         size = 0
                         imdb_id = None
 
                         payload = urlsafe_b64encode(
-                            f"{title}|{source}|{mirror}|0|{password}|{imdb_id}|{hostname}".encode('utf-8')
-                        ).decode('utf-8')
+                            f"{title}|{source}|{mirror}|0|{password}|{imdb_id}|{hostname}".encode(
+                                "utf-8"
+                            )
+                        ).decode("utf-8")
                         link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
 
-                        releases.append({
-                            "details": {
-                                "title": title,
-                                "hostname": hostname.lower(),
-                                "imdb_id": imdb_id,
-                                "link": link,
-                                "mirror": mirror,
-                                "size": size,
-                                "date": published,
-                                "source": source
-                            },
-                            "type": "protected"
-                        })
+                        releases.append(
+                            {
+                                "details": {
+                                    "title": title,
+                                    "hostname": hostname.lower(),
+                                    "imdb_id": imdb_id,
+                                    "link": link,
+                                    "mirror": mirror,
+                                    "size": size,
+                                    "date": published,
+                                    "source": source,
+                                },
+                                "type": "protected",
+                            }
+                        )
                     except Exception as e:
                         info(f"Error parsing {hostname.upper()} search item: {e}")
-                        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
+                        mark_hostname_issue(
+                            hostname,
+                            "search",
+                            str(e) if "e" in dir() else "Error occurred",
+                        )
                         continue
             except Exception as e:
                 info(f"Error parsing {hostname.upper()} search HTML: {e}")
-                mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
+                mark_hostname_issue(
+                    hostname, "search", str(e) if "e" in dir() else "Error occurred"
+                )
                 continue
 
     except Exception as e:
         info(f"Error loading {hostname.upper()} search page: {e}")
-        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
+        mark_hostname_issue(
+            hostname, "search", str(e) if "e" in dir() else "Error occurred"
+        )
 
     elapsed = time.time() - start_time
     debug(f"Search time: {elapsed:.2f}s ({hostname})")

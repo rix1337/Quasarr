@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
+from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.log import info
 
 hostname = "dt"
@@ -18,9 +18,9 @@ def derive_mirror_from_url(url):
     """Extract hoster name from URL hostname."""
     try:
         mirror_hostname = urlparse(url).netloc.lower()
-        if mirror_hostname.startswith('www.'):
+        if mirror_hostname.startswith("www."):
             mirror_hostname = mirror_hostname[4:]
-        parts = mirror_hostname.split('.')
+        parts = mirror_hostname.split(".")
         if len(parts) >= 2:
             return parts[-2]
         return mirror_hostname
@@ -58,7 +58,9 @@ def get_dt_download_links(shared_state, url, mirror, title, password):
         anchors = body.find_all("a", href=True)
 
     except Exception as e:
-        info(f"DT site has been updated. Grabbing download links for {title} not possible! ({e})")
+        info(
+            f"DT site has been updated. Grabbing download links for {title} not possible! ({e})"
+        )
         mark_hostname_issue(hostname, "download", str(e))
         return None
 
@@ -87,7 +89,11 @@ def get_dt_download_links(shared_state, url, mirror, title, password):
             if u not in seen:
                 seen.add(u)
                 low = u.lower()
-                if low.startswith(("http://", "https://")) and "imdb.com" not in low and "?ref=" not in low:
+                if (
+                    low.startswith(("http://", "https://"))
+                    and "imdb.com" not in low
+                    and "?ref=" not in low
+                ):
                     if not mirror or mirror in u:
                         mirror_name = derive_mirror_from_url(u)
                         filtered.append([u, mirror_name])

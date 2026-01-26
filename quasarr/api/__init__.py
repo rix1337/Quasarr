@@ -12,9 +12,13 @@ from quasarr.api.packages import setup_packages_routes
 from quasarr.api.sponsors_helper import setup_sponsors_helper_routes
 from quasarr.api.statistics import setup_statistics
 from quasarr.providers import shared_state
-from quasarr.providers.auth import add_auth_routes, add_auth_hook, show_logout_link
+from quasarr.providers.auth import add_auth_hook, add_auth_routes, show_logout_link
 from quasarr.providers.hostname_issues import get_all_hostname_issues
-from quasarr.providers.html_templates import render_button, render_centered_html, render_success
+from quasarr.providers.html_templates import (
+    render_button,
+    render_centered_html,
+    render_success,
+)
 from quasarr.providers.web_server import Server
 from quasarr.storage.config import Config
 from quasarr.storage.sqlite_database import DataBase
@@ -27,10 +31,11 @@ def get_api(shared_state_dict, shared_state_lock):
 
     # Auth: routes must come first, then hook
     add_auth_routes(app)
-    add_auth_hook(app,
-                  whitelist_prefixes=['/api', '/api/', '/sponsors_helper/', '/download/'],
-                  whitelist_suffixes=['.user.js']
-                  )
+    add_auth_hook(
+        app,
+        whitelist_prefixes=["/api", "/api/", "/sponsors_helper/", "/download/"],
+        whitelist_suffixes=[".user.js"],
+    )
 
     setup_arr_routes(app)
     setup_captcha_routes(app)
@@ -39,10 +44,10 @@ def get_api(shared_state_dict, shared_state_lock):
     setup_sponsors_helper_routes(app)
     setup_packages_routes(app)
 
-    @app.get('/')
+    @app.get("/")
     def index():
         protected = shared_state.get_db("protected").retrieve_all_titles()
-        api_key = Config('API').get('key')
+        api_key = Config("API").get("key")
 
         # Get quick status summary
         try:
@@ -52,10 +57,10 @@ def get_api(shared_state_dict, shared_state_lock):
             jd_connected = False
 
         # Calculate hostname status
-        hostnames_config = Config('Hostnames')
+        hostnames_config = Config("Hostnames")
         skip_login_db = DataBase("skip_login")
         hostname_issues = get_all_hostname_issues()
-        login_required_sites = ['al', 'dd', 'dl', 'nx']
+        login_required_sites = ["al", "dd", "dl", "nx"]
 
         working_count = 0
         total_count = 0
@@ -81,26 +86,30 @@ def get_api(shared_state_dict, shared_state_lock):
 
         # Determine status
         if total_count == 0:
-            hostname_status_class = 'error'
-            hostname_status_emoji = '⚫️'
-            hostname_status_text = 'No hostnames configured'
+            hostname_status_class = "error"
+            hostname_status_emoji = "⚫️"
+            hostname_status_text = "No hostnames configured"
         elif working_count == 0:
-            hostname_status_class = 'error'
-            hostname_status_emoji = '🔴'
-            hostname_status_text = f'0/{total_count} hostnames operational'
+            hostname_status_class = "error"
+            hostname_status_emoji = "🔴"
+            hostname_status_text = f"0/{total_count} hostnames operational"
         elif working_count < total_count:
-            hostname_status_class = 'warning'
-            hostname_status_emoji = '🟡'
-            hostname_status_text = f'{working_count}/{total_count} hostnames operational'
+            hostname_status_class = "warning"
+            hostname_status_emoji = "🟡"
+            hostname_status_text = (
+                f"{working_count}/{total_count} hostnames operational"
+            )
         else:
-            hostname_status_class = 'success'
-            hostname_status_emoji = '🟢'
-            hostname_status_text = f'{working_count}/{total_count} hostnames operational'
+            hostname_status_class = "success"
+            hostname_status_emoji = "🟢"
+            hostname_status_text = (
+                f"{working_count}/{total_count} hostnames operational"
+            )
 
         # CAPTCHA banner
         captcha_hint = ""
         if protected:
-            plural = 's' if len(protected) > 1 else ''
+            plural = "s" if len(protected) > 1 else ""
             captcha_hint = f"""
             <div class="alert alert-warning">
                 <span class="alert-icon">🔒</span>
@@ -109,7 +118,7 @@ def get_api(shared_state_dict, shared_state_lock):
                     {"" if shared_state.values.get("helper_active") else '<br><a href="https://github.com/rix1337/Quasarr?tab=readme-ov-file#sponsorshelper" target="_blank">Sponsors get automated CAPTCHA solutions!</a>'}
                 </div>
                 <div class="alert-action">
-                    {render_button(f"Solve CAPTCHA{plural}", 'primary', {'onclick': "location.href='/captcha'"})}
+                    {render_button(f"Solve CAPTCHA{plural}", "primary", {"onclick": "location.href='/captcha'"})}
                 </div>
             </div>
             """
@@ -117,8 +126,8 @@ def get_api(shared_state_dict, shared_state_lock):
         # Status bars
         status_bars = f"""
             <div class="status-bar">
-                <span class="status-pill {'success' if jd_connected else 'error'}">
-                    {'✅' if jd_connected else '❌'} JDownloader {'connected' if jd_connected else 'disconnected'}
+                <span class="status-pill {"success" if jd_connected else "error"}">
+                    {"✅" if jd_connected else "❌"} JDownloader {"connected" if jd_connected else "disconnected"}
                 </span>
                 <span class="status-pill {hostname_status_class}">
                     {hostname_status_emoji} {hostname_status_text}
@@ -160,7 +169,7 @@ def get_api(shared_state_dict, shared_state_lock):
                     <div class="input-group">
                         <label>URL</label>
                         <div class="input-row">
-                            <input id="urlInput" type="text" readonly value="{shared_state.values['internal_address']}" />
+                            <input id="urlInput" type="text" readonly value="{shared_state.values["internal_address"]}" />
                             <button id="copyUrl" type="button">Copy</button>
                         </div>
                     </div>
@@ -471,12 +480,12 @@ def get_api(shared_state_dict, shared_state_lock):
         </script>
         """
         # Add logout link for form auth
-        logout_html = '<a href="/logout">Logout</a>' if show_logout_link() else ''
+        logout_html = '<a href="/logout">Logout</a>' if show_logout_link() else ""
         return render_centered_html(info, footer_content=logout_html)
 
-    @app.get('/regenerate-api-key')
+    @app.get("/regenerate-api-key")
     def regenerate_api_key():
         shared_state.generate_api_key()
-        return render_success(f'API Key replaced!', 5)
+        return render_success(f"API Key replaced!", 5)
 
-    Server(app, listen='0.0.0.0', port=shared_state.values["port"]).serve_forever()
+    Server(app, listen="0.0.0.0", port=shared_state.values["port"]).serve_forever()
