@@ -76,7 +76,7 @@ def newer_version_available():
 
 def create_version_file():
     version = get_version()
-    version_clean = re.sub(r'[^\d.]', '', version)
+    version_clean = re.sub(r"[^\d.]", "", version)
     if "a" in version:
         suffix = version.split("a")[1]
     else:
@@ -85,10 +85,24 @@ def create_version_file():
     version_info = [
         "VSVersionInfo(",
         "  ffi=FixedFileInfo(",
-        "    filevers=(" + str(int(version_split[0])) + ", " + str(int(version_split[1])) + ", " + str(
-            int(version_split[2])) + ", " + str(int(suffix)) + "),",
-        "    prodvers=(" + str(int(version_split[0])) + ", " + str(int(version_split[1])) + ", " + str(
-            int(version_split[2])) + ", " + str(int(suffix)) + "),",
+        "    filevers=("
+        + str(int(version_split[0]))
+        + ", "
+        + str(int(version_split[1]))
+        + ", "
+        + str(int(version_split[2]))
+        + ", "
+        + str(int(suffix))
+        + "),",
+        "    prodvers=("
+        + str(int(version_split[0]))
+        + ", "
+        + str(int(version_split[1]))
+        + ", "
+        + str(int(version_split[2]))
+        + ", "
+        + str(int(suffix))
+        + "),",
         "    mask=0x3f,",
         "    flags=0x0,",
         "    OS=0x4,",
@@ -103,24 +117,41 @@ def create_version_file():
         "        u'040704b0',",
         "        [StringStruct(u'CompanyName', u'RiX'),",
         "        StringStruct(u'FileDescription', u'Quasarr'),",
-        "        StringStruct(u'FileVersion', u'" + str(int(version_split[0])) + "." + str(
-            int(version_split[1])) + "." + str(int(version_split[2])) + "." + str(int(suffix)) + "'),",
+        "        StringStruct(u'FileVersion', u'"
+        + str(int(version_split[0]))
+        + "."
+        + str(int(version_split[1]))
+        + "."
+        + str(int(version_split[2]))
+        + "."
+        + str(int(suffix))
+        + "'),",
         "        StringStruct(u'InternalName', u'Quasarr'),",
         "        StringStruct(u'LegalCopyright', u'Copyright © RiX'),",
         "        StringStruct(u'OriginalFilename', u'Quasarr.exe'),",
         "        StringStruct(u'ProductName', u'Quasarr'),",
-        "        StringStruct(u'ProductVersion', u'" + str(int(version_split[0])) + "." + str(
-            int(version_split[1])) + "." + str(int(version_split[2])) + "." + str(int(suffix)) + "')])",
+        "        StringStruct(u'ProductVersion', u'"
+        + str(int(version_split[0]))
+        + "."
+        + str(int(version_split[1]))
+        + "."
+        + str(int(version_split[2]))
+        + "."
+        + str(int(suffix))
+        + "')])",
         "      ]),",
         "    VarFileInfo([VarStruct(u'Translation', [1031, 1200])])",
         "  ]",
-        ")"
+        ")",
     ]
-    print("\n".join(version_info), file=open('file_version_info.txt', 'w', encoding='utf-8'))
+    print(
+        "\n".join(version_info),
+        file=open("file_version_info.txt", "w", encoding="utf-8"),
+    )
 
 
-if __name__ == '__main__':
-    if len(sys.argv) > 1 and sys.argv[1] == '--create-version-file':
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--create-version-file":
         create_version_file()
     else:
         print(get_version())

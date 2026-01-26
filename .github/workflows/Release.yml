@@ -34,7 +34,6 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
       - name: Get Version
         id: version
         run: |
@@ -58,7 +57,6 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
       - name: Build wheel
         run: uv build
       - name: Generate artifact attestation
@@ -90,7 +88,6 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
 
       - name: Disable Windows Defender
         shell: powershell
@@ -252,7 +249,6 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
 
       - name: Publish to PyPI
         if: ${{ !inputs.skip_pypi }}
@@ -273,7 +269,11 @@ jobs:
           fi
       - name: Create Release Body
         run: |
-          echo "### Install / Update:" > release_body.md
+          echo "### Docker:" > release_body.md
+          echo "" >> release_body.md
+          echo "\`docker pull ${{ env.GHCR_ENDPOINT }}:latest\`" >> release_body.md
+          echo "" >> release_body.md
+          echo "### Python:" >> release_body.md
           echo "" >> release_body.md
           echo "\`uv tool upgrade quasarr\`" >> release_body.md
           echo "" >> release_body.md
@@ -282,8 +282,6 @@ jobs:
           echo "${{ steps.changelog.outputs.changelog }}" >> release_body.md
           echo "" >> release_body.md
           echo "[Attestation](https://github.com/${{ github.repository }}/attestations/${{ needs.build-wheel.outputs.attestation-id }})" >> release_body.md
-          echo "" >> release_body.md
-          echo "\`docker pull ${{ env.GHCR_ENDPOINT }}:latest\`" >> release_body.md
 
       - name: Create Release
         uses: ncipollo/release-action@v1
