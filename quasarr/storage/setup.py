@@ -15,13 +15,22 @@ import quasarr.providers.sessions.al
 import quasarr.providers.sessions.dd
 import quasarr.providers.sessions.dl
 import quasarr.providers.sessions.nx
-from quasarr.providers.auth import add_auth_routes, add_auth_hook
+from quasarr.providers.auth import add_auth_hook, add_auth_routes
 from quasarr.providers.hostname_issues import get_all_hostname_issues
-from quasarr.providers.html_templates import render_button, render_form, render_success, render_fail, \
-    render_centered_html
+from quasarr.providers.html_templates import (
+    render_button,
+    render_centered_html,
+    render_fail,
+    render_form,
+    render_success,
+)
 from quasarr.providers.log import info
 from quasarr.providers.shared_state import extract_valid_hostname
-from quasarr.providers.utils import extract_kv_pairs, extract_allowed_keys, FALLBACK_USER_AGENT
+from quasarr.providers.utils import (
+    FALLBACK_USER_AGENT,
+    extract_allowed_keys,
+    extract_kv_pairs,
+)
 from quasarr.providers.web_server import Server
 from quasarr.storage.config import Config
 from quasarr.storage.sqlite_database import DataBase
@@ -29,10 +38,13 @@ from quasarr.storage.sqlite_database import DataBase
 
 def render_reconnect_success(message, countdown_seconds=3):
     """Render a success page that waits, then polls until the server is back online."""
-    button_html = render_button(f"Continuing in {countdown_seconds}...", "secondary",
-                                {"id": "reconnectBtn", "disabled": "true"})
+    button_html = render_button(
+        f"Continuing in {countdown_seconds}...",
+        "secondary",
+        {"id": "reconnectBtn", "disabled": "true"},
+    )
 
-    script = f'''
+    script = f"""
         <script>
             var remaining = {countdown_seconds};
             var btn = document.getElementById('reconnectBtn');
@@ -72,7 +84,7 @@ def render_reconnect_success(message, countdown_seconds=3):
                 attempt();
             }}
         </script>
-    '''
+    """
 
     content = f'''<h1><img src="{images.logo}" type="image/png" alt="Quasarr logo" class="logo"/>Quasarr</h1>
     <h2>✅ Success</h2>
@@ -86,11 +98,11 @@ def render_reconnect_success(message, countdown_seconds=3):
 def add_no_cache_headers(app):
     """Add hooks to prevent browser caching of setup pages."""
 
-    @app.hook('after_request')
+    @app.hook("after_request")
     def set_no_cache():
-        response.set_header('Cache-Control', 'no-cache, no-store, must-revalidate')
-        response.set_header('Pragma', 'no-cache')
-        response.set_header('Expires', '0')
+        response.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        response.set_header("Pragma", "no-cache")
+        response.set_header("Expires", "0")
 
 
 def setup_auth(app):
@@ -106,7 +118,7 @@ def path_config(shared_state):
 
     current_path = os.path.dirname(os.path.abspath(sys.argv[0]))
 
-    @app.get('/')
+    @app.get("/")
     def config_form():
         config_form_html = f'''
             <form action="/api/config" method="post" onsubmit="return handleSubmit(this)">
@@ -125,8 +137,9 @@ def path_config(shared_state):
             }}
             </script>
             '''
-        return render_form("Press 'Save' to set desired path for configuration",
-                           config_form_html)
+        return render_form(
+            "Press 'Save' to set desired path for configuration", config_form_html
+        )
 
     def set_config_path(config_path):
         config_path_file = "Quasarr.conf"
@@ -135,7 +148,7 @@ def path_config(shared_state):
             config_path = current_path
 
         config_path = config_path.replace("\\", "/")
-        config_path = config_path[:-1] if config_path.endswith('/') else config_path
+        config_path = config_path[:-1] if config_path.endswith("/") else config_path
 
         if not os.path.exists(config_path):
             os.makedirs(config_path)
@@ -152,42 +165,54 @@ def path_config(shared_state):
         quasarr.providers.web_server.temp_server_success = True
         return render_reconnect_success(f'Config path set to: "{config_path}"')
 
-    info(f'Starting web server for config at: "{shared_state.values['internal_address']}".')
+    info(
+        f'Starting web server for config at: "{shared_state.values["internal_address"]}".'
+    )
     info("Please set desired config path there!")
     quasarr.providers.web_server.temp_server_success = False
-    return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
+    return Server(
+        app, listen="0.0.0.0", port=shared_state.values["port"]
+    ).serve_temporarily()
 
 
 def _escape_js_for_html_attr(s):
     """Escape a string for use inside a JS string literal within an HTML attribute."""
     if s is None:
         return ""
-    return str(s).replace("\\", "\\\\").replace("'", "\\'").replace('"', '&quot;').replace("\n", "\\n").replace("\r",
-                                                                                                                "")
+    return (
+        str(s)
+        .replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace('"', "&quot;")
+        .replace("\n", "\\n")
+        .replace("\r", "")
+    )
 
 
-def hostname_form_html(shared_state, message, show_restart_button=False, show_skip_management=False):
-    hostname_fields = '''
+def hostname_form_html(
+    shared_state, message, show_restart_button=False, show_skip_management=False
+):
+    hostname_fields = """
     <label for="{id}" onclick="showStatusDetail(\'{id}\', \'{label}\', \'{status}\', \'{error_details_for_modal}\', \'{timestamp}\', \'{operation}\', \'{url}\')" 
            style="cursor:pointer; display:inline-flex; align-items:center; gap:4px;" title="{status_title}">
         <span class="status-indicator" id="status-{id}" data-status="{status}">{status_emoji}</span>
         {label}
     </label>
     <input type="text" id="{id}" name="{id}" placeholder="example.com" autocorrect="off" autocomplete="off" value="{value}"><br>
-    '''
+    """
 
-    skip_indicator = '''
+    skip_indicator = """
     <div class="skip-indicator" id="skip-indicator-{id}" style="margin-top:-0.5rem; margin-bottom:0.75rem; padding:0.5rem; background:var(--code-bg, #f8f9fa); border-radius:0.25rem; font-size:0.875rem;">
         <span style="color:#dc3545;">⚠️ Login skipped</span>
         <button type="button" class="btn-subtle" style="margin-left:0.5rem; padding:0.25rem 0.5rem; font-size:0.75rem;" onclick="clearSkipLogin('{id}', this)">Clear &amp; require login</button>
     </div>
-    '''
+    """
 
     field_html = []
-    hostnames = Config('Hostnames')  # Load once outside the loop
+    hostnames = Config("Hostnames")  # Load once outside the loop
     skip_login_db = DataBase("skip_login")
     hostname_issues = get_all_hostname_issues()
-    login_required_sites = ['al', 'dd', 'dl', 'nx']
+    login_required_sites = ["al", "dd", "dl", "nx"]
 
     for label in shared_state.values["sites"]:
         field_id = label.lower()
@@ -195,14 +220,18 @@ def hostname_form_html(shared_state, message, show_restart_button=False, show_sk
         # Get the current value (if any and non-empty)
         current_value = hostnames.get(field_id)
         if not current_value:
-            current_value = ''  # Ensure it's empty if None or ""
+            current_value = ""  # Ensure it's empty if None or ""
 
         # Determine traffic light status
-        is_login_skipped = field_id in login_required_sites and skip_login_db.retrieve(field_id)
+        is_login_skipped = field_id in login_required_sites and skip_login_db.retrieve(
+            field_id
+        )
         issue = hostname_issues.get(field_id)
         timestamp = ""
         operation = ""
-        error_details_for_modal = ""  # New variable to hold the full error message for the modal
+        error_details_for_modal = (
+            ""  # New variable to hold the full error message for the modal
+        )
 
         if not current_value:
             status = "unset"
@@ -218,7 +247,9 @@ def hostname_form_html(shared_state, message, show_restart_button=False, show_sk
             status = "error"
             status_emoji = "🔴"
             operation = issue.get("operation", "unknown")
-            error_details_for_modal = issue.get("error", "Unknown error")  # Get the full error message
+            error_details_for_modal = issue.get(
+                "error", "Unknown error"
+            )  # Get the full error message
             timestamp = issue.get("timestamp", "")
             status_title = f"Error in {operation}"
         else:
@@ -227,18 +258,22 @@ def hostname_form_html(shared_state, message, show_restart_button=False, show_sk
             status_title = "Working normally"
             error_details_for_modal = "Configured and working normally."
 
-        field_html.append(hostname_fields.format(
-            id=field_id,
-            label=_escape_js_for_html_attr(label),
-            value=current_value,
-            status=status,
-            status_emoji=status_emoji,
-            status_title=status_title,
-            error_details_for_modal=_escape_js_for_html_attr(error_details_for_modal),
-            timestamp=timestamp,
-            operation=_escape_js_for_html_attr(operation),
-            url=_escape_js_for_html_attr(current_value)
-        ))
+        field_html.append(
+            hostname_fields.format(
+                id=field_id,
+                label=_escape_js_for_html_attr(label),
+                value=current_value,
+                status=status,
+                status_emoji=status_emoji,
+                status_title=status_title,
+                error_details_for_modal=_escape_js_for_html_attr(
+                    error_details_for_modal
+                ),
+                timestamp=timestamp,
+                operation=_escape_js_for_html_attr(operation),
+                url=_escape_js_for_html_attr(current_value),
+            )
+        )
 
         # Add skip indicator for login-required sites if skip management is enabled
         if show_skip_management and field_id in login_required_sites:
@@ -246,20 +281,22 @@ def hostname_form_html(shared_state, message, show_restart_button=False, show_sk
                 field_html.append(skip_indicator.format(id=field_id))
 
     hostname_form_content = "".join(field_html)
-    button_html = render_button("Save", "primary", {"type": "submit", "id": "submitBtn"})
+    button_html = render_button(
+        "Save", "primary", {"type": "submit", "id": "submitBtn"}
+    )
 
     # Get stored hostnames URL if available
-    stored_url = Config('Settings').get("hostnames_url") or ""
+    stored_url = Config("Settings").get("hostnames_url") or ""
 
     # Build restart button HTML if needed
     restart_section = ""
     if show_restart_button:
-        restart_section = f'''
+        restart_section = f"""
         <div class="section-divider" style="margin-top:1.5rem; padding-top:1rem; border-top:1px solid var(--divider-color, #dee2e6);">
             <p style="font-size:0.875rem; color:var(--secondary, #6c757d);">Restart required after changing login-required hostnames (AL, DD, DL, NX)</p>
             {render_button("Restart Quasarr", "secondary", {"type": "button", "onclick": "confirmRestart()"})}
         </div>
-        '''
+        """
 
     template = """
 <style>
@@ -600,28 +637,28 @@ def hostname_form_html(shared_state, message, show_restart_button=False, show_sk
         hostname_form_content=hostname_form_content,
         button=button_html,
         stored_url=stored_url,
-        restart_section=restart_section
+        restart_section=restart_section,
     )
 
 
 def save_hostnames(shared_state, timeout=5, first_run=True):
-    hostnames = Config('Hostnames')
+    hostnames = Config("Hostnames")
 
     # Collect submitted hostnames, validate, and track errors
     valid_domains = {}
     errors = {}
 
-    for site_key in shared_state.values['sites']:
+    for site_key in shared_state.values["sites"]:
         shorthand = site_key.lower()
         raw_value = request.forms.get(shorthand)
         # treat missing or empty string as intentional clear, no validation
-        if raw_value is None or raw_value.strip() == '':
+        if raw_value is None or raw_value.strip() == "":
             continue
 
         # non-empty submission: must validate
         result = extract_valid_hostname(raw_value, shorthand)
-        domain = result.get('domain')
-        message = result.get('message', 'Error checking the hostname you provided!')
+        domain = result.get("domain")
+        message = result.get("message", "Error checking the hostname you provided!")
         if domain:
             valid_domains[site_key] = domain
         else:
@@ -631,47 +668,49 @@ def save_hostnames(shared_state, timeout=5, first_run=True):
     valid_domains = {k: d for k, d in valid_domains.items() if d}
     if not valid_domains:
         # report last or generic message
-        fail_msg = next(iter(errors.values()), 'No valid hostname provided!')
+        fail_msg = next(iter(errors.values()), "No valid hostname provided!")
         return render_fail(fail_msg)
 
     # Save: valid ones, explicit empty for those omitted cleanly, leave untouched if error
     changed_sites = []
-    for site_key in shared_state.values['sites']:
+    for site_key in shared_state.values["sites"]:
         shorthand = site_key.lower()
         raw_value = request.forms.get(shorthand)
         # determine if change applies
         if site_key in valid_domains:
             new_val = valid_domains[site_key]
-            old_val = hostnames.get(shorthand) or ''
+            old_val = hostnames.get(shorthand) or ""
             if old_val != new_val:
                 hostnames.save(shorthand, new_val)
                 changed_sites.append(shorthand)
         elif raw_value is None:
             # no submission: leave untouched
             continue
-        elif raw_value.strip() == '':
-            old_val = hostnames.get(shorthand) or ''
-            if old_val != '':
-                hostnames.save(shorthand, '')
+        elif raw_value.strip() == "":
+            old_val = hostnames.get(shorthand) or ""
+            if old_val != "":
+                hostnames.save(shorthand, "")
 
     # Handle hostnames URL storage
-    hostnames_url = request.forms.get('hostnames_url', '').strip()
+    hostnames_url = request.forms.get("hostnames_url", "").strip()
     settings_config = Config("Settings")
     settings_config.save("hostnames_url", hostnames_url)
 
     quasarr.providers.web_server.temp_server_success = True
 
     # Build success message, include any per-site errors
-    success_msg = 'At least one valid hostname set!'
+    success_msg = "At least one valid hostname set!"
     if errors:
-        optional_text = "<br>".join(f"{site}: {msg}" for site, msg in errors.items()) + "<br>"
+        optional_text = (
+            "<br>".join(f"{site}: {msg}" for site, msg in errors.items()) + "<br>"
+        )
     else:
         optional_text = "All provided hostnames are valid.<br>"
 
     if not first_run:
         # Append restart notice for specific sites that actually changed
         for site in changed_sites:
-            if site.lower() in {'al', 'dd', 'dl', 'nx'}:
+            if site.lower() in {"al", "dd", "dl", "nx"}:
                 optional_text += f"{site.upper()}: You must restart Quasarr and follow additional steps to start using this site.<br>"
 
     full_message = f"{success_msg}<br><small>{optional_text}</small>"
@@ -683,7 +722,7 @@ def hostnames_config(shared_state):
     add_no_cache_headers(app)
     setup_auth(app)
 
-    @app.get('/')
+    @app.get("/")
     def hostname_form():
         message = """<p>
           If you're having trouble setting this up, take a closer look at 
@@ -691,7 +730,9 @@ def hostnames_config(shared_state):
             the instructions.
           </a>
         </p>"""
-        return render_form("Set at least one valid hostname", hostname_form_html(shared_state, message))
+        return render_form(
+            "Set at least one valid hostname", hostname_form_html(shared_state, message)
+        )
 
     @app.post("/api/hostnames")
     def set_hostnames():
@@ -700,10 +741,10 @@ def hostnames_config(shared_state):
     @app.post("/api/hostnames/import-url")
     def import_hostnames_from_url():
         """Fetch URL and parse hostnames, return JSON for JS to populate fields."""
-        response.content_type = 'application/json'
+        response.content_type = "application/json"
         try:
             data = request.json
-            url = data.get('url', '').strip()
+            url = data.get("url", "").strip()
 
             if not url:
                 return {"success": False, "error": "No URL provided"}
@@ -720,33 +761,44 @@ def hostnames_config(shared_state):
                 content = resp.text
             except requests.RequestException as e:
                 info(f"Failed to fetch hostnames URL: {e}")
-                return {"success": False, "error": "Failed to fetch URL. Check the console log for details."}
+                return {
+                    "success": False,
+                    "error": "Failed to fetch URL. Check the console log for details.",
+                }
 
             # Parse hostnames
-            allowed_keys = extract_allowed_keys(Config._DEFAULT_CONFIG, 'Hostnames')
+            allowed_keys = extract_allowed_keys(Config._DEFAULT_CONFIG, "Hostnames")
             results = extract_kv_pairs(content, allowed_keys)
 
             if not results:
-                return {"success": False, "error": "No hostnames found in the provided URL"}
+                return {
+                    "success": False,
+                    "error": "No hostnames found in the provided URL",
+                }
 
             # Validate each hostname
             valid_hostnames = {}
             invalid_hostnames = {}
             for shorthand, hostname in results.items():
                 domain_check = extract_valid_hostname(hostname, shorthand)
-                domain = domain_check.get('domain')
+                domain = domain_check.get("domain")
                 if domain:
                     valid_hostnames[shorthand] = domain
                 else:
-                    invalid_hostnames[shorthand] = domain_check.get('message', 'Invalid')
+                    invalid_hostnames[shorthand] = domain_check.get(
+                        "message", "Invalid"
+                    )
 
             if not valid_hostnames:
-                return {"success": False, "error": "No valid hostnames found in the provided URL"}
+                return {
+                    "success": False,
+                    "error": "No valid hostnames found in the provided URL",
+                }
 
             return {
                 "success": True,
                 "hostnames": valid_hostnames,
-                "errors": invalid_hostnames
+                "errors": invalid_hostnames,
             }
 
         except Exception as e:
@@ -755,24 +807,28 @@ def hostnames_config(shared_state):
     @app.get("/api/skip-login")
     def get_skip_login():
         """Return list of hostnames with skipped login."""
-        response.content_type = 'application/json'
+        response.content_type = "application/json"
         skip_db = DataBase("skip_login")
-        login_required_sites = ['al', 'dd', 'dl', 'nx']
+        login_required_sites = ["al", "dd", "dl", "nx"]
         skipped = []
         for site in login_required_sites:
             if skip_db.retrieve(site):
                 skipped.append(site)
         return {"skipped": skipped}
 
-    @app.delete('/api/skip-login/<shorthand>')
+    @app.delete("/api/skip-login/<shorthand>")
     def clear_skip_login(shorthand):
         DataBase("skip_login").delete(shorthand)
         return {"success": True}
 
-    info(f'Hostnames not set. Starting web server for config at: "{shared_state.values['internal_address']}".')
+    info(
+        f'Hostnames not set. Starting web server for config at: "{shared_state.values["internal_address"]}".'
+    )
     info("Please set at least one valid hostname there!")
     quasarr.providers.web_server.temp_server_success = False
-    return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
+    return Server(
+        app, listen="0.0.0.0", port=shared_state.values["port"]
+    ).serve_temporarily()
 
 
 def hostname_credentials_config(shared_state, shorthand, domain):
@@ -782,18 +838,18 @@ def hostname_credentials_config(shared_state, shorthand, domain):
 
     shorthand = shorthand.upper()
 
-    @app.get('/')
+    @app.get("/")
     def credentials_form():
-        form_content = f'''
+        form_content = f"""
         <span>If required register account at: <a href="https://{domain}">{domain}</a>!</span><br><br>
         <label for="user">Username</label>
         <input type="text" id="user" name="user" placeholder="User" autocorrect="off"><br>
 
         <label for="password">Password</label>
         <input type="password" id="password" name="password" placeholder="Password"><br>
-        '''
+        """
 
-        form_html = f'''
+        form_html = f"""
         <style>
             .button-row {{
                 display: flex;
@@ -864,14 +920,15 @@ def hostname_credentials_config(shared_state, shorthand, domain):
             }});
         }}
         </script>
-        '''
+        """
 
         return render_form(f"Set User and Password for {shorthand}", form_html)
 
-    @app.get('/skip-success')
+    @app.get("/skip-success")
     def skip_success():
         return render_reconnect_success(
-            f"{shorthand} login skipped. You can configure credentials later in the web UI.")
+            f"{shorthand} login skipped. You can configure credentials later in the web UI."
+        )
 
     @app.post("/api/credentials/<sh>/skip")
     def skip_credentials(sh):
@@ -888,8 +945,8 @@ def hostname_credentials_config(shared_state, shorthand, domain):
         if quasarr.providers.web_server.temp_server_success:
             return render_success(f"{sh} credentials already being processed", 5)
 
-        user = request.forms.get('user')
-        password = request.forms.get('password')
+        user = request.forms.get("user")
+        password = request.forms.get("password")
         config = Config(shorthand)
 
         error_message = "User and Password wrong or empty!"
@@ -902,25 +959,43 @@ def hostname_credentials_config(shared_state, shorthand, domain):
             DataBase("skip_login").delete(sh.lower())
 
             if sh.lower() == "al":
-                error_message = ("User and Password wrong or empty.<br><br>"
-                                 "Or if you skipped Flaresolverr setup earlier, "
-                                 "you must chose to skip login for this site, "
-                                 "set up FlareSolverr in the UI and then restart Quasarr!")
-                if quasarr.providers.sessions.al.create_and_persist_session(shared_state):
+                error_message = (
+                    "User and Password wrong or empty.<br><br>"
+                    "Or if you skipped Flaresolverr setup earlier, "
+                    "you must chose to skip login for this site, "
+                    "set up FlareSolverr in the UI and then restart Quasarr!"
+                )
+                if quasarr.providers.sessions.al.create_and_persist_session(
+                    shared_state
+                ):
                     quasarr.providers.web_server.temp_server_success = True
-                    return render_reconnect_success(f"{sh} credentials set successfully")
+                    return render_reconnect_success(
+                        f"{sh} credentials set successfully"
+                    )
             elif sh.lower() == "dd":
-                if quasarr.providers.sessions.dd.create_and_persist_session(shared_state):
+                if quasarr.providers.sessions.dd.create_and_persist_session(
+                    shared_state
+                ):
                     quasarr.providers.web_server.temp_server_success = True
-                    return render_reconnect_success(f"{sh} credentials set successfully")
+                    return render_reconnect_success(
+                        f"{sh} credentials set successfully"
+                    )
             elif sh.lower() == "dl":
-                if quasarr.providers.sessions.dl.create_and_persist_session(shared_state):
+                if quasarr.providers.sessions.dl.create_and_persist_session(
+                    shared_state
+                ):
                     quasarr.providers.web_server.temp_server_success = True
-                    return render_reconnect_success(f"{sh} credentials set successfully")
+                    return render_reconnect_success(
+                        f"{sh} credentials set successfully"
+                    )
             elif sh.lower() == "nx":
-                if quasarr.providers.sessions.nx.create_and_persist_session(shared_state):
+                if quasarr.providers.sessions.nx.create_and_persist_session(
+                    shared_state
+                ):
                     quasarr.providers.web_server.temp_server_success = True
-                    return render_reconnect_success(f"{sh} credentials set successfully")
+                    return render_reconnect_success(
+                        f"{sh} credentials set successfully"
+                    )
             else:
                 quasarr.providers.web_server.temp_server_success = False
                 return render_fail(f"Unknown site shorthand! ({sh})")
@@ -931,11 +1006,14 @@ def hostname_credentials_config(shared_state, shorthand, domain):
 
     info(
         f'"{shorthand.lower()}" credentials required to access download links. '
-        f'Starting web server for config at: "{shared_state.values['internal_address']}".')
+        f'Starting web server for config at: "{shared_state.values["internal_address"]}".'
+    )
     info(f"If needed register here: 'https://{domain}'")
     info("Please set your credentials now, or skip to allow Quasarr to launch!")
     quasarr.providers.web_server.temp_server_success = False
-    return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
+    return Server(
+        app, listen="0.0.0.0", port=shared_state.values["port"]
+    ).serve_temporarily()
 
 
 def flaresolverr_config(shared_state):
@@ -943,15 +1021,15 @@ def flaresolverr_config(shared_state):
     add_no_cache_headers(app)
     setup_auth(app)
 
-    @app.get('/')
+    @app.get("/")
     def url_form():
-        form_content = '''
+        form_content = """
         <span><a href="https://github.com/FlareSolverr/FlareSolverr?tab=readme-ov-file#installation">A local instance</a>
         must be running and reachable to Quasarr!</span><br><br>
         <label for="url">FlareSolverr URL</label>
         <input type="text" id="url" name="url" placeholder="http://192.168.0.1:8191/v1"><br>
-        '''
-        form_html = f'''
+        """
+        form_html = f"""
         <style>
             .button-row {{
                 display: flex;
@@ -1022,27 +1100,28 @@ def flaresolverr_config(shared_state):
             }});
         }}
         </script>
-        '''
+        """
         return render_form("Set FlareSolverr URL", form_html)
 
-    @app.get('/skip-success')
+    @app.get("/skip-success")
     def skip_success():
         return render_reconnect_success(
-            "FlareSolverr setup skipped. Some sites (like AL) won't work. You can configure it later in the web UI.")
+            "FlareSolverr setup skipped. Some sites (like AL) won't work. You can configure it later in the web UI."
+        )
 
-    @app.post('/api/flaresolverr/skip')
+    @app.post("/api/flaresolverr/skip")
     def skip_flaresolverr():
         """Skip FlareSolverr setup and continue startup."""
         DataBase("skip_flaresolverr").update_store("skipped", "true")
         # Set fallback user agent
         shared_state.update("user_agent", FALLBACK_USER_AGENT)
-        info('FlareSolverr setup skipped by user choice')
+        info("FlareSolverr setup skipped by user choice")
         quasarr.providers.web_server.temp_server_success = True
         return {"success": True}
 
-    @app.post('/api/flaresolverr')
+    @app.post("/api/flaresolverr")
     def set_flaresolverr_url():
-        url = request.forms.get('url').strip()
+        url = request.forms.get("url").strip()
         config = Config("FlareSolverr")
 
         if not url.startswith("http://") and not url.startswith("https://"):
@@ -1054,7 +1133,7 @@ def flaresolverr_config(shared_state):
                 data = {
                     "cmd": "request.get",
                     "url": "http://www.google.com/",
-                    "maxTimeout": 30000
+                    "maxTimeout": 30000,
                 }
                 resp = requests.post(url, headers=headers, json=data, timeout=30)
                 if resp.status_code == 200:
@@ -1063,13 +1142,17 @@ def flaresolverr_config(shared_state):
                     DataBase("skip_flaresolverr").delete("skipped")
                     print(f'Using Flaresolverr URL: "{url}"')
                     quasarr.providers.web_server.temp_server_success = True
-                    return render_reconnect_success("FlareSolverr URL saved successfully!")
+                    return render_reconnect_success(
+                        "FlareSolverr URL saved successfully!"
+                    )
             except requests.RequestException:
                 pass
 
         # on failure, clear any existing value and notify user
         config.save("url", "")
-        return render_fail("Could not reach FlareSolverr at that URL (expected HTTP 200).")
+        return render_fail(
+            "Could not reach FlareSolverr at that URL (expected HTTP 200)."
+        )
 
     info(
         '"flaresolverr" URL is required for some sites (like AL). '
@@ -1077,7 +1160,9 @@ def flaresolverr_config(shared_state):
     )
     info("Please enter your FlareSolverr URL now, or skip to allow Quasarr to launch!")
     quasarr.providers.web_server.temp_server_success = False
-    return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
+    return Server(
+        app, listen="0.0.0.0", port=shared_state.values["port"]
+    ).serve_temporarily()
 
 
 def jdownloader_config(shared_state):
@@ -1085,9 +1170,9 @@ def jdownloader_config(shared_state):
     add_no_cache_headers(app)
     setup_auth(app)
 
-    @app.get('/')
+    @app.get("/")
     def jd_form():
-        verify_form_html = f'''
+        verify_form_html = f"""
         <span>If required register account at: <a href="https://my.jdownloader.org/login.html#register" target="_blank">
         my.jdownloader.org</a>!</span><br>
 
@@ -1098,9 +1183,17 @@ def jdownloader_config(shared_state):
             <input type="text" id="user" name="user" placeholder="user@example.org" autocorrect="off"><br>
             <label for="pass">Password</label>
             <input type="password" id="pass" name="pass" placeholder="Password"><br>
-            {render_button("Verify Credentials",
-                           "secondary",
-                           {"id": "verifyButton", "type": "button", "onclick": "verifyCredentials()"})}
+            {
+            render_button(
+                "Verify Credentials",
+                "secondary",
+                {
+                    "id": "verifyButton",
+                    "type": "button",
+                    "onclick": "verifyCredentials()",
+                },
+            )
+        }
         </form>
 
         <p>Some JDownloader settings will be enforced by Quasarr on startup.</p>
@@ -1113,9 +1206,9 @@ def jdownloader_config(shared_state):
             {render_button("Save", "primary", {"type": "submit", "id": "storeBtn"})}
         </form>
         <p><strong>Saving may take a while!</strong></p><br>
-        '''
+        """
 
-        verify_script = '''
+        verify_script = """
         <script>
         var verifyInProgress = false;
         var storeSubmitted = false;
@@ -1168,21 +1261,23 @@ def jdownloader_config(shared_state):
             return true;
         }
         </script>
-        '''
-        return render_form("Set your credentials for My JDownloader", verify_form_html, verify_script)
+        """
+        return render_form(
+            "Set your credentials for My JDownloader", verify_form_html, verify_script
+        )
 
     @app.post("/api/verify_jdownloader")
     def verify_jdownloader():
         data = request.json
-        username = data['user']
-        password = data['pass']
+        username = data["user"]
+        password = data["pass"]
 
         devices = shared_state.get_devices(username, password)
         device_names = []
 
         if devices:
             for device in devices:
-                device_names.append(device['name'])
+                device_names.append(device["name"])
 
         if device_names:
             return {"success": True, "devices": device_names}
@@ -1191,26 +1286,29 @@ def jdownloader_config(shared_state):
 
     @app.post("/api/store_jdownloader")
     def store_jdownloader():
-        username = request.forms.get('user')
-        password = request.forms.get('pass')
-        device = request.forms.get('device')
+        username = request.forms.get("user")
+        password = request.forms.get("pass")
+        device = request.forms.get("device")
 
         if username and password and device:
             # Verify connection works before saving credentials
             if shared_state.set_device(username, password, device):
-                config = Config('JDownloader')
-                config.save('user', username)
-                config.save('password', password)
-                config.save('device', device)
+                config = Config("JDownloader")
+                config.save("user", username)
+                config.save("password", password)
+                config.save("device", device)
                 quasarr.providers.web_server.temp_server_success = True
                 return render_reconnect_success("Credentials set")
 
         return render_fail("Could not set credentials!")
 
     info(
-        f'My-JDownloader-Credentials not set. '
-        f'Starting web server for config at: "{shared_state.values['internal_address']}".')
+        f"My-JDownloader-Credentials not set. "
+        f'Starting web server for config at: "{shared_state.values["internal_address"]}".'
+    )
     info("If needed register here: 'https://my.jdownloader.org/login.html#register'")
     info("Please set your credentials now, to allow Quasarr to launch!")
     quasarr.providers.web_server.temp_server_success = False
-    return Server(app, listen='0.0.0.0', port=shared_state.values['port']).serve_temporarily()
+    return Server(
+        app, listen="0.0.0.0", port=shared_state.values["port"]
+    ).serve_temporarily()

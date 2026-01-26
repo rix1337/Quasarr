@@ -4,7 +4,7 @@
 
 import json
 
-from bottle import request, abort
+from bottle import abort, request
 
 from quasarr.downloads import fail
 from quasarr.providers import shared_state
@@ -47,7 +47,7 @@ def setup_sponsors_helper_routes(app):
             package_id, data = selected_package
             title = data["title"]
             links = data["links"]
-            mirror = None if (mirror := data.get('mirror')) == "None" else mirror
+            mirror = None if (mirror := data.get("mirror")) == "None" else mirror
             password = data["password"]
 
             rapid = [ln for ln in links if "rapidgator" in ln[1].lower()]
@@ -61,7 +61,7 @@ def setup_sponsors_helper_routes(app):
                     "url": prioritized_links,
                     "mirror": mirror,
                     "password": password,
-                    "max_attempts": 3
+                    "max_attempts": 3,
                 }
             }
         except Exception as e:
@@ -72,22 +72,28 @@ def setup_sponsors_helper_routes(app):
     def download_api():
         try:
             data = request.json
-            title = data.get('name')
-            package_id = data.get('package_id')
-            download_links = data.get('urls')
-            password = data.get('password')
+            title = data.get("name")
+            package_id = data.get("package_id")
+            download_links = data.get("urls")
+            password = data.get("password")
 
             info(f"Received {len(download_links)} download links for {title}")
 
             if download_links:
-                downloaded = shared_state.download_package(download_links, title, password, package_id)
+                downloaded = shared_state.download_package(
+                    download_links, title, password, package_id
+                )
                 if downloaded:
-                    StatsHelper(shared_state).increment_package_with_links(download_links)
+                    StatsHelper(shared_state).increment_package_with_links(
+                        download_links
+                    )
                     StatsHelper(shared_state).increment_captcha_decryptions_automatic()
                     shared_state.get_db("protected").delete(package_id)
                     send_discord_message(shared_state, title=title, case="solved")
                     info(f"Download successfully started for {title}")
-                    return f"Downloaded {len(download_links)} download links for {title}"
+                    return (
+                        f"Downloaded {len(download_links)} download links for {title}"
+                    )
                 else:
                     info(f"Download failed for {title}")
 
@@ -102,7 +108,7 @@ def setup_sponsors_helper_routes(app):
     def disable_api():
         try:
             data = request.json
-            package_id = data.get('package_id')
+            package_id = data.get("package_id")
 
             if not package_id:
                 return {"error": "Missing package_id"}, 400
@@ -111,11 +117,13 @@ def setup_sponsors_helper_routes(app):
 
             blob = shared_state.get_db("protected").retrieve(package_id)
             package_data = json.loads(blob)
-            title = package_data.get('title')
+            title = package_data.get("title")
 
             package_data["disabled"] = True
 
-            shared_state.get_db("protected").update_store(package_id, json.dumps(package_data))
+            shared_state.get_db("protected").update_store(
+                package_id, json.dumps(package_data)
+            )
 
             info(f"Disabled package {title}")
 
@@ -136,14 +144,19 @@ def setup_sponsors_helper_routes(app):
             StatsHelper(shared_state).increment_failed_decryptions_automatic()
 
             data = request.json
-            package_id = data.get('package_id')
+            package_id = data.get("package_id")
 
             data = json.loads(shared_state.get_db("protected").retrieve(package_id))
-            title = data.get('title')
+            title = data.get("title")
 
             if package_id:
                 info(f'Marking package "{title}" with ID "{package_id}" as failed')
-                failed = fail(title, package_id, shared_state, reason="Too many failed attempts by SponsorsHelper")
+                failed = fail(
+                    title,
+                    package_id,
+                    shared_state,
+                    reason="Too many failed attempts by SponsorsHelper",
+                )
                 if failed:
                     shared_state.get_db("protected").delete(package_id)
                     send_discord_message(shared_state, title=title, case="failed")

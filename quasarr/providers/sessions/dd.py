@@ -7,8 +7,8 @@ import pickle
 
 import requests
 
-from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
-from quasarr.providers.log import info, debug
+from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
+from quasarr.providers.log import debug, info
 from quasarr.providers.utils import is_site_usable
 
 hostname = "dd"
@@ -21,31 +21,36 @@ def create_and_persist_session(shared_state):
 
     cookies = {}
     headers = {
-        'User-Agent': shared_state.values["user_agent"],
+        "User-Agent": shared_state.values["user_agent"],
     }
 
     data = {
-        'username': shared_state.values["config"]("DD").get("user"),
-        'password': shared_state.values["config"]("DD").get("password"),
-        'ajax': 'true',
-        'Login': 'true',
+        "username": shared_state.values["config"]("DD").get("user"),
+        "password": shared_state.values["config"]("DD").get("password"),
+        "ajax": "true",
+        "Login": "true",
     }
 
-    r = dd_session.post(f'https://{dd}/index/index',
-                        cookies=cookies, headers=headers, data=data, timeout=10)
+    r = dd_session.post(
+        f"https://{dd}/index/index",
+        cookies=cookies,
+        headers=headers,
+        data=data,
+        timeout=10,
+    )
     r.raise_for_status()
 
     error = False
     if r.status_code == 200:
         try:
             response_data = r.json()
-            if not response_data.get('loggedin'):
+            if not response_data.get("loggedin"):
                 info("DD rejected login.")
                 mark_hostname_issue(hostname, "session", "Login rejected")
                 raise ValueError
             session_id = r.cookies.get("PHPSESSID")
             if session_id:
-                dd_session.cookies.set('PHPSESSID', session_id, domain=dd)
+                dd_session.cookies.set("PHPSESSID", session_id, domain=dd)
             else:
                 info("Invalid DD response on login.")
                 mark_hostname_issue(hostname, "session", "Invalid login response")
@@ -61,7 +66,7 @@ def create_and_persist_session(shared_state):
             return None
 
         serialized_session = pickle.dumps(dd_session)
-        session_string = base64.b64encode(serialized_session).decode('utf-8')
+        session_string = base64.b64encode(serialized_session).decode("utf-8")
         shared_state.values["database"]("sessions").update_store("dd", session_string)
         clear_hostname_issue(hostname)
         return dd_session
@@ -81,10 +86,12 @@ def retrieve_and_validate_session(shared_state):
         dd_session = create_and_persist_session(shared_state)
     else:
         try:
-            serialized_session = base64.b64decode(session_string.encode('utf-8'))
+            serialized_session = base64.b64decode(session_string.encode("utf-8"))
             dd_session = pickle.loads(serialized_session)
             if not isinstance(dd_session, requests.Session):
-                raise ValueError("Retrieved object is not a valid requests.Session instance.")
+                raise ValueError(
+                    "Retrieved object is not a valid requests.Session instance."
+                )
         except Exception as e:
             info(f"Session retrieval failed: {e}")
             mark_hostname_issue(hostname, "session", str(e))

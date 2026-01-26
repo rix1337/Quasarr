@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 
 from quasarr.providers.cloudflare import flaresolverr_get, is_cloudflare_challenge
 from quasarr.providers.hostname_issues import mark_hostname_issue
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 from quasarr.providers.utils import is_flaresolverr_available
 
 hostname = "wd"
@@ -33,10 +33,14 @@ def resolve_wd_redirect(url, user_agent):
                 debug(f"Redirected from {resp.url} to {r.url}")
             return r.url
         else:
-            info(f"WD blocked attempt to resolve {url}. Your IP may be banned. Try again later.")
+            info(
+                f"WD blocked attempt to resolve {url}. Your IP may be banned. Try again later."
+            )
     except Exception as e:
         info(f"Error fetching redirected URL for {url}: {e}")
-        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
+        mark_hostname_issue(
+            hostname, "download", str(e) if "e" in dir() else "Download error"
+        )
     return None
 
 
@@ -54,16 +58,24 @@ def get_wd_download_links(shared_state, url, mirror, title, password):
         r = requests.get(url)
         if r.status_code >= 400 or is_cloudflare_challenge(r.text):
             if is_flaresolverr_available(shared_state):
-                info("WD is protected by Cloudflare. Using FlareSolverr to bypass protection.")
+                info(
+                    "WD is protected by Cloudflare. Using FlareSolverr to bypass protection."
+                )
                 r = flaresolverr_get(shared_state, url)
             else:
-                info("WD is protected by Cloudflare but FlareSolverr is not configured. "
-                     "Please configure FlareSolverr in the web UI to access this site.")
-                mark_hostname_issue(hostname, "download", "FlareSolverr required but missing.")
+                info(
+                    "WD is protected by Cloudflare but FlareSolverr is not configured. "
+                    "Please configure FlareSolverr in the web UI to access this site."
+                )
+                mark_hostname_issue(
+                    hostname, "download", "FlareSolverr required but missing."
+                )
                 return {"links": [], "imdb_id": None}
 
         if r.status_code >= 400:
-            mark_hostname_issue(hostname, "download", f"Download error: {str(r.status_code)}")
+            mark_hostname_issue(
+                hostname, "download", f"Download error: {str(r.status_code)}"
+            )
 
         soup = BeautifulSoup(r.text, "html.parser")
 
@@ -83,7 +95,9 @@ def get_wd_download_links(shared_state, url, mirror, title, password):
             string=re.compile(r"^\s*Downloads\s*$", re.IGNORECASE),
         )
         if not header:
-            info(f"WD Downloads section not found. Grabbing download links for {title} not possible!")
+            info(
+                f"WD Downloads section not found. Grabbing download links for {title} not possible!"
+            )
             return {"links": [], "imdb_id": None}
 
         card = header.find_parent("div", class_="card")
@@ -96,7 +110,9 @@ def get_wd_download_links(shared_state, url, mirror, title, password):
         info(f"WD access failed: {e}")
         return {"links": [], "imdb_id": None}
     except Exception:
-        info(f"WD site has been updated. Grabbing download links for {title} not possible!")
+        info(
+            f"WD site has been updated. Grabbing download links for {title} not possible!"
+        )
         return {"links": [], "imdb_id": None}
 
     results = []
@@ -122,12 +138,16 @@ def get_wd_download_links(shared_state, url, mirror, title, password):
                             break
 
                 if mirror and mirror.lower() not in hoster.lower():
-                    debug(f'Skipping link from "{hoster}" (not the desired mirror "{mirror}")!')
+                    debug(
+                        f'Skipping link from "{hoster}" (not the desired mirror "{mirror}")!'
+                    )
                     continue
 
                 results.append([resolved, hoster])
     except Exception:
-        info(f"WD site has been updated. Parsing download links for {title} not possible!")
+        info(
+            f"WD site has been updated. Parsing download links for {title} not possible!"
+        )
 
     return {
         "links": results,
