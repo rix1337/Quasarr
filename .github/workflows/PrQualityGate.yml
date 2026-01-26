@@ -1,0 +1,172 @@
+name: Pull Request Quality Gate
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+
+jobs:
+  auto-fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # Needed to push fixes
+      pull-requests: write # Needed to comment
+
+    steps:
+      - name: Checkout PR Branch
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Fix, Bump, and Report
+        id: manager
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # Configure Git for the bot
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Run the Python Manager Script
+          uv run python - <<'EOF'
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          # --- CONFIGURATION ---
+          VERSION_FILE = Path("quasarr/providers/version.py")
+          PR_NUMBER = os.environ.get("PR_NUMBER")
+          HEAD_REF = os.environ.get("HEAD_REF")
+          
+          # Flags to track what we fixed
+          fixed_format = False
+          fixed_version = False
+
+          # ---------------------------------------------------------
+          # 1. RUN RUFF (Format & Imports)
+          # ---------------------------------------------------------
+          print("Running Ruff...")
+          # Run check (imports) and format (layout)
+          subprocess.run(["uv", "run", "ruff", "check", "--select", "I", "--fix", "."], check=False)
+          subprocess.run(["uv", "run", "ruff", "format", "."], check=False)
+
+          # Check if Ruff actually changed anything
+          status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+          if status.stdout.strip():
+              print(">> Formatting changes detected.")
+              fixed_format = True
+              # Commit these changes specifically so we don't mix them up yet
+              # (Optional, but we'll bundle them in one push at the end)
+
+          # ---------------------------------------------------------
+          # 2. CHECK & BUMP VERSION
+          # ---------------------------------------------------------
+          print("Checking Version...")
+          
+          def get_version(content):
+              m = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', content)
+              return m.group(1) if m else None
+
+          def bump_patch(v):
+              parts = v.split('.')
+              while len(parts) < 3: parts.append('0')
+              # Bump last number
+              try:
+                  parts[-1] = str(int(parts[-1]) + 1)
+              except ValueError:
+                  parts.append('1')
+              return ".".join(parts)
+
+          # Get Main Version
+          try:
+              subprocess.run(["git", "fetch", "origin", "main"], check=True, capture_output=True)
+              base_ref = subprocess.check_output(["git", "merge-base", "HEAD", "origin/main"], text=True).strip()
+              # Read version file from base_ref
+              subprocess.run(["git", "checkout", base_ref, "--", str(VERSION_FILE)], check=True, capture_output=True)
+              main_content = VERSION_FILE.read_text()
+              main_ver = get_version(main_content)
+          
+              # Restore file to HEAD to read current state
+              subprocess.run(["git", "checkout", "HEAD", "--", str(VERSION_FILE)], check=True, capture_output=True)
+          
+              # Re-read file (in case Ruff formatted it)
+              current_content = VERSION_FILE.read_text()
+              current_ver = get_version(current_content)
+
+              print(f"Main: {main_ver} | Current: {current_ver}")
+
+              if current_ver == main_ver:
+                  new_ver = bump_patch(current_ver)
+                  print(f">> Version needs bump. Updating to {new_ver}")
+          
+                  new_content = current_content.replace(f'"{current_ver}"', f'"{new_ver}"')
+                  VERSION_FILE.write_text(new_content)
+                  fixed_version = True
+              else:
+                  print("Version is already ahead or modified.")
+
+          except Exception as e:
+              print(f"Version check failed: {e}")
+
+          # ---------------------------------------------------------
+          # 3. PUSH CHANGES (If any)
+          # ---------------------------------------------------------
+          if fixed_format or fixed_version:
+              subprocess.run(["git", "add", "."], check=True)
+              commit_msg = "chore: auto-fix"
+              if fixed_format and fixed_version: commit_msg += " formatting and version"
+              elif fixed_format: commit_msg += " formatting"
+              elif fixed_version: commit_msg += " version bump"
+              commit_msg += " [skip ci]"
+
+              subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+              subprocess.run(["git", "push", "origin", f"HEAD:{HEAD_REF}"], check=True)
+          
+              # ---------------------------------------------------------
+              # 4. CONSTRUCT DYNAMIC COMMENT
+              # ---------------------------------------------------------
+              comment_body = "### 🤖 Auto-Fix Applied\n\n"
+              comment_body += "I found issues in your PR and fixed them automatically.\n\n"
+          
+              # Dynamic "What I did" section
+              if fixed_format:
+                  comment_body += "- ✅ **Formatted Code:** Sorted imports and fixed layout.\n"
+              if fixed_version:
+                  comment_body += "- ✅ **Bumped Version:** Incremented version number.\n"
+
+              comment_body += f"\n**Action Required:**\nRun this command to sync your local branch:\n```bash\ngit pull origin {HEAD_REF}\n```\n"
+          
+              comment_body += "\n---\n#### 💡 For future reference:\n"
+
+              # Dynamic Tutorial Section
+              if fixed_format:
+                  comment_body += "\n**To check formatting:**\n```bash\nuv run ruff check --select I --fix .\nuv run ruff format .\n```\n"
+          
+              if fixed_version:
+                  comment_body += "\n**To bump version manually:**\nEdit `__version__` in:\n`quasarr/providers/version.py`\n"
+
+              # Post the comment using gh cli
+              subprocess.run(
+                  ["gh", "pr", "comment", PR_NUMBER, "--body", comment_body],
+                  check=True
+              )
+          
+              # Exit with error code 1 so the PR check turns red (alerting the user they must pull)
+              # But the message inside will be "Fixed", not "Failed"
+              import sys
+              sys.exit(1)
+          else:
+              print("Everything looks clean!")
+          EOF

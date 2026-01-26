@@ -25,7 +25,6 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
       - name: Get Version
         id: version
         run: |
@@ -34,6 +33,8 @@ jobs:
   build-wheel:
     name: Build Wheel
     runs-on: ubuntu-latest
+    outputs:
+      attestation-id: ${{ steps.attest.outputs.attestation-id }}
     permissions:
       contents: read
       id-token: write
@@ -47,11 +48,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
       - name: Build wheel
         run: uv build
 
       - name: Generate artifact attestation
+        id: attest
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: "dist/*.whl"
@@ -80,7 +81,6 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
 
       - name: Disable Windows Defender
         shell: powershell
@@ -104,13 +104,17 @@ jobs:
   upload-exe-beta:
     name: Upload Exe Beta
     runs-on: ubuntu-latest
-    needs: [ version, build-exe ]
+    needs: [ version, build-wheel, build-exe ]
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheel
+          path: ./wheel
       - uses: actions/download-artifact@v4
         with:
           name: exe-amd64
@@ -122,7 +126,11 @@ jobs:
           myToken: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Release Body
         run: |
-          echo "### Install / Update:" > release_body.md
+          echo "### Docker:" > release_body.md
+          echo "" >> release_body.md
+          echo "\`docker pull ${{ env.GHCR_ENDPOINT }}:beta\`" >> release_body.md
+          echo "" >> release_body.md
+          echo "### Python:" >> release_body.md
           echo "" >> release_body.md
           echo "\`uv tool upgrade quasarr\`" >> release_body.md
           echo "" >> release_body.md
@@ -130,11 +138,11 @@ jobs:
           echo "" >> release_body.md
           echo "${{ steps.changelog.outputs.changelog }}" >> release_body.md
           echo "" >> release_body.md
-          echo "\`docker pull ${{ env.GHCR_ENDPOINT }}:beta\`" >> release_body.md
+          echo "[Attestation](https://github.com/${{ github.repository }}/attestations/${{ needs.build-wheel.outputs.attestation-id }})" >> release_body.md
       - name: Upload to Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "./exe-amd64/*.exe"
+          artifacts: "./wheel/*.whl,./exe-amd64/*.exe"
           allowUpdates: true
           removeArtifacts: true
           replacesArtifacts: true

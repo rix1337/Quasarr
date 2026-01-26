@@ -4,8 +4,7 @@
 *.pyc
 *.bak
 
-# Virtual Environment by uv
-uv.lock
+# Virtual Environment
 .venv
 
 # PyCharm
