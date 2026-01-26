@@ -4,11 +4,11 @@
 
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 import requests
 
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 from quasarr.providers.statistics import StatsHelper
 
 
@@ -57,10 +57,10 @@ def unhide_links(shared_state, url, session):
             container_id = canonical_id
             debug(f"Resolved to canonical container ID: {container_id}")
 
-        headers = {'User-Agent': shared_state.values["user_agent"]}
+        headers = {"User-Agent": shared_state.values["user_agent"]}
         info(f"Fetching hide.cx container with ID: {container_id}")
 
-        headers = {'User-Agent': shared_state.values["user_agent"]}
+        headers = {"User-Agent": shared_state.values["user_agent"]}
 
         container_url = f"https://api.hide.cx/containers/{container_id}"
         response = session.get(container_url, headers=headers)
@@ -81,7 +81,7 @@ def unhide_links(shared_state, url, session):
         # Process links in batches of 10
         batch_size = 10
         for i in range(0, len(link_ids), batch_size):
-            batch = link_ids[i:i + batch_size]
+            batch = link_ids[i : i + batch_size]
             with ThreadPoolExecutor(max_workers=batch_size) as executor:
                 futures = [executor.submit(fetch_link, link_id) for link_id in batch]
                 for future in as_completed(futures):
@@ -146,7 +146,6 @@ def decrypt_links_if_hide(shared_state: Any, items: List[List[str]]) -> Dict[str
                 hide_urls.append(final_url)
             else:
                 debug(f"Not a hide.cx link (skipped): {final_url}")
-
 
         except requests.RequestException as e:
             info(f"Error resolving URL {original_url}: {e}")

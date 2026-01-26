@@ -11,7 +11,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from quasarr.providers.hostname_issues import mark_hostname_issue
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 
 hostname = "by"
 
@@ -25,7 +25,7 @@ def get_by_download_links(shared_state, url, mirror, title, password):
 
     by = shared_state.values["config"]("Hostnames").get("by")
     headers = {
-        'User-Agent': shared_state.values["user_agent"],
+        "User-Agent": shared_state.values["user_agent"],
     }
 
     mirror_lower = mirror.lower() if mirror else None
@@ -35,9 +35,11 @@ def get_by_download_links(shared_state, url, mirror, title, password):
         r = requests.get(url, headers=headers, timeout=10)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        frames = [iframe.get("src") for iframe in soup.find_all("iframe") if iframe.get("src")]
+        frames = [
+            iframe.get("src") for iframe in soup.find_all("iframe") if iframe.get("src")
+        ]
 
-        frame_urls = [src for src in frames if f'https://{by}' in src]
+        frame_urls = [src for src in frames if f"https://{by}" in src]
         if not frame_urls:
             debug(f"No iframe hosts found on {url} for {title}.")
             return []
@@ -64,8 +66,12 @@ def get_by_download_links(shared_state, url, mirror, title, password):
         url_hosters = []
         for content, source in async_results:
             host_soup = BeautifulSoup(content, "html.parser")
-            link = host_soup.find("a", href=re.compile(
-                r"https?://(?:www\.)?(?:hide\.cx|filecrypt\.(?:cc|co|to))/container/"))
+            link = host_soup.find(
+                "a",
+                href=re.compile(
+                    r"https?://(?:www\.)?(?:hide\.cx|filecrypt\.(?:cc|co|to))/container/"
+                ),
+            )
 
             # Fallback to the old format
             if not link:
@@ -79,7 +85,9 @@ def get_by_download_links(shared_state, url, mirror, title, password):
             hostname_lower = link_hostname.lower()
 
             if mirror_lower and mirror_lower not in hostname_lower:
-                debug(f'Skipping link from "{link_hostname}" (not the desired mirror "{mirror}")!')
+                debug(
+                    f'Skipping link from "{link_hostname}" (not the desired mirror "{mirror}")!'
+                )
                 continue
 
             url_hosters.append((href, link_hostname))
@@ -87,7 +95,9 @@ def get_by_download_links(shared_state, url, mirror, title, password):
         def resolve_redirect(href_hostname):
             href, hostname = href_hostname
             try:
-                rq = requests.get(href, headers=headers, timeout=10, allow_redirects=True)
+                rq = requests.get(
+                    href, headers=headers, timeout=10, allow_redirects=True
+                )
                 rq.raise_for_status()
                 if "/404.html" in rq.url:
                     info(f"Link leads to 404 page for {hostname}: {r.url}")
@@ -96,7 +106,9 @@ def get_by_download_links(shared_state, url, mirror, title, password):
                 return rq.url
             except Exception as e:
                 info(f"Error resolving link for {hostname}: {e}")
-                mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
+                mark_hostname_issue(
+                    hostname, "download", str(e) if "e" in dir() else "Download error"
+                )
                 return None
 
         for pair in url_hosters:
@@ -106,16 +118,22 @@ def get_by_download_links(shared_state, url, mirror, title, password):
             if not link_hostname:
                 link_hostname = urlparse(resolved_url).hostname
 
-            if resolved_url and link_hostname and link_hostname.startswith(
-                    ("ddownload", "rapidgator", "turbobit", "filecrypt")):
+            if (
+                resolved_url
+                and link_hostname
+                and link_hostname.startswith(
+                    ("ddownload", "rapidgator", "turbobit", "filecrypt")
+                )
+            ):
                 if "rapidgator" in link_hostname:
                     links.insert(0, [resolved_url, link_hostname])
                 else:
                     links.append([resolved_url, link_hostname])
 
-
     except Exception as e:
         info(f"Error loading BY download links: {e}")
-        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
+        mark_hostname_issue(
+            hostname, "download", str(e) if "e" in dir() else "Download error"
+        )
 
     return {"links": links}

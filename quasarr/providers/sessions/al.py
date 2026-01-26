@@ -10,20 +10,22 @@ import urllib.parse
 
 import requests
 from bs4 import BeautifulSoup
-from requests.exceptions import Timeout, RequestException
+from requests.exceptions import RequestException, Timeout
 
-from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
-from quasarr.providers.log import info, debug
-from quasarr.providers.utils import is_site_usable, is_flaresolverr_available
+from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
+from quasarr.providers.log import debug, info
+from quasarr.providers.utils import is_flaresolverr_available, is_site_usable
 
 
 class SkippedSiteError(Exception):
     """Raised when a site is skipped due to missing credentials or login being skipped."""
+
     pass
 
 
 class FlareSolverrNotAvailableError(Exception):
     """Raised when FlareSolverr is required but not available."""
+
     pass
 
 
@@ -35,9 +37,13 @@ SESSION_MAX_AGE_SECONDS = 24 * 60 * 60  # 24 hours
 def create_and_persist_session(shared_state):
     # AL requires FlareSolverr - check availability first
     if not is_flaresolverr_available(shared_state):
-        info(f'"{hostname.upper()}" requires FlareSolverr which is not configured. '
-             f'Please configure FlareSolverr in the web UI to use this site.')
-        mark_hostname_issue(hostname, "session", "FlareSolverr required but not configured")
+        info(
+            f'"{hostname.upper()}" requires FlareSolverr which is not configured. '
+            f"Please configure FlareSolverr in the web UI to use this site."
+        )
+        mark_hostname_issue(
+            hostname, "session", "FlareSolverr required but not configured"
+        )
         return None
 
     cfg = shared_state.values["config"]("Hostnames")
@@ -46,7 +52,7 @@ def create_and_persist_session(shared_state):
     user = credentials_cfg.get("user")
     pw = credentials_cfg.get("password")
 
-    flaresolverr_url = shared_state.values["config"]('FlareSolverr').get('url')
+    flaresolverr_url = shared_state.values["config"]("FlareSolverr").get("url")
 
     sess = requests.Session()
 
@@ -57,11 +63,13 @@ def create_and_persist_session(shared_state):
         fs_payload = {
             "cmd": "request.get",
             "url": f"https://www.{host}/",
-            "maxTimeout": 60000
+            "maxTimeout": 60000,
         }
 
         try:
-            fs_resp = requests.post(flaresolverr_url, headers=fs_headers, json=fs_payload, timeout=30)
+            fs_resp = requests.post(
+                flaresolverr_url, headers=fs_headers, json=fs_payload, timeout=30
+            )
             fs_resp.raise_for_status()
         except Timeout:
             info(f"{hostname}: FlareSolverr request timed out")
@@ -77,14 +85,16 @@ def create_and_persist_session(shared_state):
         # Check if FlareSolverr actually solved the challenge
         if fs_json.get("status") != "ok" or "solution" not in fs_json:
             info(f"{hostname}: FlareSolverr did not return a valid solution")
-            mark_hostname_issue(hostname, "session", "FlareSolverr did not return a valid solution")
+            mark_hostname_issue(
+                hostname, "session", "FlareSolverr did not return a valid solution"
+            )
             return None
 
         solution = fs_json["solution"]
         # store FlareSolverr's UA into our requests.Session
         fl_ua = solution.get("userAgent")
         if fl_ua:
-            sess.headers.update({'User-Agent': fl_ua})
+            sess.headers.update({"User-Agent": fl_ua})
 
         # Extract any cookies returned by FlareSolverr and add them into our session
         for ck in solution.get("cookies", []):
@@ -101,21 +111,17 @@ def create_and_persist_session(shared_state):
         return None
 
     if user and pw:
-        data = {
-            "identity": user,
-            "password": pw,
-            "remember": "1"
-        }
+        data = {"identity": user, "password": pw, "remember": "1"}
         encoded_data = urllib.parse.urlencode(data)
 
-        login_headers = {
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
+        login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-        r = sess.post(f'https://www.{host}/auth/signin',
-                      data=encoded_data,
-                      headers=login_headers,
-                      timeout=30)
+        r = sess.post(
+            f"https://www.{host}/auth/signin",
+            data=encoded_data,
+            headers=login_headers,
+            timeout=30,
+        )
 
         if r.status_code != 200 or "invalid" in r.text.lower():
             info(f'Login failed: "{hostname}" - {r.status_code} - {r.text}')
@@ -194,10 +200,7 @@ def _persist_session_to_db(shared_state, sess):
     """
     blob = pickle.dumps(sess)
     token = base64.b64encode(blob).decode("utf-8")
-    session_data = json.dumps({
-        "token": token,
-        "created_at": time.time()
-    })
+    session_data = json.dumps({"token": token, "created_at": time.time()})
     shared_state.values["database"]("sessions").update_store(hostname, session_data)
 
 
@@ -207,12 +210,14 @@ def _load_session_cookies_for_flaresolverr(sess):
     """
     cookie_list = []
     for ck in sess.cookies:
-        cookie_list.append({
-            "name": ck.name,
-            "value": ck.value,
-            "domain": ck.domain,
-            "path": ck.path or "/",
-        })
+        cookie_list.append(
+            {
+                "name": ck.name,
+                "value": ck.value,
+                "domain": ck.domain,
+                "path": ck.path or "/",
+            }
+        )
     return cookie_list
 
 
@@ -232,11 +237,13 @@ def unwrap_flaresolverr_body(raw_text: str) -> str:
     return text
 
 
-def fetch_via_flaresolverr(shared_state,
-                           method: str,
-                           target_url: str,
-                           post_data: dict = None,
-                           timeout: int = 60):
+def fetch_via_flaresolverr(
+    shared_state,
+    method: str,
+    target_url: str,
+    post_data: dict = None,
+    timeout: int = 60,
+):
     """
     Load (or recreate) the requests.Session from DB.
     Package its cookies into FlareSolverr payload.
@@ -251,18 +258,20 @@ def fetch_via_flaresolverr(shared_state,
     """
     # Check if FlareSolverr is available
     if not is_flaresolverr_available(shared_state):
-        info(f'"{hostname.upper()}" requires FlareSolverr which is not configured. '
-             f'Please configure FlareSolverr in the web UI.')
+        info(
+            f'"{hostname.upper()}" requires FlareSolverr which is not configured. '
+            f"Please configure FlareSolverr in the web UI."
+        )
         return {
             "status_code": None,
             "headers": {},
             "json": None,
             "text": "",
             "cookies": [],
-            "error": "FlareSolverr is not configured"
+            "error": "FlareSolverr is not configured",
         }
 
-    flaresolverr_url = shared_state.values["config"]('FlareSolverr').get('url')
+    flaresolverr_url = shared_state.values["config"]("FlareSolverr").get("url")
 
     sess = retrieve_and_validate_session(shared_state)
     if not sess:
@@ -273,7 +282,7 @@ def fetch_via_flaresolverr(shared_state,
             "json": None,
             "text": "",
             "cookies": [],
-            "error": f"Site '{hostname}' is not usable (login skipped or no credentials)"
+            "error": f"Site '{hostname}' is not usable (login skipped or no credentials)",
         }
 
     cmd = "request.get" if method.upper() == "GET" else "request.post"
@@ -282,7 +291,7 @@ def fetch_via_flaresolverr(shared_state,
         "url": target_url,
         "maxTimeout": timeout * 1000,
         # Inject every cookie from our Python session into FlareSolverr
-        "cookies": _load_session_cookies_for_flaresolverr(sess)
+        "cookies": _load_session_cookies_for_flaresolverr(sess),
     }
 
     if method.upper() == "POST":
@@ -294,10 +303,7 @@ def fetch_via_flaresolverr(shared_state,
     fs_headers = {"Content-Type": "application/json"}
     try:
         resp = requests.post(
-            flaresolverr_url,
-            headers=fs_headers,
-            json=fs_payload,
-            timeout=timeout + 10
+            flaresolverr_url, headers=fs_headers, json=fs_payload, timeout=timeout + 10
         )
     except requests.exceptions.RequestException as e:
         info(f"Could not reach FlareSolverr: {e}")
@@ -308,7 +314,7 @@ def fetch_via_flaresolverr(shared_state,
             "json": None,
             "text": "",
             "cookies": [],
-            "error": f"FlareSolverr request failed: {e}"
+            "error": f"FlareSolverr request failed: {e}",
         }
     except Exception as e:
         raise RuntimeError(f"Could not reach FlareSolverr: {e}")
@@ -319,7 +325,9 @@ def fetch_via_flaresolverr(shared_state,
 
     fs_json = resp.json()
     if fs_json.get("status") != "ok" or "solution" not in fs_json:
-        raise RuntimeError(f"FlareSolverr did not return a valid solution: {fs_json.get('message', '<no message>')}")
+        raise RuntimeError(
+            f"FlareSolverr did not return a valid solution: {fs_json.get('message', '<no message>')}"
+        )
 
     solution = fs_json["solution"]
 
@@ -341,7 +349,7 @@ def fetch_via_flaresolverr(shared_state,
             ck.get("name"),
             ck.get("value"),
             domain=ck.get("domain"),
-            path=ck.get("path", "/")
+            path=ck.get("path", "/"),
         )
 
     # Persist the updated Session back into your DB
@@ -353,11 +361,17 @@ def fetch_via_flaresolverr(shared_state,
         "headers": solution.get("headers", {}),
         "json": parsed_json,
         "text": raw_body,
-        "cookies": solution.get("cookies", [])
+        "cookies": solution.get("cookies", []),
     }
 
 
-def fetch_via_requests_session(shared_state, method: str, target_url: str, post_data: dict = None, timeout: int = 30):
+def fetch_via_requests_session(
+    shared_state,
+    method: str,
+    target_url: str,
+    post_data: dict = None,
+    timeout: int = 30,
+):
     """
     - method: "GET" or "POST"
     - post_data: for POST only (will be sent as form-data unless you explicitly JSON-encode)
@@ -365,7 +379,9 @@ def fetch_via_requests_session(shared_state, method: str, target_url: str, post_
     """
     sess = retrieve_and_validate_session(shared_state)
     if not sess:
-        raise SkippedSiteError(f"{hostname}: site not usable (login skipped or no credentials)")
+        raise SkippedSiteError(
+            f"{hostname}: site not usable (login skipped or no credentials)"
+        )
 
     # Execute request
     if method.upper() == "GET":

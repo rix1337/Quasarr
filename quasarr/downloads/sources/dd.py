@@ -3,8 +3,11 @@
 # Project by https://github.com/rix1337
 
 from quasarr.providers.hostname_issues import mark_hostname_issue
-from quasarr.providers.log import info, debug
-from quasarr.providers.sessions.dd import create_and_persist_session, retrieve_and_validate_session
+from quasarr.providers.log import debug, info
+from quasarr.providers.sessions.dd import (
+    create_and_persist_session,
+    retrieve_and_validate_session,
+)
 
 hostname = "dd"
 
@@ -35,17 +38,17 @@ def get_dd_download_links(shared_state, url, mirror, title, password):
         "web-1080p-x265",
         "web-2160p-x265-hdr",
         "movie-1080p-x265",
-        "movie-2160p-webdl-x265-hdr"
+        "movie-2160p-webdl-x265-hdr",
     ]
 
     headers = {
-        'User-Agent': shared_state.values["user_agent"],
+        "User-Agent": shared_state.values["user_agent"],
     }
 
     try:
         release_list = []
         for page in range(0, 100, 20):
-            api_url = f'https://{dd}/index/search/keyword/{title}/qualities/{",".join(qualities)}/from/{page}/search'
+            api_url = f"https://{dd}/index/search/keyword/{title}/qualities/{','.join(qualities)}/from/{page}/search"
 
             r = dd_session.get(api_url, headers=headers, timeout=10)
             r.raise_for_status()
@@ -56,23 +59,29 @@ def get_dd_download_links(shared_state, url, mirror, title, password):
         for release in release_list:
             try:
                 if release.get("fake"):
-                    debug(f"Release {release.get('release')} marked as fake. Invalidating DD session...")
+                    debug(
+                        f"Release {release.get('release')} marked as fake. Invalidating DD session..."
+                    )
                     create_and_persist_session(shared_state)
                     return {"links": []}
                 elif release.get("release") == title:
                     filtered_links = []
                     for link in release["links"]:
                         if mirror and mirror not in link["hostname"]:
-                            debug(f'Skipping link from "{link["hostname"]}" (not the desired mirror "{mirror}")!')
+                            debug(
+                                f'Skipping link from "{link["hostname"]}" (not the desired mirror "{mirror}")!'
+                            )
                             continue
 
                         if any(
-                                existing_link["hostname"] == link["hostname"] and
-                                existing_link["url"].endswith(".mkv") and
-                                link["url"].endswith(".mkv")
-                                for existing_link in filtered_links
+                            existing_link["hostname"] == link["hostname"]
+                            and existing_link["url"].endswith(".mkv")
+                            and link["url"].endswith(".mkv")
+                            for existing_link in filtered_links
                         ):
-                            debug(f"Skipping duplicate `.mkv` link from {link['hostname']}")
+                            debug(
+                                f"Skipping duplicate `.mkv` link from {link['hostname']}"
+                            )
                             continue
                         filtered_links.append(link)
 
@@ -81,11 +90,15 @@ def get_dd_download_links(shared_state, url, mirror, title, password):
                     break
             except Exception as e:
                 info(f"Error parsing DD download: {e}")
-                mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
+                mark_hostname_issue(
+                    hostname, "download", str(e) if "e" in dir() else "Download error"
+                )
                 continue
 
     except Exception as e:
         info(f"Error loading DD download: {e}")
-        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
+        mark_hostname_issue(
+            hostname, "download", str(e) if "e" in dir() else "Download error"
+        )
 
     return {"links": links}

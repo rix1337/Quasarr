@@ -6,12 +6,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from quasarr.providers.imdb_metadata import get_imdb_metadata
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 from quasarr.search.sources.al import al_feed, al_search
 from quasarr.search.sources.by import by_feed, by_search
-from quasarr.search.sources.dd import dd_search, dd_feed
-from quasarr.search.sources.dj import dj_search, dj_feed
-from quasarr.search.sources.dl import dl_search, dl_feed
+from quasarr.search.sources.dd import dd_feed, dd_search
+from quasarr.search.sources.dj import dj_feed, dj_search
+from quasarr.search.sources.dl import dl_feed, dl_search
 from quasarr.search.sources.dt import dt_feed, dt_search
 from quasarr.search.sources.dw import dw_feed, dw_search
 from quasarr.search.sources.fx import fx_feed, fx_search
@@ -20,17 +20,25 @@ from quasarr.search.sources.mb import mb_feed, mb_search
 from quasarr.search.sources.nk import nk_feed, nk_search
 from quasarr.search.sources.nx import nx_feed, nx_search
 from quasarr.search.sources.sf import sf_feed, sf_search
-from quasarr.search.sources.sj import sj_search, sj_feed
+from quasarr.search.sources.sj import sj_feed, sj_search
 from quasarr.search.sources.sl import sl_feed, sl_search
 from quasarr.search.sources.wd import wd_feed, wd_search
 from quasarr.search.sources.wx import wx_feed, wx_search
 
 
-def get_search_results(shared_state, request_from, imdb_id="", search_phrase="", mirror=None, season="", episode=""):
+def get_search_results(
+    shared_state,
+    request_from,
+    imdb_id="",
+    search_phrase="",
+    mirror=None,
+    season="",
+    episode="",
+):
     results = []
 
-    if imdb_id and not imdb_id.startswith('tt'):
-        imdb_id = f'tt{imdb_id}'
+    if imdb_id and not imdb_id.startswith("tt"):
+        imdb_id = f"tt{imdb_id}"
 
     # Pre-populate IMDb metadata cache to avoid API hammering by search threads
     if imdb_id:
@@ -115,16 +123,18 @@ def get_search_results(shared_state, request_from, imdb_id="", search_phrase="",
     if imdb_id:  # only Radarr/Sonarr are using imdb_id
         args, kwargs = (
             (shared_state, start_time, request_from, imdb_id),
-            {'mirror': mirror, 'season': season, 'episode': episode}
+            {"mirror": mirror, "season": season, "episode": episode},
         )
         for flag, func in imdb_map:
             if flag:
                 functions.append(lambda f=func, a=args, kw=kwargs: f(*a, **kw))
 
-    elif search_phrase and docs_search:  # only LazyLibrarian is allowed to use search_phrase
+    elif (
+        search_phrase and docs_search
+    ):  # only LazyLibrarian is allowed to use search_phrase
         args, kwargs = (
             (shared_state, start_time, request_from, search_phrase),
-            {'mirror': mirror, 'season': season, 'episode': episode}
+            {"mirror": mirror, "season": season, "episode": episode},
         )
         for flag, func in phrase_map:
             if flag:
@@ -132,13 +142,11 @@ def get_search_results(shared_state, request_from, imdb_id="", search_phrase="",
 
     elif search_phrase:
         debug(
-            f"Search phrase '{search_phrase}' is not supported for {request_from}. Only LazyLibrarian can use search phrases.")
+            f"Search phrase '{search_phrase}' is not supported for {request_from}. Only LazyLibrarian can use search phrases."
+        )
 
     else:
-        args, kwargs = (
-            (shared_state, start_time, request_from),
-            {'mirror': mirror}
-        )
+        args, kwargs = ((shared_state, start_time, request_from), {"mirror": mirror})
         for flag, func in feed_map:
             if flag:
                 functions.append(lambda f=func, a=args, kw=kwargs: f(*a, **kw))
@@ -150,7 +158,9 @@ def get_search_results(shared_state, request_from, imdb_id="", search_phrase="",
     else:
         stype = "feed search"
 
-    info(f'Starting {len(functions)} search functions for {stype}... This may take some time.')
+    info(
+        f"Starting {len(functions)} search functions for {stype}... This may take some time."
+    )
 
     with ThreadPoolExecutor() as executor:
         futures = [executor.submit(func) for func in functions]
@@ -162,6 +172,8 @@ def get_search_results(shared_state, request_from, imdb_id="", search_phrase="",
                 info(f"An error occurred: {e}")
 
     elapsed_time = time.time() - start_time
-    info(f"Providing {len(results)} releases to {request_from} for {stype}. Time taken: {elapsed_time:.2f} seconds")
+    info(
+        f"Providing {len(results)} releases to {request_from} for {stype}. Time taken: {elapsed_time:.2f} seconds"
+    )
 
     return results

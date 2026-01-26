@@ -7,8 +7,8 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
-from quasarr.providers.log import info, debug
+from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
+from quasarr.providers.log import debug, info
 
 hostname = "mb"
 
@@ -21,7 +21,7 @@ def get_mb_download_links(shared_state, url, mirror, title, password):
     """
 
     headers = {
-        'User-Agent': shared_state.values["user_agent"],
+        "User-Agent": shared_state.values["user_agent"],
     }
 
     try:
@@ -36,14 +36,18 @@ def get_mb_download_links(shared_state, url, mirror, title, password):
 
     download_links = []
 
-    pattern = re.compile(r'https?://(?:www\.)?filecrypt\.[^/]+/Container/', re.IGNORECASE)
-    for a in soup.find_all('a', href=pattern):
+    pattern = re.compile(
+        r"https?://(?:www\.)?filecrypt\.[^/]+/Container/", re.IGNORECASE
+    )
+    for a in soup.find_all("a", href=pattern):
         try:
-            link = a['href']
+            link = a["href"]
             hoster = a.get_text(strip=True).lower()
 
             if mirror and mirror.lower() not in hoster.lower():
-                debug(f'Skipping link from "{hoster}" (not the desired mirror "{mirror}")!')
+                debug(
+                    f'Skipping link from "{hoster}" (not the desired mirror "{mirror}")!'
+                )
                 continue
 
             download_links.append([link, hoster])
@@ -51,8 +55,14 @@ def get_mb_download_links(shared_state, url, mirror, title, password):
             debug(f"Error parsing MB download links: {e}")
 
     if not download_links:
-        info(f"No download links found for {title}. Site structure may have changed. - {url}")
-        mark_hostname_issue(hostname, "download", "No download links found - site structure may have changed")
+        info(
+            f"No download links found for {title}. Site structure may have changed. - {url}"
+        )
+        mark_hostname_issue(
+            hostname,
+            "download",
+            "No download links found - site structure may have changed",
+        )
         return {"links": []}
 
     clear_hostname_issue(hostname)

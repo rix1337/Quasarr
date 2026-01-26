@@ -15,5 +15,5 @@ def info(string):
 
 
 def debug(string):
-    if os.getenv('DEBUG'):
+    if os.getenv("DEBUG"):
         info(string)

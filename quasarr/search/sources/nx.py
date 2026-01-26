@@ -8,9 +8,9 @@ from base64 import urlsafe_b64encode
 
 import requests
 
-from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
+from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 
 hostname = "nx"
 supported_mirrors = ["filer"]
@@ -29,13 +29,17 @@ def nx_feed(shared_state, start_time, request_from, mirror=None):
         category = "episode"
 
     if mirror and mirror not in supported_mirrors:
-        debug(f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported mirrors: {supported_mirrors}.'
-              ' Skipping search!')
+        debug(
+            f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported mirrors: {supported_mirrors}.'
+            " Skipping search!"
+        )
         return releases
 
-    url = f'https://{nx}/api/frontend/releases/category/{category}/tag/all/1/51?sort=date'
+    url = (
+        f"https://{nx}/api/frontend/releases/category/{category}/tag/all/1/51?sort=date"
+    )
     headers = {
-        'User-Agent': shared_state.values["user_agent"],
+        "User-Agent": shared_state.values["user_agent"],
     }
 
     try:
@@ -44,26 +48,30 @@ def nx_feed(shared_state, start_time, request_from, mirror=None):
         feed = r.json()
     except Exception as e:
         info(f"Error loading {hostname.upper()} feed: {e}")
-        mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
+        mark_hostname_issue(
+            hostname, "feed", str(e) if "e" in dir() else "Error occurred"
+        )
         return releases
 
-    items = feed['result']['list']
+    items = feed["result"]["list"]
     for item in items:
         try:
-            title = item['name']
+            title = item["name"]
 
             if title:
                 try:
-                    if 'lazylibrarian' in request_from.lower():
+                    if "lazylibrarian" in request_from.lower():
                         # lazylibrarian can only detect specific date formats / issue numbering for magazines
                         title = shared_state.normalize_magazine_title(title)
 
                     source = f"https://{nx}/release/{item['slug']}"
-                    imdb_id = item.get('_media', {}).get('imdbid', None)
+                    imdb_id = item.get("_media", {}).get("imdbid", None)
                     mb = shared_state.convert_to_mb(item)
                     payload = urlsafe_b64encode(
-                        f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}|{hostname}".encode("utf-8")).decode(
-                        "utf-8")
+                        f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}|{hostname}".encode(
+                            "utf-8"
+                        )
+                    ).decode("utf-8")
                     link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                 except:
                     continue
@@ -74,27 +82,31 @@ def nx_feed(shared_state, start_time, request_from, mirror=None):
                     continue
 
                 try:
-                    published = item['publishat']
+                    published = item["publishat"]
                 except:
                     continue
 
-                releases.append({
-                    "details": {
-                        "title": title,
-                        "hostname": hostname.lower(),
-                        "imdb_id": imdb_id,
-                        "link": link,
-                        "mirror": mirror,
-                        "size": size,
-                        "date": published,
-                        "source": source
-                    },
-                    "type": "protected"
-                })
+                releases.append(
+                    {
+                        "details": {
+                            "title": title,
+                            "hostname": hostname.lower(),
+                            "imdb_id": imdb_id,
+                            "link": link,
+                            "mirror": mirror,
+                            "size": size,
+                            "date": published,
+                            "source": source,
+                        },
+                        "type": "protected",
+                    }
+                )
 
         except Exception as e:
             info(f"Error parsing {hostname.upper()} feed: {e}")
-            mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
+            mark_hostname_issue(
+                hostname, "feed", str(e) if "e" in dir() else "Error occurred"
+            )
 
     elapsed_time = time.time() - start_time
     debug(f"Time taken: {elapsed_time:.2f}s ({hostname})")
@@ -104,7 +116,15 @@ def nx_feed(shared_state, start_time, request_from, mirror=None):
     return releases
 
 
-def nx_search(shared_state, start_time, request_from, search_string, mirror=None, season=None, episode=None):
+def nx_search(
+    shared_state,
+    start_time,
+    request_from,
+    search_string,
+    mirror=None,
+    season=None,
+    episode=None,
+):
     releases = []
     nx = shared_state.values["config"]("Hostnames").get(hostname.lower())
     password = nx
@@ -117,21 +137,23 @@ def nx_search(shared_state, start_time, request_from, search_string, mirror=None
         valid_type = "episode"
 
     if mirror and mirror not in supported_mirrors:
-        debug(f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported mirrors: {supported_mirrors}.'
-              ' Skipping search!')
+        debug(
+            f'Mirror "{mirror}" not supported by "{hostname.upper()}". Supported mirrors: {supported_mirrors}.'
+            " Skipping search!"
+        )
         return releases
 
     imdb_id = shared_state.is_imdb_id(search_string)
     if imdb_id:
-        search_string = get_localized_title(shared_state, imdb_id, 'de')
+        search_string = get_localized_title(shared_state, imdb_id, "de")
         if not search_string:
             info(f"Could not extract title from IMDb-ID {imdb_id}")
             return releases
         search_string = html.unescape(search_string)
 
-    url = f'https://{nx}/api/frontend/search/{search_string}'
+    url = f"https://{nx}/api/frontend/search/{search_string}"
     headers = {
-        'User-Agent': shared_state.values["user_agent"],
+        "User-Agent": shared_state.values["user_agent"],
     }
 
     try:
@@ -140,34 +162,37 @@ def nx_search(shared_state, start_time, request_from, search_string, mirror=None
         feed = r.json()
     except Exception as e:
         info(f"Error loading {hostname.upper()} search: {e}")
-        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
+        mark_hostname_issue(
+            hostname, "search", str(e) if "e" in dir() else "Error occurred"
+        )
         return releases
 
-    items = feed['result']['releases']
+    items = feed["result"]["releases"]
     for item in items:
         try:
-            if item['type'] == valid_type:
-                title = item['name']
+            if item["type"] == valid_type:
+                title = item["name"]
                 if title:
-                    if not shared_state.is_valid_release(title,
-                                                         request_from,
-                                                         search_string,
-                                                         season,
-                                                         episode):
+                    if not shared_state.is_valid_release(
+                        title, request_from, search_string, season, episode
+                    ):
                         continue
 
-                    if 'lazylibrarian' in request_from.lower():
+                    if "lazylibrarian" in request_from.lower():
                         # lazylibrarian can only detect specific date formats / issue numbering for magazines
                         title = shared_state.normalize_magazine_title(title)
 
                     try:
                         source = f"https://{nx}/release/{item['slug']}"
                         if not imdb_id:
-                            imdb_id = item.get('_media', {}).get('imdbid', None)
+                            imdb_id = item.get("_media", {}).get("imdbid", None)
 
                         mb = shared_state.convert_to_mb(item)
-                        payload = urlsafe_b64encode(f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}".
-                                                    encode("utf-8")).decode("utf-8")
+                        payload = urlsafe_b64encode(
+                            f"{title}|{source}|{mirror}|{mb}|{password}|{imdb_id}".encode(
+                                "utf-8"
+                            )
+                        ).decode("utf-8")
                         link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
                     except:
                         continue
@@ -178,27 +203,31 @@ def nx_search(shared_state, start_time, request_from, search_string, mirror=None
                         continue
 
                     try:
-                        published = item['publishat']
+                        published = item["publishat"]
                     except:
                         published = ""
 
-                    releases.append({
-                        "details": {
-                            "title": title,
-                            "hostname": hostname.lower(),
-                            "imdb_id": imdb_id,
-                            "link": link,
-                            "mirror": mirror,
-                            "size": size,
-                            "date": published,
-                            "source": source
-                        },
-                        "type": "protected"
-                    })
+                    releases.append(
+                        {
+                            "details": {
+                                "title": title,
+                                "hostname": hostname.lower(),
+                                "imdb_id": imdb_id,
+                                "link": link,
+                                "mirror": mirror,
+                                "size": size,
+                                "date": published,
+                                "source": source,
+                            },
+                            "type": "protected",
+                        }
+                    )
 
         except Exception as e:
             info(f"Error parsing {hostname.upper()} search: {e}")
-            mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
+            mark_hostname_issue(
+                hostname, "search", str(e) if "e" in dir() else "Error occurred"
+            )
 
     elapsed_time = time.time() - start_time
     debug(f"Time taken: {elapsed_time:.2f}s ({hostname})")

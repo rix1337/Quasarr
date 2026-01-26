@@ -8,13 +8,14 @@ import pickle
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
-from quasarr.providers.log import info, debug
+from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
+from quasarr.providers.log import debug, info
 from quasarr.providers.utils import is_site_usable
 
 
 class SkippedSiteError(Exception):
     """Raised when a site is skipped due to missing credentials or login being skipped."""
+
     pass
 
 
@@ -47,46 +48,48 @@ def create_and_persist_session(shared_state):
 
     # Set user agent
     ua = shared_state.values["user_agent"]
-    sess.headers.update({'User-Agent': ua})
+    sess.headers.update({"User-Agent": ua})
 
     try:
         # Step 1: Get login page to retrieve CSRF token
-        login_page_url = f'https://www.{host}/login/'
+        login_page_url = f"https://www.{host}/login/"
         login_r = sess.get(login_page_url, timeout=30)
 
         login_r.raise_for_status()
 
         # Extract CSRF token from login form
-        soup = BeautifulSoup(login_r.text, 'html.parser')
-        csrf_input = soup.find('input', {'name': '_xfToken'})
+        soup = BeautifulSoup(login_r.text, "html.parser")
+        csrf_input = soup.find("input", {"name": "_xfToken"})
 
-        if not csrf_input or not csrf_input.get('value'):
+        if not csrf_input or not csrf_input.get("value"):
             info(f'Could not find CSRF token on login page for: "{hostname}"')
             mark_hostname_issue(hostname, "session", "Could not find CSRF token")
             return None
 
-        csrf_token = csrf_input['value']
+        csrf_token = csrf_input["value"]
 
         # Step 2: Submit login form
         login_data = {
-            'login': user,
-            'password': password,
-            '_xfToken': csrf_token,
-            'remember': '1',
-            '_xfRedirect': f'https://www.{host}/'
+            "login": user,
+            "password": password,
+            "_xfToken": csrf_token,
+            "remember": "1",
+            "_xfRedirect": f"https://www.{host}/",
         }
 
-        login_url = f'https://www.{host}/login/login'
+        login_url = f"https://www.{host}/login/login"
         submit_r = sess.post(login_url, data=login_data, timeout=30)
         submit_r.raise_for_status()
 
         # Step 3: Verify login success
         # Check if we're logged in by accessing the main page
-        verify_r = sess.get(f'https://www.{host}/', timeout=30)
+        verify_r = sess.get(f"https://www.{host}/", timeout=30)
         verify_r.raise_for_status()
 
         if 'data-logged-in="true"' not in verify_r.text:
-            info(f'Login verification failed for: "{hostname}" - invalid credentials or login failed')
+            info(
+                f'Login verification failed for: "{hostname}" - invalid credentials or login failed'
+            )
             mark_hostname_issue(hostname, "session", "Login verification failed")
             return None
 
@@ -160,8 +163,14 @@ def _persist_session_to_db(shared_state, sess):
     shared_state.values["database"]("sessions").update_store(hostname, token)
 
 
-def fetch_via_requests_session(shared_state, method: str, target_url: str, post_data: dict = None,
-                               get_params: dict = None, timeout: int = 30):
+def fetch_via_requests_session(
+    shared_state,
+    method: str,
+    target_url: str,
+    post_data: dict = None,
+    get_params: dict = None,
+    timeout: int = 30,
+):
     """
     Execute request using the session.
 
@@ -178,7 +187,9 @@ def fetch_via_requests_session(shared_state, method: str, target_url: str, post_
     """
     sess = retrieve_and_validate_session(shared_state)
     if not sess:
-        raise SkippedSiteError(f"{hostname}: site not usable (login skipped or no credentials)")
+        raise SkippedSiteError(
+            f"{hostname}: site not usable (login skipped or no credentials)"
+        )
 
     # Execute request
     if method.upper() == "GET":

@@ -18,9 +18,9 @@ def derive_mirror_from_url(url):
     """Extract hoster name from URL hostname."""
     try:
         hostname = urlparse(url).netloc.lower()
-        if hostname.startswith('www.'):
+        if hostname.startswith("www."):
             hostname = hostname[4:]
-        parts = hostname.split('.')
+        parts = hostname.split(".")
         if len(parts) >= 2:
             return parts[-2]
         return hostname
@@ -30,10 +30,7 @@ def derive_mirror_from_url(url):
 
 def get_filer_folder_links_via_api(shared_state, url):
     try:
-        headers = {
-            'User-Agent': shared_state.values["user_agent"],
-            'Referer': url
-        }
+        headers = {"User-Agent": shared_state.values["user_agent"], "Referer": url}
 
         m = re.search(r"/folder/([A-Za-z0-9]+)", url)
         if not m:
@@ -80,22 +77,15 @@ def get_nx_download_links(shared_state, url, mirror, title, password):
         mark_hostname_issue(hostname, "download", "Session error")
         return {"links": []}
 
-    headers = {
-        'User-Agent': shared_state.values["user_agent"],
-        'Referer': url
-    }
+    headers = {"User-Agent": shared_state.values["user_agent"], "Referer": url}
 
     json_data = {}
 
-    url_segments = url.split('/')
-    payload_url = '/'.join(url_segments[:-2]) + '/api/getLinks/' + url_segments[-1]
+    url_segments = url.split("/")
+    payload_url = "/".join(url_segments[:-2]) + "/api/getLinks/" + url_segments[-1]
 
     try:
-        r = nx_session.post(payload_url,
-                            headers=headers,
-                            json=json_data,
-                            timeout=10
-                            )
+        r = nx_session.post(payload_url, headers=headers, json=json_data, timeout=10)
         r.raise_for_status()
 
         payload = r.json()
@@ -112,7 +102,7 @@ def get_nx_download_links(shared_state, url, mirror, title, password):
         return {"links": []}
 
     try:
-        decrypted_url = payload['link'][0]['url']
+        decrypted_url = payload["link"][0]["url"]
         if decrypted_url:
             if "filer.net/folder/" in decrypted_url:
                 urls = get_filer_folder_links_via_api(shared_state, decrypted_url)
