@@ -6,6 +6,10 @@ on:
   push:
     branches: [ dev ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   GHCR_ENDPOINT: "ghcr.io/rix1337/quasarr"
   DESCRIPTION: "Quasarr connects JDownloader with Radarr, Sonarr and LazyLibrarian."
@@ -241,7 +245,7 @@ jobs:
           name: exe-amd64
           path: ./dist/*.exe
 
-  upload-exe-beta:
+  beta-release:
     needs: [ version, build-wheel, build-exe ]
     runs-on: ubuntu-latest
     permissions: { contents: write }
@@ -368,3 +372,65 @@ jobs:
             --annotation "$ANNOTATION" \
             ${{ env.GHCR_ENDPOINT }}:${TAG_AMD64} \
             ${{ env.GHCR_ENDPOINT }}:${TAG_ARM64}
+
+  notify:
+    name: Notify Discord & PR
+    needs: [ quality-check, version, beta-release, merge-docker-manifest ]
+    # Only run if the build wasn't skipped by the auto-fixer and the release succeeded
+    if: needs.quality-check.outputs.changes_pushed != 'true' && needs.beta-release.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write # Required to comment on the PR
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Send Notifications
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          VERSION: ${{ needs.version.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "Fetching release details..."
+          # Get the body of the release we just created (beta tag)
+          RELEASE_BODY=$(gh release view beta --json body --jq .body)
+          
+          # --- 1. DISCORD NOTIFICATION ---
+          if [ -n "$DISCORD_WEBHOOK" ]; then
+            echo "Sending Discord Webhook..."
+          
+            # Construct a JSON payload safely using jq (handles escaping quotes/newlines)
+            # We create a simple embed with the version and the release body
+            jq -n \
+              --arg title "🚀 New Beta Build: $VERSION" \
+              --arg desc "$RELEASE_BODY" \
+              --arg url "https://github.com/$REPO/releases/tag/beta" \
+              '{content: null, embeds: [{title: $title, description: $desc, url: $url, color: 5814783}]}' \
+              > discord_payload.json
+          
+            curl -H "Content-Type: application/json" \
+                 -d @discord_payload.json \
+                 "$DISCORD_WEBHOOK"
+          else
+            echo "::warning::Skipping Discord notification (DISCORD_WEBHOOK secret not set)"
+          fi
+          
+          # --- 2. PR COMMENT FALLBACK ---
+          # Find the PR associated with the commit that triggered this push
+          echo "Looking for associated PR..."
+          PR_NUMBER=$(gh pr list --search "${{ github.sha }}" --state merged --json number --jq '.[0].number')
+          
+          if [ -n "$PR_NUMBER" ]; then
+            echo "Found PR #$PR_NUMBER. Posting comment..."
+          
+            echo "## 🚀 Beta Release $VERSION is Live!" > pr_comment.md
+            echo "" >> pr_comment.md
+            echo "$RELEASE_BODY" >> pr_comment.md
+            echo "" >> pr_comment.md
+            echo "[View Release on GitHub](https://github.com/$REPO/releases/tag/beta)" >> pr_comment.md
+          
+            gh pr comment "$PR_NUMBER" --body-file pr_comment.md
+          else
+            echo "No merged PR found for commit ${{ github.sha }}. Skipping PR comment."
+          fi

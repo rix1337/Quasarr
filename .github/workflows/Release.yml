@@ -290,3 +290,44 @@ jobs:
           artifactErrorsFailBuild: true
           bodyFile: "release_body.md"
           tag: v.${{ needs.version.outputs.version }}
+
+  notify:
+    name: Notify Discord
+    needs: [ version, release, merge-docker-manifest ]
+    if: always() && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Send Discord Webhook
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          VERSION: ${{ needs.version.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Use the exact tag format defined in the release job (v.X.X.X)
+          TAG="v.$VERSION"
+          echo "Fetching release details for $TAG..."
+          
+          # Fetch the body from the release we just created
+          RELEASE_BODY=$(gh release view "$TAG" --json body --jq .body)
+          
+          if [ -n "$DISCORD_WEBHOOK" ]; then
+            echo "Sending notification..."
+          
+            # Construct JSON payload using jq
+            # Color 5763719 is 'Green'
+            jq -n \
+              --arg title "🚀 New Release: $TAG" \
+              --arg desc "$RELEASE_BODY" \
+              --arg url "https://github.com/$REPO/releases/tag/$TAG" \
+              '{content: null, embeds: [{title: $title, description: $desc, url: $url, color: 5763719}]}' \
+              > discord_payload.json
+
+            curl -H "Content-Type: application/json" \
+                 -d @discord_payload.json \
+                 "$DISCORD_WEBHOOK"
+          else
+            echo "::warning::Skipping Discord notification (DISCORD_WEBHOOK secret not set)"
+          fi
