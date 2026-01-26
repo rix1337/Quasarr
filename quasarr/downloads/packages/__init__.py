@@ -8,7 +8,7 @@ from collections import defaultdict
 from urllib.parse import urlparse
 
 from quasarr.providers.jd_cache import JDPackageCache
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 
 # =============================================================================
 # CONSTANTS
@@ -23,25 +23,55 @@ CATEGORY_DOCS = "docs"
 CATEGORY_NOT_QUASARR = "not_quasarr"
 
 # Known archive extensions for file detection
-ARCHIVE_EXTENSIONS = frozenset([
-    '.rar', '.zip', '.7z', '.tar', '.gz', '.bz2', '.xz',
-    '.001', '.002', '.003', '.004', '.005', '.006', '.007', '.008', '.009',
-    '.r00', '.r01', '.r02', '.r03', '.r04', '.r05', '.r06', '.r07', '.r08', '.r09',
-    '.part1.rar', '.part01.rar', '.part001.rar',
-    '.part2.rar', '.part02.rar', '.part002.rar',
-])
+ARCHIVE_EXTENSIONS = frozenset(
+    [
+        ".rar",
+        ".zip",
+        ".7z",
+        ".tar",
+        ".gz",
+        ".bz2",
+        ".xz",
+        ".001",
+        ".002",
+        ".003",
+        ".004",
+        ".005",
+        ".006",
+        ".007",
+        ".008",
+        ".009",
+        ".r00",
+        ".r01",
+        ".r02",
+        ".r03",
+        ".r04",
+        ".r05",
+        ".r06",
+        ".r07",
+        ".r08",
+        ".r09",
+        ".part1.rar",
+        ".part01.rar",
+        ".part001.rar",
+        ".part2.rar",
+        ".part02.rar",
+        ".part002.rar",
+    ]
+)
 
 # JDownloader extraction complete status markers (checked case-insensitively)
 # Add new languages here as needed
 EXTRACTION_COMPLETE_MARKERS = (
-    'extraction ok',  # English
-    'entpacken ok',  # German
+    "extraction ok",  # English
+    "entpacken ok",  # German
 )
 
 
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
+
 
 def is_extraction_complete(status):
     """Check if a JDownloader status string indicates extraction is complete (case-insensitive)."""
@@ -51,7 +81,7 @@ def is_extraction_complete(status):
     return any(marker in status_lower for marker in EXTRACTION_COMPLETE_MARKERS)
 
 
-def is_archive_file(filename, extraction_status=''):
+def is_archive_file(filename, extraction_status=""):
     """Check if a file is an archive based on extension or extraction status."""
     if extraction_status:
         return True
@@ -88,7 +118,9 @@ def get_links_comment(package, package_links):
             if link.get("packageUUID") == package_uuid:
                 comment = link.get("comment")
                 if comment:
-                    debug(f"get_links_comment: Found comment '{comment}' for package {package_uuid}")
+                    debug(
+                        f"get_links_comment: Found comment '{comment}' for package {package_uuid}"
+                    )
                 return comment
     return None
 
@@ -105,7 +137,9 @@ def get_links_status(package, all_links, is_archive=False):
     """
     package_uuid = package.get("uuid")
     package_name = package.get("name", "unknown")
-    debug(f"get_links_status: Checking package '{package_name}' ({package_uuid}), is_archive={is_archive}")
+    debug(
+        f"get_links_status: Checking package '{package_name}' ({package_uuid}), is_archive={is_archive}"
+    )
 
     links_in_package = []
     if package_uuid and all_links:
@@ -133,22 +167,32 @@ def get_links_status(package, all_links, is_archive=False):
     # Check if any mirror has all links online
     has_mirror_all_online = False
     for domain, mirror_links in mirrors.items():
-        if all(link.get('availability', '').lower() == 'online' for link in mirror_links):
+        if all(
+            link.get("availability", "").lower() == "online" for link in mirror_links
+        ):
             has_mirror_all_online = True
-            debug(f"get_links_status: Mirror '{domain}' has all {len(mirror_links)} links online")
+            debug(
+                f"get_links_status: Mirror '{domain}' has all {len(mirror_links)} links online"
+            )
             break
 
     # Collect offline link IDs (only if there's an online mirror available)
-    offline_links = [link for link in links_in_package if link.get('availability', '').lower() == 'offline']
-    offline_ids = [link.get('uuid') for link in offline_links]
+    offline_links = [
+        link
+        for link in links_in_package
+        if link.get("availability", "").lower() == "offline"
+    ]
+    offline_ids = [link.get("uuid") for link in offline_links]
     offline_mirror_linkids = offline_ids if has_mirror_all_online else []
 
     if offline_links:
-        debug(f"get_links_status: {len(offline_links)} offline links, has_mirror_all_online={has_mirror_all_online}")
+        debug(
+            f"get_links_status: {len(offline_links)} offline links, has_mirror_all_online={has_mirror_all_online}"
+        )
 
     # First pass: detect if ANY link has extraction activity (for safety override)
     for link in links_in_package:
-        if link.get('extractionStatus', ''):
+        if link.get("extractionStatus", ""):
             has_extraction_activity = True
             break
 
@@ -157,27 +201,33 @@ def get_links_status(package, all_links, is_archive=False):
 
     # Second pass: check each link's status
     for link in links_in_package:
-        link_name = link.get('name', 'unknown')
-        link_finished = link.get('finished', False)
-        link_availability = link.get('availability', '').lower()
-        link_extraction_status = link.get('extractionStatus', '').lower()
-        link_status = link.get('status', '')
-        link_status_icon = link.get('statusIconKey', '').lower()
-        link_eta = link.get('eta', 0) // 1000 if link.get('eta') else 0
+        link_name = link.get("name", "unknown")
+        link_finished = link.get("finished", False)
+        link_availability = link.get("availability", "").lower()
+        link_extraction_status = link.get("extractionStatus", "").lower()
+        link_status = link.get("status", "")
+        link_status_icon = link.get("statusIconKey", "").lower()
+        link_eta = link.get("eta", 0) // 1000 if link.get("eta") else 0
 
         # Determine if THIS LINK is an archive file
         link_is_archive_file = is_archive_file(link_name, link_extraction_status)
 
-        link_status_preview = link_status[:50] + '...' if len(link_status) > 50 else link_status
+        link_status_preview = (
+            link_status[:50] + "..." if len(link_status) > 50 else link_status
+        )
 
-        debug(f"get_links_status: Link '{link_name}': finished={link_finished}, "
-              f"is_archive_file={link_is_archive_file}, availability={link_availability}, "
-              f"extractionStatus='{link_extraction_status}', status='{link_status_preview}'")
+        debug(
+            f"get_links_status: Link '{link_name}': finished={link_finished}, "
+            f"is_archive_file={link_is_archive_file}, availability={link_availability}, "
+            f"extractionStatus='{link_extraction_status}', status='{link_status_preview}'"
+        )
 
         # Check for offline links
         if link_availability == "offline" and not has_mirror_all_online:
             error = "Links offline for all mirrors"
-            debug(f"get_links_status: ERROR - Link offline with no online mirror: {link_name}")
+            debug(
+                f"get_links_status: ERROR - Link offline with no online mirror: {link_name}"
+            )
 
         # Check for file errors
         if link_status_icon == "false":
@@ -189,20 +239,26 @@ def get_links_status(package, all_links, is_archive=False):
         if not link_finished:
             # Download not complete
             all_finished = False
-            debug(f"get_links_status: Link not finished (download in progress): {link_name}")
+            debug(
+                f"get_links_status: Link not finished (download in progress): {link_name}"
+            )
 
-        elif link_extraction_status and link_extraction_status != 'successful':
+        elif link_extraction_status and link_extraction_status != "successful":
             # Extraction is running or errored (applies to archive files only)
-            if link_extraction_status == 'error':
-                error = link.get('status', 'Extraction error')
+            if link_extraction_status == "error":
+                error = link.get("status", "Extraction error")
                 debug(f"get_links_status: Extraction ERROR on {link_name}: {error}")
-            elif link_extraction_status == 'running':
-                debug(f"get_links_status: Extraction RUNNING on {link_name}, eta={link_eta}s")
+            elif link_extraction_status == "running":
+                debug(
+                    f"get_links_status: Extraction RUNNING on {link_name}, eta={link_eta}s"
+                )
                 if link_eta > 0:
                     if eta is None or link_eta > eta:
                         eta = link_eta
             else:
-                debug(f"get_links_status: Extraction status '{link_extraction_status}' on {link_name}")
+                debug(
+                    f"get_links_status: Extraction status '{link_extraction_status}' on {link_name}"
+                )
             all_finished = False
 
         elif link_is_archive_file:
@@ -210,27 +266,33 @@ def get_links_status(package, all_links, is_archive=False):
             if is_extraction_complete(link_status):
                 debug(f"get_links_status: Archive link COMPLETE: {link_name}")
             else:
-                debug(f"get_links_status: Archive link WAITING for extraction: {link_name}, status='{link_status}'")
+                debug(
+                    f"get_links_status: Archive link WAITING for extraction: {link_name}, status='{link_status}'"
+                )
                 all_finished = False
 
         elif is_archive or has_extraction_activity:
             # Package is marked as archive but THIS link doesn't look like an archive file
             # (e.g., .mkv in a package with .rar files)
             # These non-archive files are finished when download is complete
-            debug(f"get_links_status: Non-archive link in archive package COMPLETE: {link_name}")
+            debug(
+                f"get_links_status: Non-archive link in archive package COMPLETE: {link_name}"
+            )
 
         else:
             # Non-archive file in non-archive package - finished when downloaded
             debug(f"get_links_status: Non-archive link COMPLETE: {link_name}")
 
-    debug(f"get_links_status: RESULT for '{package_name}': all_finished={all_finished}, "
-          f"eta={eta}, error={error}, is_archive={is_archive}, has_extraction_activity={has_extraction_activity}")
+    debug(
+        f"get_links_status: RESULT for '{package_name}': all_finished={all_finished}, "
+        f"eta={eta}, error={error}, is_archive={is_archive}, has_extraction_activity={has_extraction_activity}"
+    )
 
     return {
         "all_finished": all_finished,
         "eta": eta,
         "error": error,
-        "offline_mirror_linkids": offline_mirror_linkids
+        "offline_mirror_linkids": offline_mirror_linkids,
     }
 
 
@@ -240,14 +302,18 @@ def get_links_matching_package_uuid(package, package_links):
     link_ids = []
 
     if not isinstance(package_links, list):
-        debug(f"get_links_matching_package_uuid: ERROR - expected list, got {type(package_links).__name__}")
+        debug(
+            f"get_links_matching_package_uuid: ERROR - expected list, got {type(package_links).__name__}"
+        )
         return link_ids
 
     if package_uuid:
         for link in package_links:
             if link.get("packageUUID") == package_uuid:
                 link_ids.append(link.get("uuid"))
-        debug(f"get_links_matching_package_uuid: Found {len(link_ids)} links for package {package_uuid}")
+        debug(
+            f"get_links_matching_package_uuid: Found {len(link_ids)} links for package {package_uuid}"
+        )
     else:
         info("Error - package uuid missing in delete request!")
     return link_ids
@@ -266,6 +332,7 @@ def format_eta(seconds):
 # =============================================================================
 # MAIN FUNCTIONS
 # =============================================================================
+
 
 def get_packages(shared_state, _cache=None):
     """
@@ -289,7 +356,9 @@ def get_packages(shared_state, _cache=None):
 
     # === PROTECTED PACKAGES (CAPTCHA required) ===
     protected_packages = shared_state.get_db("protected").retrieve_all_titles()
-    debug(f"get_packages: Found {len(protected_packages) if protected_packages else 0} protected packages")
+    debug(
+        f"get_packages: Found {len(protected_packages) if protected_packages else 0} protected packages"
+    )
 
     if protected_packages:
         for package in protected_packages:
@@ -300,21 +369,29 @@ def get_packages(shared_state, _cache=None):
                     "title": data["title"],
                     "urls": data["links"],
                     "size_mb": data.get("size_mb"),
-                    "password": data.get("password")
+                    "password": data.get("password"),
                 }
-                packages.append({
-                    "details": details,
-                    "location": "queue",
-                    "type": "protected",
-                    "package_id": package_id
-                })
-                debug(f"get_packages: Added protected package '{data['title']}' ({package_id})")
+                packages.append(
+                    {
+                        "details": details,
+                        "location": "queue",
+                        "type": "protected",
+                        "package_id": package_id,
+                    }
+                )
+                debug(
+                    f"get_packages: Added protected package '{data['title']}' ({package_id})"
+                )
             except (json.JSONDecodeError, KeyError) as e:
-                debug(f"get_packages: Failed to parse protected package {package_id}: {e}")
+                debug(
+                    f"get_packages: Failed to parse protected package {package_id}: {e}"
+                )
 
     # === FAILED PACKAGES ===
     failed_packages = shared_state.get_db("failed").retrieve_all_titles()
-    debug(f"get_packages: Found {len(failed_packages) if failed_packages else 0} failed packages")
+    debug(
+        f"get_packages: Found {len(failed_packages) if failed_packages else 0} failed packages"
+    )
 
     if failed_packages:
         for package in failed_packages:
@@ -328,19 +405,23 @@ def get_packages(shared_state, _cache=None):
                 details = {
                     "name": data.get("title", "Unknown"),
                     "bytesLoaded": 0,
-                    "saveTo": "/"
+                    "saveTo": "/",
                 }
                 error = data.get("error", "Unknown error")
 
-                packages.append({
-                    "details": details,
-                    "location": "history",
-                    "type": "failed",
-                    "error": error,
-                    "comment": package_id,
-                    "uuid": package_id
-                })
-                debug(f"get_packages: Added failed package '{details['name']}' ({package_id}): {error}")
+                packages.append(
+                    {
+                        "details": details,
+                        "location": "history",
+                        "type": "failed",
+                        "error": error,
+                        "comment": package_id,
+                        "uuid": package_id,
+                    }
+                )
+                debug(
+                    f"get_packages: Added failed package '{details['name']}' ({package_id}): {error}"
+                )
             except (json.JSONDecodeError, KeyError, TypeError) as e:
                 debug(f"get_packages: Failed to parse failed package {package_id}: {e}")
 
@@ -356,46 +437,60 @@ def get_packages(shared_state, _cache=None):
             package_uuid = package.get("uuid")
 
             comment = get_links_comment(package, linkgrabber_links)
-            link_details = get_links_status(package, linkgrabber_links, is_archive=False)
+            link_details = get_links_status(
+                package, linkgrabber_links, is_archive=False
+            )
 
             error = link_details["error"]
             offline_mirror_linkids = link_details["offline_mirror_linkids"]
 
             # Clean up offline links if we have online mirrors
             if offline_mirror_linkids:
-                debug(f"get_packages: Cleaning up {len(offline_mirror_linkids)} offline links from '{package_name}'")
+                debug(
+                    f"get_packages: Cleaning up {len(offline_mirror_linkids)} offline links from '{package_name}'"
+                )
                 try:
                     shared_state.get_device().linkgrabber.cleanup(
                         "DELETE_OFFLINE",
                         "REMOVE_LINKS_ONLY",
                         "SELECTED",
                         offline_mirror_linkids,
-                        [package_uuid]
+                        [package_uuid],
                     )
                 except Exception as e:
                     debug(f"get_packages: Failed to cleanup offline links: {e}")
 
             location = "history" if error else "queue"
-            packages.append({
-                "details": package,
-                "location": location,
-                "type": "linkgrabber",
-                "comment": comment,
-                "uuid": package_uuid,
-                "error": error
-            })
-            debug(f"get_packages: Added linkgrabber package '{package_name}' -> {location}")
+            packages.append(
+                {
+                    "details": package,
+                    "location": location,
+                    "type": "linkgrabber",
+                    "comment": comment,
+                    "uuid": package_uuid,
+                    "error": error,
+                }
+            )
+            debug(
+                f"get_packages: Added linkgrabber package '{package_name}' -> {location}"
+            )
 
     # === DOWNLOADER PACKAGES ===
     downloader_packages = cache.downloader_packages
     downloader_links = cache.downloader_links
 
-    debug(f"get_packages: Processing {len(downloader_packages)} downloader packages with {len(downloader_links)} links")
+    debug(
+        f"get_packages: Processing {len(downloader_packages)} downloader packages with {len(downloader_links)} links"
+    )
 
     if downloader_packages and downloader_links:
         # ONE bulk API call for all archive detection, with safety fallbacks
-        archive_package_uuids = cache.detect_all_archives(downloader_packages, downloader_links)
-        debug(f"get_packages: Archive detection complete - {len(archive_package_uuids)} packages are archives")
+        archive_package_uuids = cache.detect_all_archives(
+            downloader_packages, downloader_links
+        )
+        debug(
+            f"get_packages: Archive detection complete - {len(archive_package_uuids)} packages are archives"
+        )
 
         for package in downloader_packages:
             package_name = package.get("name", "unknown")
@@ -404,7 +499,9 @@ def get_packages(shared_state, _cache=None):
             comment = get_links_comment(package, downloader_links)
 
             # Lookup from cache (populated by detect_all_archives above)
-            is_archive = package_uuid in archive_package_uuids if package_uuid else False
+            is_archive = (
+                package_uuid in archive_package_uuids if package_uuid else False
+            )
             debug(f"get_packages: Package '{package_name}' is_archive={is_archive}")
 
             link_details = get_links_status(package, downloader_links, is_archive)
@@ -424,36 +521,39 @@ def get_packages(shared_state, _cache=None):
                     # Only mark as finished if it's not an archive
                     if not is_archive:
                         debug(
-                            f"get_packages: Package '{package_name}' bytes complete and not archive -> marking finished")
+                            f"get_packages: Package '{package_name}' bytes complete and not archive -> marking finished"
+                        )
                         finished = True
                     else:
                         debug(
-                            f"get_packages: Package '{package_name}' bytes complete BUT is_archive=True -> NOT marking finished yet")
+                            f"get_packages: Package '{package_name}' bytes complete BUT is_archive=True -> NOT marking finished yet"
+                        )
 
             if not finished and link_details["eta"]:
                 package["eta"] = link_details["eta"]
 
             location = "history" if error or finished else "queue"
 
-            debug(f"get_packages: Package '{package_name}' -> location={location}, "
-                  f"finished={finished}, error={error}, is_archive={is_archive}")
+            debug(
+                f"get_packages: Package '{package_name}' -> location={location}, "
+                f"finished={finished}, error={error}, is_archive={is_archive}"
+            )
 
-            packages.append({
-                "details": package,
-                "location": location,
-                "type": "downloader",
-                "comment": comment,
-                "uuid": package_uuid,
-                "error": error,
-                "is_archive": is_archive,
-                "extraction_ok": finished and is_archive
-            })
+            packages.append(
+                {
+                    "details": package,
+                    "location": location,
+                    "type": "downloader",
+                    "comment": comment,
+                    "uuid": package_uuid,
+                    "error": error,
+                    "is_archive": is_archive,
+                    "extraction_ok": finished and is_archive,
+                }
+            )
 
     # === BUILD RESPONSE ===
-    downloads = {
-        "queue": [],
-        "history": []
-    }
+    downloads = {"queue": [], "history": []}
 
     queue_index = 0
     history_index = 0
@@ -489,7 +589,9 @@ def get_packages(shared_state, _cache=None):
                 bytes_loaded = int(details.get("bytesLoaded", 0))
 
                 mb = bytes_total / (1024 * 1024)
-                mb_left = (bytes_total - bytes_loaded) / (1024 * 1024) if bytes_total else 0
+                mb_left = (
+                    (bytes_total - bytes_loaded) / (1024 * 1024) if bytes_total else 0
+                )
                 if mb_left < 0:
                     mb_left = 0
 
@@ -525,33 +627,39 @@ def get_packages(shared_state, _cache=None):
                 except (ZeroDivisionError, ValueError, TypeError):
                     percentage = 0
 
-                downloads["queue"].append({
-                    "index": queue_index,
-                    "nzo_id": effective_id,
-                    "priority": "Normal",
-                    "filename": name,
-                    "cat": category,
-                    "mbleft": int(mb_left) if mb_left else 0,
-                    "mb": int(mb) if mb else 0,
-                    "bytes": bytes_total,
-                    "status": "Downloading",
-                    "percentage": percentage,
-                    "timeleft": time_left,
-                    "type": package_type,
-                    "uuid": package_uuid,
-                    "is_archive": package.get("is_archive", False),
-                    "storage": storage
-                })
+                downloads["queue"].append(
+                    {
+                        "index": queue_index,
+                        "nzo_id": effective_id,
+                        "priority": "Normal",
+                        "filename": name,
+                        "cat": category,
+                        "mbleft": int(mb_left) if mb_left else 0,
+                        "mb": int(mb) if mb else 0,
+                        "bytes": bytes_total,
+                        "status": "Downloading",
+                        "percentage": percentage,
+                        "timeleft": time_left,
+                        "type": package_type,
+                        "uuid": package_uuid,
+                        "is_archive": package.get("is_archive", False),
+                        "storage": storage,
+                    }
+                )
                 queue_index += 1
             else:
-                debug(f"get_packages: Skipping queue package without package_id or uuid: {name}")
+                debug(
+                    f"get_packages: Skipping queue package without package_id or uuid: {name}"
+                )
 
         elif package["location"] == "history":
             details = package["details"]
             name = details.get("name", "unknown")
             try:
                 # Use bytesLoaded first, fall back to bytesTotal for failed/incomplete downloads
-                size = int(details.get("bytesLoaded", 0)) or int(details.get("bytesTotal", 0))
+                size = int(details.get("bytesLoaded", 0)) or int(
+                    details.get("bytesTotal", 0)
+                )
             except (KeyError, TypeError, ValueError):
                 size = 0
             storage = details.get("saveTo", "/")
@@ -569,29 +677,36 @@ def get_packages(shared_state, _cache=None):
             else:
                 status = "Completed"
 
-            downloads["history"].append({
-                "fail_message": fail_message,
-                "category": category,
-                "storage": storage,
-                "status": status,
-                "nzo_id": effective_id,
-                "name": name,
-                "bytes": int(size),
-                "percentage": 100,
-                "type": "downloader",
-                "uuid": package.get("uuid"),
-                "is_archive": package.get("is_archive", False),
-                "extraction_ok": package.get("extraction_ok", False),
-                "extraction_status": "SUCCESSFUL" if package.get("extraction_ok", False) else "RUNNING" if package.get(
-                    "is_archive", False) else ""
-            })
+            downloads["history"].append(
+                {
+                    "fail_message": fail_message,
+                    "category": category,
+                    "storage": storage,
+                    "status": status,
+                    "nzo_id": effective_id,
+                    "name": name,
+                    "bytes": int(size),
+                    "percentage": 100,
+                    "type": "downloader",
+                    "uuid": package.get("uuid"),
+                    "is_archive": package.get("is_archive", False),
+                    "extraction_ok": package.get("extraction_ok", False),
+                    "extraction_status": "SUCCESSFUL"
+                    if package.get("extraction_ok", False)
+                    else "RUNNING"
+                    if package.get("is_archive", False)
+                    else "",
+                }
+            )
             history_index += 1
         else:
             info(f"Invalid package location {package['location']}")
 
     # === AUTO-START QUASARR PACKAGES ===
     if not cache.is_collecting:
-        debug("get_packages: Linkgrabber not collecting, checking for packages to auto-start")
+        debug(
+            "get_packages: Linkgrabber not collecting, checking for packages to auto-start"
+        )
 
         packages_to_start = []
         links_to_start = []
@@ -602,67 +717,90 @@ def get_packages(shared_state, _cache=None):
                 package_uuid = package.get("uuid")
                 if package_uuid:
                     package_link_ids = [
-                        link.get("uuid") for link in linkgrabber_links
+                        link.get("uuid")
+                        for link in linkgrabber_links
                         if link.get("packageUUID") == package_uuid and link.get("uuid")
                     ]
                     if package_link_ids:
                         debug(
-                            f"get_packages: Found Quasarr package to start: {package.get('name')} with {len(package_link_ids)} links")
+                            f"get_packages: Found Quasarr package to start: {package.get('name')} with {len(package_link_ids)} links"
+                        )
                         packages_to_start.append(package_uuid)
                         links_to_start.extend(package_link_ids)
                     else:
-                        info(f"Package {package_uuid} has no links in linkgrabber - skipping start")
+                        info(
+                            f"Package {package_uuid} has no links in linkgrabber - skipping start"
+                        )
                     # Only start one package at a time
                     break
 
         if packages_to_start and links_to_start:
             debug(
-                f"get_packages: Moving {len(packages_to_start)} packages with {len(links_to_start)} links to download list")
+                f"get_packages: Moving {len(packages_to_start)} packages with {len(links_to_start)} links to download list"
+            )
             try:
-                shared_state.get_device().linkgrabber.move_to_downloadlist(links_to_start, packages_to_start)
+                shared_state.get_device().linkgrabber.move_to_downloadlist(
+                    links_to_start, packages_to_start
+                )
                 info(
-                    f"Started {len(packages_to_start)} package download{'s' if len(packages_to_start) > 1 else ''} from linkgrabber")
+                    f"Started {len(packages_to_start)} package download{'s' if len(packages_to_start) > 1 else ''} from linkgrabber"
+                )
             except Exception as e:
                 debug(f"get_packages: Failed to move packages to download list: {e}")
     else:
         debug("get_packages: Linkgrabber is collecting, skipping auto-start")
 
-    debug(f"get_packages: COMPLETE - queue={len(downloads['queue'])}, history={len(downloads['history'])}")
+    debug(
+        f"get_packages: COMPLETE - queue={len(downloads['queue'])}, history={len(downloads['history'])}"
+    )
 
     # Summary overview for quick debugging
-    if downloads['queue'] or downloads['history']:
+    if downloads["queue"] or downloads["history"]:
         debug("=" * 60)
         debug("PACKAGE SUMMARY")
         debug("=" * 60)
         debug(f"  CACHE: {cache.get_stats()}")
         debug("-" * 60)
-        for item in downloads['queue']:
-            is_archive = item.get('is_archive', False)
+        for item in downloads["queue"]:
+            is_archive = item.get("is_archive", False)
             archive_indicator = "[ARCHIVE]" if is_archive else ""
-            mb = item.get('mb', 0)
+            mb = item.get("mb", 0)
             size_str = f"{mb:.0f} MB" if mb < 1024 else f"{mb / 1024:.1f} GB"
-            debug(f"  QUEUE: {item['filename'][:50]}{'...' if len(item['filename']) > 50 else ''}")
             debug(
-                f"         -> {item['percentage']}% | {item['timeleft']} | {size_str} | {item['cat']} {archive_indicator}")
-        for item in downloads['history']:
-            status_icon = "✅" if item['status'] == 'Completed' else "✗"
-            is_archive = item.get('is_archive')
-            extraction_ok = item.get('extraction_ok', False)
+                f"  QUEUE: {item['filename'][:50]}{'...' if len(item['filename']) > 50 else ''}"
+            )
+            debug(
+                f"         -> {item['percentage']}% | {item['timeleft']} | {size_str} | {item['cat']} {archive_indicator}"
+            )
+        for item in downloads["history"]:
+            status_icon = "✅" if item["status"] == "Completed" else "✗"
+            is_archive = item.get("is_archive")
+            extraction_ok = item.get("extraction_ok", False)
             # Only show archive status if we know it's an archive
             if is_archive:
-                archive_status = f"[ARCHIVE: {'EXTRACTED ✅' if extraction_ok else 'NOT EXTRACTED'}]"
+                archive_status = (
+                    f"[ARCHIVE: {'EXTRACTED ✅' if extraction_ok else 'NOT EXTRACTED'}]"
+                )
             else:
                 archive_status = ""
             # Format size
-            size_bytes = item.get('bytes', 0)
+            size_bytes = item.get("bytes", 0)
             if size_bytes > 0:
                 size_mb = size_bytes / (1024 * 1024)
-                size_str = f"{size_mb:.0f} MB" if size_mb < 1024 else f"{size_mb / 1024:.1f} GB"
+                size_str = (
+                    f"{size_mb:.0f} MB"
+                    if size_mb < 1024
+                    else f"{size_mb / 1024:.1f} GB"
+                )
             else:
                 size_str = "? MB"
-            debug(f"  HISTORY: {item['name'][:50]}{'...' if len(item['name']) > 50 else ''}")
-            debug(f"           -> {status_icon} {item['status']} | {size_str} | {item['category']} {archive_status}")
-            if item.get('fail_message'):
+            debug(
+                f"  HISTORY: {item['name'][:50]}{'...' if len(item['name']) > 50 else ''}"
+            )
+            debug(
+                f"           -> {status_icon} {item['status']} | {size_str} | {item['category']} {archive_status}"
+            )
+            if item.get("fail_message"):
                 debug(f"              Error: {item['fail_message']}")
         debug("=" * 60)
 
@@ -692,55 +830,80 @@ def delete_package(shared_state, package_id):
                     package_uuid = package.get("uuid")
 
                     debug(
-                        f"delete_package: Found package to delete - type={package_type}, uuid={package_uuid}, location={package_location}")
+                        f"delete_package: Found package to delete - type={package_type}, uuid={package_uuid}, location={package_location}"
+                    )
 
                     # Clean up JDownloader links if applicable
                     if package_type == "linkgrabber":
-                        ids = get_links_matching_package_uuid(package, cache.linkgrabber_links)
+                        ids = get_links_matching_package_uuid(
+                            package, cache.linkgrabber_links
+                        )
                         if ids:
-                            debug(f"delete_package: Deleting {len(ids)} links from linkgrabber")
+                            debug(
+                                f"delete_package: Deleting {len(ids)} links from linkgrabber"
+                            )
                             try:
                                 shared_state.get_device().linkgrabber.cleanup(
                                     "DELETE_ALL",
                                     "REMOVE_LINKS_AND_DELETE_FILES",
                                     "SELECTED",
                                     ids,
-                                    [package_uuid]
+                                    [package_uuid],
                                 )
                             except Exception as e:
-                                debug(f"delete_package: Linkgrabber cleanup failed: {e}")
+                                debug(
+                                    f"delete_package: Linkgrabber cleanup failed: {e}"
+                                )
                         else:
-                            debug(f"delete_package: No link IDs found for linkgrabber package")
+                            debug(
+                                f"delete_package: No link IDs found for linkgrabber package"
+                            )
 
                     elif package_type == "downloader":
-                        ids = get_links_matching_package_uuid(package, cache.downloader_links)
+                        ids = get_links_matching_package_uuid(
+                            package, cache.downloader_links
+                        )
                         if ids:
-                            debug(f"delete_package: Deleting {len(ids)} links from downloader")
+                            debug(
+                                f"delete_package: Deleting {len(ids)} links from downloader"
+                            )
                             try:
                                 shared_state.get_device().downloads.cleanup(
                                     "DELETE_ALL",
                                     "REMOVE_LINKS_AND_DELETE_FILES",
                                     "SELECTED",
                                     ids,
-                                    [package_uuid]
+                                    [package_uuid],
                                 )
                             except Exception as e:
                                 debug(f"delete_package: Downloads cleanup failed: {e}")
                         else:
-                            debug(f"delete_package: No link IDs found for downloader package")
+                            debug(
+                                f"delete_package: No link IDs found for downloader package"
+                            )
 
                     # Always clean up database entries (no state check - just clean whatever exists)
-                    debug(f"delete_package: Cleaning up database entries for {package_id}")
+                    debug(
+                        f"delete_package: Cleaning up database entries for {package_id}"
+                    )
                     try:
                         shared_state.get_db("failed").delete(package_id)
-                        debug(f"delete_package: Deleted from failed DB (or was not present)")
+                        debug(
+                            f"delete_package: Deleted from failed DB (or was not present)"
+                        )
                     except Exception as e:
-                        debug(f"delete_package: Failed DB delete exception (may be normal): {e}")
+                        debug(
+                            f"delete_package: Failed DB delete exception (may be normal): {e}"
+                        )
                     try:
                         shared_state.get_db("protected").delete(package_id)
-                        debug(f"delete_package: Deleted from protected DB (or was not present)")
+                        debug(
+                            f"delete_package: Deleted from protected DB (or was not present)"
+                        )
                     except Exception as e:
-                        debug(f"delete_package: Protected DB delete exception (may be normal): {e}")
+                        debug(
+                            f"delete_package: Protected DB delete exception (may be normal): {e}"
+                        )
 
                     # Get title for logging
                     if package_location == "queue":
@@ -758,7 +921,9 @@ def delete_package(shared_state, package_id):
         else:
             info(f'Deleted package "{package_id}"')
 
-        debug(f"delete_package: Successfully completed deletion for package {package_id}, found={found}")
+        debug(
+            f"delete_package: Successfully completed deletion for package {package_id}, found={found}"
+        )
         return True
 
     except Exception as e:

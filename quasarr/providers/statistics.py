@@ -3,7 +3,7 @@
 # Project by https://github.com/rix1337
 
 from json import loads
-from typing import Dict, Any
+from typing import Any, Dict
 
 
 class StatsHelper:
@@ -29,7 +29,7 @@ class StatsHelper:
             "captcha_decryptions_manual": 0,
             "failed_downloads": 0,
             "failed_decryptions_automatic": 0,
-            "failed_decryptions_manual": 0
+            "failed_decryptions_manual": 0,
         }
 
         db = self._get_db()
@@ -58,7 +58,7 @@ class StatsHelper:
         Args:
             links: Can be:
                 - list/array: counts the length
-                - int: uses the value directly  
+                - int: uses the value directly
                 - None/False/empty: treats as failed download
         """
         # Handle different input types
@@ -127,7 +127,11 @@ class StatsHelper:
                     if data.get("poster_link"):
                         with_poster += 1
 
-                    if data.get("localized") and isinstance(data["localized"], dict) and len(data["localized"]) > 0:
+                    if (
+                        data.get("localized")
+                        and isinstance(data["localized"], dict)
+                        and len(data["localized"]) > 0
+                    ):
                         with_localized += 1
 
                 except (ValueError, TypeError):
@@ -137,14 +141,14 @@ class StatsHelper:
                 "imdb_total_cached": total_cached,
                 "imdb_with_title": with_title,
                 "imdb_with_poster": with_poster,
-                "imdb_with_localized": with_localized
+                "imdb_with_localized": with_localized,
             }
         except Exception:
             return {
                 "imdb_total_cached": 0,
                 "imdb_with_title": 0,
                 "imdb_with_poster": 0,
-                "imdb_with_localized": 0
+                "imdb_with_localized": 0,
             }
 
     def get_stats(self) -> Dict[str, Any]:
@@ -152,50 +156,78 @@ class StatsHelper:
         stats = {
             "packages_downloaded": self._get_stat("packages_downloaded", 0),
             "links_processed": self._get_stat("links_processed", 0),
-            "captcha_decryptions_automatic": self._get_stat("captcha_decryptions_automatic", 0),
-            "captcha_decryptions_manual": self._get_stat("captcha_decryptions_manual", 0),
+            "captcha_decryptions_automatic": self._get_stat(
+                "captcha_decryptions_automatic", 0
+            ),
+            "captcha_decryptions_manual": self._get_stat(
+                "captcha_decryptions_manual", 0
+            ),
             "failed_downloads": self._get_stat("failed_downloads", 0),
-            "failed_decryptions_automatic": self._get_stat("failed_decryptions_automatic", 0),
-            "failed_decryptions_manual": self._get_stat("failed_decryptions_manual", 0)
+            "failed_decryptions_automatic": self._get_stat(
+                "failed_decryptions_automatic", 0
+            ),
+            "failed_decryptions_manual": self._get_stat("failed_decryptions_manual", 0),
         }
 
         # Calculate totals and rates
-        total_captcha_decryptions = stats["captcha_decryptions_automatic"] + stats["captcha_decryptions_manual"]
-        total_failed_decryptions = stats["failed_decryptions_automatic"] + stats["failed_decryptions_manual"]
-        total_download_attempts = stats["packages_downloaded"] + stats["failed_downloads"]
+        total_captcha_decryptions = (
+            stats["captcha_decryptions_automatic"] + stats["captcha_decryptions_manual"]
+        )
+        total_failed_decryptions = (
+            stats["failed_decryptions_automatic"] + stats["failed_decryptions_manual"]
+        )
+        total_download_attempts = (
+            stats["packages_downloaded"] + stats["failed_downloads"]
+        )
         total_decryption_attempts = total_captcha_decryptions + total_failed_decryptions
-        total_automatic_attempts = stats["captcha_decryptions_automatic"] + stats["failed_decryptions_automatic"]
-        total_manual_attempts = stats["captcha_decryptions_manual"] + stats["failed_decryptions_manual"]
+        total_automatic_attempts = (
+            stats["captcha_decryptions_automatic"]
+            + stats["failed_decryptions_automatic"]
+        )
+        total_manual_attempts = (
+            stats["captcha_decryptions_manual"] + stats["failed_decryptions_manual"]
+        )
 
         # Add calculated fields
-        stats.update({
-            "total_captcha_decryptions": total_captcha_decryptions,
-            "total_failed_decryptions": total_failed_decryptions,
-            "total_download_attempts": total_download_attempts,
-            "total_decryption_attempts": total_decryption_attempts,
-            "total_automatic_attempts": total_automatic_attempts,
-            "total_manual_attempts": total_manual_attempts,
-            "download_success_rate": (
-                (stats["packages_downloaded"] / total_download_attempts * 100)
-                if total_download_attempts > 0 else 0
-            ),
-            "decryption_success_rate": (
-                (total_captcha_decryptions / total_decryption_attempts * 100)
-                if total_decryption_attempts > 0 else 0
-            ),
-            "automatic_decryption_success_rate": (
-                (stats["captcha_decryptions_automatic"] / total_automatic_attempts * 100)
-                if total_automatic_attempts > 0 else 0
-            ),
-            "manual_decryption_success_rate": (
-                (stats["captcha_decryptions_manual"] / total_manual_attempts * 100)
-                if total_manual_attempts > 0 else 0
-            ),
-            "average_links_per_package": (
-                stats["links_processed"] / stats["packages_downloaded"]
-                if stats["packages_downloaded"] > 0 else 0
-            )
-        })
+        stats.update(
+            {
+                "total_captcha_decryptions": total_captcha_decryptions,
+                "total_failed_decryptions": total_failed_decryptions,
+                "total_download_attempts": total_download_attempts,
+                "total_decryption_attempts": total_decryption_attempts,
+                "total_automatic_attempts": total_automatic_attempts,
+                "total_manual_attempts": total_manual_attempts,
+                "download_success_rate": (
+                    (stats["packages_downloaded"] / total_download_attempts * 100)
+                    if total_download_attempts > 0
+                    else 0
+                ),
+                "decryption_success_rate": (
+                    (total_captcha_decryptions / total_decryption_attempts * 100)
+                    if total_decryption_attempts > 0
+                    else 0
+                ),
+                "automatic_decryption_success_rate": (
+                    (
+                        stats["captcha_decryptions_automatic"]
+                        / total_automatic_attempts
+                        * 100
+                    )
+                    if total_automatic_attempts > 0
+                    else 0
+                ),
+                "manual_decryption_success_rate": (
+                    (stats["captcha_decryptions_manual"] / total_manual_attempts * 100)
+                    if total_manual_attempts > 0
+                    else 0
+                ),
+                "average_links_per_package": (
+                    stats["links_processed"] / stats["packages_downloaded"]
+                    if stats["packages_downloaded"] > 0
+                    else 0
+                ),
+            }
+        )
 
         # Add IMDb cache stats
         stats.update(self.get_imdb_cache_stats())

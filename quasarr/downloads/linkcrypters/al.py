@@ -8,7 +8,7 @@ from io import BytesIO
 from Cryptodome.Cipher import AES
 from PIL import Image, ImageChops
 
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 from quasarr.providers.utils import is_flaresolverr_available
 
 
@@ -107,7 +107,9 @@ def decrypt_content(content_items: list[dict], mirror: str | None) -> list[str]:
         filtered = []
 
     if mirror and not filtered:
-        info(f"No items found for mirror='{mirror}'. Falling back to all content_items.")
+        info(
+            f"No items found for mirror='{mirror}'. Falling back to all content_items."
+        )
         filtered = content_items.copy()
 
     if not mirror:
@@ -120,7 +122,9 @@ def decrypt_content(content_items: list[dict], mirror: str | None) -> list[str]:
 
     for idx, item in enumerate(items_to_process):
         if not isinstance(item, dict):
-            info(f"[Item {idx}] Invalid item format; expected dict, got {type(item).__name__}")
+            info(
+                f"[Item {idx}] Invalid item format; expected dict, got {type(item).__name__}"
+            )
             continue
 
         hoster_name = item.get("hoster", "<unknown>")
@@ -129,7 +133,9 @@ def decrypt_content(content_items: list[dict], mirror: str | None) -> list[str]:
         crypted = cnl_info.get("crypted", "")
 
         if not jnk or not crypted:
-            info(f"[Item {idx} | hoster={hoster_name}] Missing 'jk' or 'crypted' → skipping")
+            info(
+                f"[Item {idx} | hoster={hoster_name}] Missing 'jk' or 'crypted' → skipping"
+            )
             continue
 
         try:
@@ -160,11 +166,15 @@ def calculate_pixel_based_difference(img1, img2):
     return (non_zero * 100) / total_elements
 
 
-def solve_captcha(hostname, shared_state, fetch_via_flaresolverr, fetch_via_requests_session):
+def solve_captcha(
+    hostname, shared_state, fetch_via_flaresolverr, fetch_via_requests_session
+):
     # Check if FlareSolverr is available
     if not is_flaresolverr_available(shared_state):
-        raise RuntimeError("FlareSolverr is required for CAPTCHA solving but is not configured. "
-                           "Please configure FlareSolverr in the web UI.")
+        raise RuntimeError(
+            "FlareSolverr is required for CAPTCHA solving but is not configured. "
+            "Please configure FlareSolverr in the web UI."
+        )
 
     al = shared_state.values["config"]("Hostnames").get(hostname)
     captcha_base = f"https://www.{al}/files/captcha"
@@ -174,7 +184,7 @@ def solve_captcha(hostname, shared_state, fetch_via_flaresolverr, fetch_via_requ
         method="POST",
         target_url=captcha_base,
         post_data={"cID": 0, "rT": 1},
-        timeout=30
+        timeout=30,
     )
 
     try:
@@ -189,9 +199,13 @@ def solve_captcha(hostname, shared_state, fetch_via_flaresolverr, fetch_via_requ
     images = []
     for img_id in image_ids:
         img_url = f"{captcha_base}?cid=0&hash={img_id}"
-        r_img = fetch_via_requests_session(shared_state, method="GET", target_url=img_url, timeout=30)
+        r_img = fetch_via_requests_session(
+            shared_state, method="GET", target_url=img_url, timeout=30
+        )
         if r_img.status_code != 200:
-            raise RuntimeError(f"Failed to download captcha image {img_id} (HTTP {r_img.status_code})")
+            raise RuntimeError(
+                f"Failed to download captcha image {img_id} (HTTP {r_img.status_code})"
+            )
         elif not r_img.content:
             raise RuntimeError(f"Captcha image {img_id} is empty or invalid.")
         images.append((img_id, r_img.content))
@@ -225,19 +239,22 @@ def solve_captcha(hostname, shared_state, fetch_via_flaresolverr, fetch_via_requ
             total_difference += calculate_pixel_based_difference(img_i, img_j)
         images_pixel_differences.append((img_id_i, total_difference))
 
-    identified_captcha_image, cumulated_percentage = max(images_pixel_differences, key=lambda x: x[1])
-    different_pixels_percentage = int(cumulated_percentage / len(images)) if images else int(cumulated_percentage)
-    info(f'CAPTCHA image "{identified_captcha_image}" - difference to others: {different_pixels_percentage}%')
+    identified_captcha_image, cumulated_percentage = max(
+        images_pixel_differences, key=lambda x: x[1]
+    )
+    different_pixels_percentage = (
+        int(cumulated_percentage / len(images)) if images else int(cumulated_percentage)
+    )
+    info(
+        f'CAPTCHA image "{identified_captcha_image}" - difference to others: {different_pixels_percentage}%'
+    )
 
     result = fetch_via_flaresolverr(
         shared_state,
         method="POST",
         target_url=captcha_base,
         post_data={"cID": 0, "pC": identified_captcha_image, "rT": 2},
-        timeout=60
+        timeout=60,
     )
 
-    return {
-        "response": result["text"],
-        "captcha_id": identified_captcha_image
-    }
+    return {"response": result["text"], "captcha_id": identified_captcha_image}

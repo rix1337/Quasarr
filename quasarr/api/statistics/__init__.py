@@ -8,7 +8,7 @@ from quasarr.providers.statistics import StatsHelper
 
 
 def setup_statistics(app, shared_state):
-    @app.get('/statistics')
+    @app.get("/statistics")
     def statistics():
         stats_helper = StatsHelper(shared_state)
         stats = stats_helper.get_stats()
@@ -21,13 +21,13 @@ def setup_statistics(app, shared_state):
             <div class="stats-grid compact">
                 <div class="stat-card highlight">
                     <h3>📦 Total Download Attempts</h3>
-                    <div class="stat-value">{stats['total_download_attempts']:,}</div>
-                    <div class="stat-subtitle">Success Rate: {stats['download_success_rate']:,.1f}%</div>
+                    <div class="stat-value">{stats["total_download_attempts"]:,}</div>
+                    <div class="stat-subtitle">Success Rate: {stats["download_success_rate"]:,.1f}%</div>
                 </div>
                 <div class="stat-card highlight">
                     <h3>🔐 Total CAPTCHA Decryptions</h3>
-                    <div class="stat-value">{stats['total_captcha_decryptions']:,}</div>
-                    <div class="stat-subtitle">Success Rate: {stats['decryption_success_rate']:,.1f}%</div>
+                    <div class="stat-value">{stats["total_captcha_decryptions"]:,}</div>
+                    <div class="stat-subtitle">Success Rate: {stats["decryption_success_rate"]:,.1f}%</div>
                 </div>
             </div>
 
@@ -35,19 +35,19 @@ def setup_statistics(app, shared_state):
             <div class="stats-grid compact">
                 <div class="stat-card">
                     <h3>✅ Packages Downloaded</h3>
-                    <div class="stat-value">{stats['packages_downloaded']:,}</div>
+                    <div class="stat-value">{stats["packages_downloaded"]:,}</div>
                 </div>
                 <div class="stat-card">
                     <h3>⚙️ Links Processed</h3>
-                    <div class="stat-value">{stats['links_processed']:,}</div>
+                    <div class="stat-value">{stats["links_processed"]:,}</div>
                 </div>
                 <div class="stat-card">
                     <h3>❌ Failed Downloads</h3>
-                    <div class="stat-value">{stats['failed_downloads']:,}</div>
+                    <div class="stat-value">{stats["failed_downloads"]:,}</div>
                 </div>
                 <div class="stat-card">
                     <h3>🔗 Average Links per Package</h3>
-                    <div class="stat-value">{stats['average_links_per_package']:,.1f}</div>
+                    <div class="stat-value">{stats["average_links_per_package"]:,.1f}</div>
                 </div>
             </div>
 
@@ -55,21 +55,21 @@ def setup_statistics(app, shared_state):
             <div class="stats-grid compact">
                 <div class="stat-card">
                     <h3>🤖 Automatic Decryptions</h3>
-                    <div class="stat-value">{stats['captcha_decryptions_automatic']:,}</div>
-                    <div class="stat-subtitle">Success Rate: {stats['automatic_decryption_success_rate']:,.1f}%</div>
+                    <div class="stat-value">{stats["captcha_decryptions_automatic"]:,}</div>
+                    <div class="stat-subtitle">Success Rate: {stats["automatic_decryption_success_rate"]:,.1f}%</div>
                 </div>
                 <div class="stat-card">
                     <h3>👤 Manual Decryptions</h3>
-                    <div class="stat-value">{stats['captcha_decryptions_manual']:,}</div>
-                    <div class="stat-subtitle">Success Rate: {stats['manual_decryption_success_rate']:,.1f}%</div>
+                    <div class="stat-value">{stats["captcha_decryptions_manual"]:,}</div>
+                    <div class="stat-subtitle">Success Rate: {stats["manual_decryption_success_rate"]:,.1f}%</div>
                 </div>
                 <div class="stat-card">
                     <h3>⛔ Failed Auto Decryptions</h3>
-                    <div class="stat-value">{stats['failed_decryptions_automatic']:,}</div>
+                    <div class="stat-value">{stats["failed_decryptions_automatic"]:,}</div>
                 </div>
                 <div class="stat-card">
                     <h3>🚫 Failed Manual Decryptions</h3>
-                    <div class="stat-value">{stats['failed_decryptions_manual']:,}</div>
+                    <div class="stat-value">{stats["failed_decryptions_manual"]:,}</div>
                 </div>
             </div>
 
@@ -77,19 +77,19 @@ def setup_statistics(app, shared_state):
             <div class="stats-grid compact">
                 <div class="stat-card">
                     <h3>💾 Total Cached IDs</h3>
-                    <div class="stat-value">{stats['imdb_total_cached']:,}</div>
+                    <div class="stat-value">{stats["imdb_total_cached"]:,}</div>
                 </div>
                 <div class="stat-card">
                     <h3>🏷️ With Title</h3>
-                    <div class="stat-value">{stats['imdb_with_title']:,}</div>
+                    <div class="stat-value">{stats["imdb_with_title"]:,}</div>
                 </div>
                 <div class="stat-card">
                     <h3>🖼️ With Poster</h3>
-                    <div class="stat-value">{stats['imdb_with_poster']:,}</div>
+                    <div class="stat-value">{stats["imdb_with_poster"]:,}</div>
                 </div>
                 <div class="stat-card">
                     <h3>🌍 With Localized Title</h3>
-                    <div class="stat-value">{stats['imdb_with_localized']:,}</div>
+                    <div class="stat-value">{stats["imdb_with_localized"]:,}</div>
                 </div>
             </div>
         </div>

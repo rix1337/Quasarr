@@ -24,7 +24,7 @@ from quasarr.downloads.sources.sj import get_sj_download_links
 from quasarr.downloads.sources.sl import get_sl_download_links
 from quasarr.downloads.sources.wd import get_wd_download_links
 from quasarr.downloads.sources.wx import get_wx_download_links
-from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
+from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.log import info
 from quasarr.providers.notifications import send_discord_message
 from quasarr.providers.statistics import StatsHelper
@@ -36,41 +36,42 @@ from quasarr.providers.utils import filter_offline_links
 
 # Patterns match crypter name only - TLDs may change
 AUTO_DECRYPT_PATTERNS = {
-    'hide': re.compile(r'hide\.', re.IGNORECASE),
+    "hide": re.compile(r"hide\.", re.IGNORECASE),
 }
 
 PROTECTED_PATTERNS = {
-    'filecrypt': re.compile(r'filecrypt\.', re.IGNORECASE),
-    'tolink': re.compile(r'tolink\.', re.IGNORECASE),
-    'keeplinks': re.compile(r'keeplinks\.', re.IGNORECASE),
+    "filecrypt": re.compile(r"filecrypt\.", re.IGNORECASE),
+    "tolink": re.compile(r"tolink\.", re.IGNORECASE),
+    "keeplinks": re.compile(r"keeplinks\.", re.IGNORECASE),
 }
 
 # Source key -> getter function mapping
 # All getters have signature: (shared_state, url, mirror, title, password)
 # AL uses password as release_id, others ignore it
 SOURCE_GETTERS = {
-    'al': get_al_download_links,
-    'by': get_by_download_links,
-    'dd': get_dd_download_links,
-    'dj': get_dj_download_links,
-    'dl': get_dl_download_links,
-    'dt': get_dt_download_links,
-    'dw': get_dw_download_links,
-    'he': get_he_download_links,
-    'mb': get_mb_download_links,
-    'nk': get_nk_download_links,
-    'nx': get_nx_download_links,
-    'sf': get_sf_download_links,
-    'sj': get_sj_download_links,
-    'sl': get_sl_download_links,
-    'wd': get_wd_download_links,
-    'wx': get_wx_download_links,
+    "al": get_al_download_links,
+    "by": get_by_download_links,
+    "dd": get_dd_download_links,
+    "dj": get_dj_download_links,
+    "dl": get_dl_download_links,
+    "dt": get_dt_download_links,
+    "dw": get_dw_download_links,
+    "he": get_he_download_links,
+    "mb": get_mb_download_links,
+    "nk": get_nk_download_links,
+    "nx": get_nx_download_links,
+    "sf": get_sf_download_links,
+    "sj": get_sj_download_links,
+    "sl": get_sl_download_links,
+    "wd": get_wd_download_links,
+    "wx": get_wx_download_links,
 }
 
 
 # =============================================================================
 # DETERMINISTIC PACKAGE ID GENERATION
 # =============================================================================
+
 
 def extract_client_type(request_from):
     """
@@ -85,15 +86,15 @@ def extract_client_type(request_from):
         return "unknown"
 
     # Extract the client name before the version (first part before '/')
-    client = request_from.split('/')[0].lower().strip()
+    client = request_from.split("/")[0].lower().strip()
 
     # Normalize known clients
-    if 'radarr' in client:
-        return 'radarr'
-    elif 'sonarr' in client:
-        return 'sonarr'
-    elif 'lazylibrarian' in client:
-        return 'lazylibrarian'
+    if "radarr" in client:
+        return "radarr"
+    elif "sonarr" in client:
+        return "sonarr"
+    elif "lazylibrarian" in client:
+        return "lazylibrarian"
 
     return client
 
@@ -119,16 +120,12 @@ def generate_deterministic_package_id(title, source_key, client_type):
     normalized_client = client_type.lower().strip() if client_type else "unknown"
 
     # Category mapping (for compatibility with existing package ID format)
-    category_map = {
-        "lazylibrarian": "docs",
-        "radarr": "movies",
-        "sonarr": "tv"
-    }
+    category_map = {"lazylibrarian": "docs", "radarr": "movies", "sonarr": "tv"}
     category = category_map.get(normalized_client, "tv")
 
     # Create deterministic hash from combination using SHA256
     hash_input = f"{normalized_title}|{normalized_source}|{normalized_client}"
-    hash_bytes = hashlib.sha256(hash_input.encode('utf-8')).hexdigest()
+    hash_bytes = hashlib.sha256(hash_input.encode("utf-8")).hexdigest()
 
     # Use first 32 characters for good collision resistance (128-bit)
     return f"Quasarr_{category}_{hash_bytes[:32]}"
@@ -138,14 +135,15 @@ def generate_deterministic_package_id(title, source_key, client_type):
 # LINK CLASSIFICATION
 # =============================================================================
 
+
 def detect_crypter(url):
     """Returns (crypter_name, 'auto'|'protected') or (None, None)."""
     for name, pattern in AUTO_DECRYPT_PATTERNS.items():
         if pattern.search(url):
-            return name, 'auto'
+            return name, "auto"
     for name, pattern in PROTECTED_PATTERNS.items():
         if pattern.search(url):
-            return name, 'protected'
+            return name, "protected"
     return None, None
 
 
@@ -163,23 +161,23 @@ def classify_links(links, shared_state):
     Direct = anything that's not a known crypter or junkies link.
     Mirror names from source are preserved.
     """
-    classified = {'direct': [], 'auto': [], 'protected': []}
+    classified = {"direct": [], "auto": [], "protected": []}
 
     for link in links:
         url = link[0]
 
         if is_junkies_link(url, shared_state):
-            classified['protected'].append(link)
+            classified["protected"].append(link)
             continue
 
         crypter, crypter_type = detect_crypter(url)
-        if crypter_type == 'auto':
-            classified['auto'].append(link)
-        elif crypter_type == 'protected':
-            classified['protected'].append(link)
+        if crypter_type == "auto":
+            classified["auto"].append(link)
+        elif crypter_type == "protected":
+            classified["protected"].append(link)
         else:
             # Not a known crypter = direct hoster link
-            classified['direct'].append(link)
+            classified["direct"].append(link)
 
     return classified
 
@@ -187,6 +185,7 @@ def classify_links(links, shared_state):
 # =============================================================================
 # LINK PROCESSING
 # =============================================================================
+
 
 def handle_direct_links(shared_state, links, title, password, package_id):
     """Send direct hoster links to JDownloader."""
@@ -196,7 +195,10 @@ def handle_direct_links(shared_state, links, title, password, package_id):
     if shared_state.download_package(urls, title, password, package_id):
         StatsHelper(shared_state).increment_package_with_links(urls)
         return {"success": True}
-    return {"success": False, "reason": f'Failed to add {len(urls)} links to linkgrabber'}
+    return {
+        "success": False,
+        "reason": f"Failed to add {len(urls)} links to linkgrabber",
+    }
 
 
 def handle_auto_decrypt_links(shared_state, links, title, password, package_id):
@@ -218,25 +220,50 @@ def handle_auto_decrypt_links(shared_state, links, title, password, package_id):
     return {"success": False, "reason": "Failed to add decrypted links to linkgrabber"}
 
 
-def store_protected_links(shared_state, links, title, password, package_id, size_mb=None, original_url=None):
+def store_protected_links(
+    shared_state, links, title, password, package_id, size_mb=None, original_url=None
+):
     """Store protected links for CAPTCHA UI."""
-    blob_data = {"title": title, "links": links, "password": password, "size_mb": size_mb}
+    blob_data = {
+        "title": title,
+        "links": links,
+        "password": password,
+        "size_mb": size_mb,
+    }
     if original_url:
         blob_data["original_url"] = original_url
 
-    shared_state.values["database"]("protected").update_store(package_id, json.dumps(blob_data))
-    info(f'CAPTCHA-Solution required for "{title}" at: "{shared_state.values["external_address"]}/captcha"')
+    shared_state.values["database"]("protected").update_store(
+        package_id, json.dumps(blob_data)
+    )
+    info(
+        f'CAPTCHA-Solution required for "{title}" at: "{shared_state.values["external_address"]}/captcha"'
+    )
     return {"success": True}
 
 
-def process_links(shared_state, source_result, title, password, package_id, imdb_id, source_url, size_mb, label):
+def process_links(
+    shared_state,
+    source_result,
+    title,
+    password,
+    package_id,
+    imdb_id,
+    source_url,
+    size_mb,
+    label,
+):
     """
     Central link processor with priority: direct → auto-decrypt → protected.
     If ANY direct links exist, use them and ignore crypted fallbacks.
     """
     if not source_result:
-        return fail(title, package_id, shared_state,
-                    reason=f'Source returned no data for "{title}" on {label} - "{source_url}"')
+        return fail(
+            title,
+            package_id,
+            shared_state,
+            reason=f'Source returned no data for "{title}" on {label} - "{source_url}"',
+        )
 
     links = source_result.get("links", [])
     password = source_result.get("password") or password
@@ -244,58 +271,104 @@ def process_links(shared_state, source_result, title, password, package_id, imdb
     title = source_result.get("title") or title
 
     if not links:
-        return fail(title, package_id, shared_state,
-                    reason=f'No links found for "{title}" on {label} - "{source_url}"')
+        return fail(
+            title,
+            package_id,
+            shared_state,
+            reason=f'No links found for "{title}" on {label} - "{source_url}"',
+        )
 
     # Filter out 404 links
     valid_links = [link for link in links if "/404.html" not in link[0]]
     if not valid_links:
-        return fail(title, package_id, shared_state,
-                    reason=f'All links are offline or IP is banned for "{title}" on {label} - "{source_url}"')
+        return fail(
+            title,
+            package_id,
+            shared_state,
+            reason=f'All links are offline or IP is banned for "{title}" on {label} - "{source_url}"',
+        )
     links = valid_links
 
     # Filter out verifiably offline links
     links = filter_offline_links(links, shared_state=shared_state, log_func=info)
     if not links:
-        return fail(title, package_id, shared_state,
-                    reason=f'All verifiable links are offline for "{title}" on {label} - "{source_url}"')
+        return fail(
+            title,
+            package_id,
+            shared_state,
+            reason=f'All verifiable links are offline for "{title}" on {label} - "{source_url}"',
+        )
 
     classified = classify_links(links, shared_state)
 
     # PRIORITY 1: Direct hoster links
-    if classified['direct']:
+    if classified["direct"]:
         info(f"Found {len(classified['direct'])} direct hoster links for {title}")
-        send_discord_message(shared_state, title=title, case="unprotected", imdb_id=imdb_id, source=source_url)
-        result = handle_direct_links(shared_state, classified['direct'], title, password, package_id)
+        send_discord_message(
+            shared_state,
+            title=title,
+            case="unprotected",
+            imdb_id=imdb_id,
+            source=source_url,
+        )
+        result = handle_direct_links(
+            shared_state, classified["direct"], title, password, package_id
+        )
         if result["success"]:
             return {"success": True, "title": title}
         return fail(title, package_id, shared_state, reason=result.get("reason"))
 
     # PRIORITY 2: Auto-decryptable (hide.cx)
-    if classified['auto']:
+    if classified["auto"]:
         info(f"Found {len(classified['auto'])} auto-decryptable links for {title}")
-        result = handle_auto_decrypt_links(shared_state, classified['auto'], title, password, package_id)
+        result = handle_auto_decrypt_links(
+            shared_state, classified["auto"], title, password, package_id
+        )
         if result["success"]:
-            send_discord_message(shared_state, title=title, case="unprotected", imdb_id=imdb_id, source=source_url)
+            send_discord_message(
+                shared_state,
+                title=title,
+                case="unprotected",
+                imdb_id=imdb_id,
+                source=source_url,
+            )
             return {"success": True, "title": title}
         info(f"Auto-decrypt failed for {title}, falling back to manual CAPTCHA...")
-        classified['protected'].extend(classified['auto'])
+        classified["protected"].extend(classified["auto"])
 
     # PRIORITY 3: Protected (filecrypt, tolink, keeplinks, junkies)
-    if classified['protected']:
+    if classified["protected"]:
         info(f"Found {len(classified['protected'])} protected links for {title}")
-        send_discord_message(shared_state, title=title, case="captcha", imdb_id=imdb_id, source=source_url)
-        store_protected_links(shared_state, classified['protected'], title, password, package_id,
-                              size_mb=size_mb, original_url=source_url)
+        send_discord_message(
+            shared_state,
+            title=title,
+            case="captcha",
+            imdb_id=imdb_id,
+            source=source_url,
+        )
+        store_protected_links(
+            shared_state,
+            classified["protected"],
+            title,
+            password,
+            package_id,
+            size_mb=size_mb,
+            original_url=source_url,
+        )
         return {"success": True, "title": title}
 
-    return fail(title, package_id, shared_state,
-                reason=f'No usable links found for "{title}" on {label} - "{source_url}"')
+    return fail(
+        title,
+        package_id,
+        shared_state,
+        reason=f'No usable links found for "{title}" on {label} - "{source_url}"',
+    )
 
 
 # =============================================================================
 # MAIN ENTRY POINT
 # =============================================================================
+
 
 def package_id_exists(shared_state, package_id):
     # DB checks
@@ -314,7 +387,17 @@ def package_id_exists(shared_state, package_id):
     return False
 
 
-def download(shared_state, request_from, title, url, mirror, size_mb, password, imdb_id=None, source_key=None):
+def download(
+    shared_state,
+    request_from,
+    title,
+    url,
+    mirror,
+    size_mb,
+    password,
+    imdb_id=None,
+    source_key=None,
+):
     """
     Main download entry point.
 
@@ -384,7 +467,17 @@ def download(shared_state, request_from, title, url, mirror, size_mb, password, 
         StatsHelper(shared_state).increment_failed_downloads()
         return {"success": False, "package_id": package_id, "title": title}
 
-    result = process_links(shared_state, source_result, title, password, package_id, imdb_id, url, size_mb, label)
+    result = process_links(
+        shared_state,
+        source_result,
+        title,
+        password,
+        package_id,
+        imdb_id,
+        url,
+        size_mb,
+        label,
+    )
     return {"package_id": package_id, **result}
 
 

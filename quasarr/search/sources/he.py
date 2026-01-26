@@ -11,9 +11,9 @@ from html import unescape
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
+from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title, get_year
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 
 hostname = "he"
 supported_mirrors = ["rapidgator", "nitroflare"]
@@ -21,35 +21,37 @@ supported_mirrors = ["rapidgator", "nitroflare"]
 
 def parse_posted_ago(txt):
     try:
-        m = re.search(r"(\d+)\s*(sec|min|hour|day|week|month|year)s?", txt, re.IGNORECASE)
+        m = re.search(
+            r"(\d+)\s*(sec|min|hour|day|week|month|year)s?", txt, re.IGNORECASE
+        )
         if not m:
-            return ''
+            return ""
         value = int(m.group(1))
         unit = m.group(2).lower()
         now = datetime.utcnow()
-        if unit.startswith('sec'):
+        if unit.startswith("sec"):
             delta = timedelta(seconds=value)
-        elif unit.startswith('min'):
+        elif unit.startswith("min"):
             delta = timedelta(minutes=value)
-        elif unit.startswith('hour'):
+        elif unit.startswith("hour"):
             delta = timedelta(hours=value)
-        elif unit.startswith('day'):
+        elif unit.startswith("day"):
             delta = timedelta(days=value)
-        elif unit.startswith('week'):
+        elif unit.startswith("week"):
             delta = timedelta(weeks=value)
-        elif unit.startswith('month'):
+        elif unit.startswith("month"):
             delta = timedelta(days=30 * value)
         else:
             delta = timedelta(days=365 * value)
         return (datetime.utcnow() - delta).strftime("%a, %d %b %Y %H:%M:%S +0000")
     except Exception:
-        return ''
+        return ""
 
 
 def extract_size(text: str) -> dict:
     match = re.search(r"(\d+(?:[\.,]\d+)?)\s*([A-Za-z]+)", text)
     if match:
-        size = match.group(1).replace(',', '.')
+        size = match.group(1).replace(",", ".")
         unit = match.group(2)
         return {"size": size, "sizeunit": unit}
     return {"size": "0", "sizeunit": "MB"}
@@ -59,12 +61,22 @@ def he_feed(*args, **kwargs):
     return he_search(*args, **kwargs)
 
 
-def he_search(shared_state, start_time, request_from, search_string="", mirror=None, season=None, episode=None):
+def he_search(
+    shared_state,
+    start_time,
+    request_from,
+    search_string="",
+    mirror=None,
+    season=None,
+    episode=None,
+):
     releases = []
     host = shared_state.values["config"]("Hostnames").get(hostname)
 
     if not "arr" in request_from.lower():
-        debug(f'Skipping {request_from} search on "{hostname.upper()}" (unsupported media type)!')
+        debug(
+            f'Skipping {request_from} search on "{hostname.upper()}" (unsupported media type)!'
+        )
         return releases
 
     if "radarr" in request_from.lower():
@@ -80,7 +92,7 @@ def he_search(shared_state, start_time, request_from, search_string="", mirror=N
     if search_string != "":
         imdb_id = shared_state.is_imdb_id(search_string)
         if imdb_id:
-            local_title = get_localized_title(shared_state, imdb_id, 'en')
+            local_title = get_localized_title(shared_state, imdb_id, "en")
             if not local_title:
                 info(f"{hostname}: no title for IMDb {imdb_id}")
                 return releases
@@ -108,7 +120,7 @@ def he_search(shared_state, start_time, request_from, search_string="", mirror=N
         if episode:
             source_search += f"E{int(episode):02d}"
 
-    url = f'https://{host}/tag/{tag}/'
+    url = f"https://{host}/tag/{tag}/"
 
     headers = {"User-Agent": shared_state.values["user_agent"]}
     params = {"s": source_search}
@@ -116,11 +128,13 @@ def he_search(shared_state, start_time, request_from, search_string="", mirror=N
     try:
         r = requests.get(url, headers=headers, params=params, timeout=timeout)
         r.raise_for_status()
-        soup = BeautifulSoup(r.content, 'html.parser')
-        results = soup.find_all('div', class_='item')
+        soup = BeautifulSoup(r.content, "html.parser")
+        results = soup.find_all("div", class_="item")
     except Exception as e:
         info(f"{hostname}: {search_type} load error: {e}")
-        mark_hostname_issue(hostname, search_type, str(e) if "e" in dir() else "Error occurred")
+        mark_hostname_issue(
+            hostname, search_type, str(e) if "e" in dir() else "Error occurred"
+        )
         return releases
 
     if not results:
@@ -128,19 +142,19 @@ def he_search(shared_state, start_time, request_from, search_string="", mirror=N
 
     for result in results:
         try:
-            data = result.find('div', class_='data')
+            data = result.find("div", class_="data")
             if not data:
                 continue
 
-            headline = data.find('h5')
+            headline = data.find("h5")
             if not headline:
                 continue
 
-            a = headline.find('a', href=True)
+            a = headline.find("a", href=True)
             if not a:
                 continue
 
-            source = a['href'].strip()
+            source = a["href"].strip()
 
             head_title = a.get_text(strip=True)
             if not head_title:
@@ -149,7 +163,9 @@ def he_search(shared_state, start_time, request_from, search_string="", mirror=N
             head_split = head_title.split(" – ")
             title = head_split[0].strip()
 
-            if not shared_state.is_valid_release(title, request_from, search_string, season, episode):
+            if not shared_state.is_valid_release(
+                title, request_from, search_string, season, episode
+            ):
                 continue
 
             size_item = extract_size(head_split[1].strip())
@@ -158,12 +174,12 @@ def he_search(shared_state, start_time, request_from, search_string="", mirror=N
             size = mb * 1024 * 1024
 
             published = None
-            p_meta = data.find('p', class_='meta')
+            p_meta = data.find("p", class_="meta")
             if p_meta:
                 posted_span = None
-                for sp in p_meta.find_all('span'):
-                    txt = sp.get_text(' ', strip=True)
-                    if txt.lower().startswith('posted') or 'ago' in txt.lower():
+                for sp in p_meta.find_all("span"):
+                    txt = sp.get_text(" ", strip=True)
+                    if txt.lower().startswith("posted") or "ago" in txt.lower():
                         posted_span = txt
                         break
 
@@ -176,15 +192,21 @@ def he_search(shared_state, start_time, request_from, search_string="", mirror=N
             release_imdb_id = None
             try:
                 r = requests.get(source, headers=headers, timeout=10)
-                soup = BeautifulSoup(r.content, 'html.parser')
+                soup = BeautifulSoup(r.content, "html.parser")
             except Exception as e:
-                mark_hostname_issue(hostname, search_type, str(e) if "e" in dir() else "Error occurred")
+                mark_hostname_issue(
+                    hostname, search_type, str(e) if "e" in dir() else "Error occurred"
+                )
             try:
-                imdb_link = soup.find('a', href=re.compile(r"imdb\.com/title/tt\d+", re.IGNORECASE))
+                imdb_link = soup.find(
+                    "a", href=re.compile(r"imdb\.com/title/tt\d+", re.IGNORECASE)
+                )
                 if imdb_link:
-                    release_imdb_id = re.search(r'tt\d+', imdb_link['href']).group()
+                    release_imdb_id = re.search(r"tt\d+", imdb_link["href"]).group()
                     if imdb_id and release_imdb_id != imdb_id:
-                        debug(f"{hostname}: IMDb ID mismatch: expected {imdb_id}, found {release_imdb_id}")
+                        debug(
+                            f"{hostname}: IMDb ID mismatch: expected {imdb_id}, found {release_imdb_id}"
+                        )
                         continue
                 else:
                     debug(f"{hostname}: imdb link not found for title {title}")
@@ -194,22 +216,29 @@ def he_search(shared_state, start_time, request_from, search_string="", mirror=N
 
             password = None
             payload = urlsafe_b64encode(
-                f"{title}|{source}|{mirror}|{mb}|{password}|{release_imdb_id}|{hostname}".encode("utf-8")).decode()
-            link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
+                f"{title}|{source}|{mirror}|{mb}|{password}|{release_imdb_id}|{hostname}".encode(
+                    "utf-8"
+                )
+            ).decode()
+            link = (
+                f"{shared_state.values['internal_address']}/download/?payload={payload}"
+            )
 
-            releases.append({
-                "details": {
-                    "title": title,
-                    "hostname": hostname,
-                    "imdb_id": release_imdb_id,
-                    "link": link,
-                    "mirror": mirror,
-                    "size": size,
-                    "date": published,
-                    "source": source
-                },
-                "type": "protected"
-            })
+            releases.append(
+                {
+                    "details": {
+                        "title": title,
+                        "hostname": hostname,
+                        "imdb_id": release_imdb_id,
+                        "link": link,
+                        "mirror": mirror,
+                        "size": size,
+                        "date": published,
+                        "source": source,
+                    },
+                    "type": "protected",
+                }
+            )
         except Exception as e:
             debug(f"{hostname}: error parsing search result: {e}")
             continue

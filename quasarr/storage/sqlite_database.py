@@ -12,19 +12,25 @@ from quasarr.providers.log import info
 class DataBase(object):
     def __init__(self, table):
         try:
-            self._conn = sqlite3.connect(shared_state.values["dbfile"], check_same_thread=False, timeout=5)
+            self._conn = sqlite3.connect(
+                shared_state.values["dbfile"], check_same_thread=False, timeout=5
+            )
             self._table = table
             if not self._conn.execute(
-                    f"SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '{self._table}';").fetchall():
+                f"SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '{self._table}';"
+            ).fetchall():
                 self._conn.execute(f"CREATE TABLE {self._table} (key, value)")
                 self._conn.commit()
         except sqlite3.OperationalError as e:
             try:
                 time.sleep(5)
-                self._conn = sqlite3.connect(shared_state.values["dbfile"], check_same_thread=False, timeout=10)
+                self._conn = sqlite3.connect(
+                    shared_state.values["dbfile"], check_same_thread=False, timeout=10
+                )
                 self._table = table
                 if not self._conn.execute(
-                        f"SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '{self._table}';").fetchall():
+                    f"SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '{self._table}';"
+                ).fetchall():
                     self._conn.execute(f"CREATE TABLE {self._table} (key, value)")
                     self._conn.commit()
             except sqlite3.OperationalError as e:

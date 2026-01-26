@@ -3,13 +3,15 @@
 # Project by https://github.com/rix1337
 
 import quasarr.providers.html_images as images
-from quasarr.downloads.packages import get_packages, delete_package
+from quasarr.downloads.packages import delete_package, get_packages
 from quasarr.providers import shared_state
 from quasarr.providers.html_templates import render_button, render_centered_html
 
 
 def _get_category_emoji(cat):
-    return {'movies': '🎬', 'tv': '📺', 'docs': '📄', 'not_quasarr': '❓'}.get(cat, '❓')
+    return {"movies": "🎬", "tv": "📺", "docs": "📄", "not_quasarr": "❓"}.get(
+        cat, "❓"
+    )
 
 
 def _format_size(mb=None, bytes_val=None):
@@ -29,42 +31,53 @@ def _format_size(mb=None, bytes_val=None):
 
 
 def _escape_js(s):
-    return s.replace('\\', '\\\\').replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n')
+    return (
+        s.replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+    )
 
 
 def _render_queue_item(item):
-    filename = item.get('filename', 'Unknown')
-    percentage = item.get('percentage', 0)
-    timeleft = item.get('timeleft', '??:??:??')
-    bytes_val = item.get('bytes', 0)
-    mb = item.get('mb', 0)
-    cat = item.get('cat', 'not_quasarr')
-    is_archive = item.get('is_archive', False)
-    nzo_id = item.get('nzo_id', '')
-    storage = item.get('storage', '')
+    filename = item.get("filename", "Unknown")
+    percentage = item.get("percentage", 0)
+    timeleft = item.get("timeleft", "??:??:??")
+    bytes_val = item.get("bytes", 0)
+    mb = item.get("mb", 0)
+    cat = item.get("cat", "not_quasarr")
+    is_archive = item.get("is_archive", False)
+    nzo_id = item.get("nzo_id", "")
+    storage = item.get("storage", "")
 
-    is_captcha = '[CAPTCHA' in filename
-    status_text = 'Downloading'
+    is_captcha = "[CAPTCHA" in filename
+    status_text = "Downloading"
     if is_captcha:
-        status_emoji = '🔒'
-        status_text = 'Waiting for CAPTCHA Solution!'
-    elif '[Extracting]' in filename:
-        status_emoji = '📦'
-        status_text = 'Extracting'
-    elif '[Paused]' in filename:
-        status_emoji = '⏸️'
-        status_text = 'Paused'
-    elif '[Linkgrabber]' in filename:
-        status_emoji = '🔗'
-        status_text = 'Linkgrabber'
+        status_emoji = "🔒"
+        status_text = "Waiting for CAPTCHA Solution!"
+    elif "[Extracting]" in filename:
+        status_emoji = "📦"
+        status_text = "Extracting"
+    elif "[Paused]" in filename:
+        status_emoji = "⏸️"
+        status_text = "Paused"
+    elif "[Linkgrabber]" in filename:
+        status_emoji = "🔗"
+        status_text = "Linkgrabber"
     else:
-        status_emoji = '▶️'
+        status_emoji = "▶️"
 
     display_name = filename
-    for prefix in ['[Downloading] ', '[Extracting] ', '[Paused] ', '[Linkgrabber] ', '[CAPTCHA not solved!] ']:
-        display_name = display_name.replace(prefix, '')
+    for prefix in [
+        "[Downloading] ",
+        "[Extracting] ",
+        "[Paused] ",
+        "[Linkgrabber] ",
+        "[CAPTCHA not solved!] ",
+    ]:
+        display_name = display_name.replace(prefix, "")
 
-    archive_badge = '📦' if is_archive else ''
+    archive_badge = "📦" if is_archive else ""
     cat_emoji = _get_category_emoji(cat)
     size_str = _format_size(bytes_val=bytes_val) if bytes_val else _format_size(mb=mb)
 
@@ -80,34 +93,38 @@ def _render_queue_item(item):
 
     # Action buttons - Info left, CAPTCHA/Delete right
     if is_captcha and nzo_id:
-        actions = f'''
+        actions = f"""
             <div class="package-actions">
                 {info_btn}
                 <button class="btn-small primary-thin" onclick="location.href='/captcha?package_id={nzo_id}'">🔓 Solve CAPTCHA</button>
                 <span class="spacer"></span>
                 <button class="btn-small danger" onclick="confirmDelete('{nzo_id}', '{_escape_js(display_name)}')">🗑️</button>
             </div>
-        '''
+        """
     elif nzo_id:
-        actions = f'''
+        actions = f"""
             <div class="package-actions">
                 {info_btn}
                 <span class="spacer"></span>
                 <button class="btn-small danger" onclick="confirmDelete('{nzo_id}', '{_escape_js(display_name)}')">🗑️</button>
             </div>
-        '''
+        """
     else:
-        actions = f'''
+        actions = f"""
             <div class="package-actions">
                 {info_btn}
                 <span class="spacer"></span>
             </div>
-        '''
+        """
 
     cat_html = f'<span title="Category: {cat}">{cat_emoji}</span>'
-    archive_html = f'<span title="Archive: {is_archive}">{archive_badge}</span>' if is_archive else ''
+    archive_html = (
+        f'<span title="Archive: {is_archive}">{archive_badge}</span>'
+        if is_archive
+        else ""
+    )
 
-    return f'''
+    return f"""
         <div class="package-card">
             <div class="package-header">
                 <span class="status-emoji">{status_emoji}</span>
@@ -125,37 +142,39 @@ def _render_queue_item(item):
             </div>
             {actions}
         </div>
-    '''
+    """
 
 
 def _render_history_item(item):
-    name = item.get('name', 'Unknown')
-    status = item.get('status', 'Unknown')
-    bytes_val = item.get('bytes', 0)
-    category = item.get('category', 'not_quasarr')
-    is_archive = item.get('is_archive', False)
-    extraction_status = item.get('extraction_status', '')
-    fail_message = item.get('fail_message', '')
-    nzo_id = item.get('nzo_id', '')
-    storage = item.get('storage', '')
+    name = item.get("name", "Unknown")
+    status = item.get("status", "Unknown")
+    bytes_val = item.get("bytes", 0)
+    category = item.get("category", "not_quasarr")
+    is_archive = item.get("is_archive", False)
+    extraction_status = item.get("extraction_status", "")
+    fail_message = item.get("fail_message", "")
+    nzo_id = item.get("nzo_id", "")
+    storage = item.get("storage", "")
 
-    is_error = status.lower() in ['failed', 'error'] or fail_message
-    card_class = 'package-card error' if is_error else 'package-card'
+    is_error = status.lower() in ["failed", "error"] or fail_message
+    card_class = "package-card error" if is_error else "package-card"
 
     cat_emoji = _get_category_emoji(category)
     size_str = _format_size(bytes_val=bytes_val)
 
-    archive_emoji = ''
+    archive_emoji = ""
     if is_archive:
-        if extraction_status == 'SUCCESSFUL':
-            archive_emoji = '✅'
-        elif extraction_status == 'RUNNING':
-            archive_emoji = '⏳'
+        if extraction_status == "SUCCESSFUL":
+            archive_emoji = "✅"
+        elif extraction_status == "RUNNING":
+            archive_emoji = "⏳"
         else:
-            archive_emoji = '📦'
+            archive_emoji = "📦"
 
-    status_emoji = '❌' if is_error else '✅'
-    error_html = f'<div class="package-error">⚠️ {fail_message}</div>' if fail_message else ''
+    status_emoji = "❌" if is_error else "✅"
+    error_html = (
+        f'<div class="package-error">⚠️ {fail_message}</div>' if fail_message else ""
+    )
 
     # Interactive info
     info_onclick = f"showPackageDetails('{nzo_id}', '{_escape_js(name)}', '{category}', '{'Yes' if is_archive else 'No'}', '{extraction_status}', '', '{size_str}', '', '{status}', '{_escape_js(storage)}', false)"
@@ -163,23 +182,27 @@ def _render_history_item(item):
 
     # Delete button for history items
     if nzo_id:
-        actions = f'''
+        actions = f"""
             <div class="package-actions">
                 {info_btn}
                 <span class="spacer"></span>
                 <button class="btn-small danger" onclick="confirmDelete('{nzo_id}', '{_escape_js(name)}')">🗑️</button>
             </div>
-        '''
+        """
     else:
-        actions = f'''
+        actions = f"""
             <div class="package-actions">
                 {info_btn}
                 <span class="spacer"></span>
             </div>
-        '''
+        """
 
     cat_html = f'<span title="Category: {category}">{cat_emoji}</span>'
-    archive_html = f'<span title="Archive Status: {extraction_status}">{archive_emoji}</span>' if is_archive else ''
+    archive_html = (
+        f'<span title="Archive Status: {extraction_status}">{archive_emoji}</span>'
+        if is_archive
+        else ""
+    )
 
     return f'''
         <div class="{card_class}">
@@ -201,14 +224,14 @@ def _render_history_item(item):
 def _render_packages_content():
     """Render just the packages content (used for both full page and AJAX refresh)."""
     downloads = get_packages(shared_state)
-    queue = downloads.get('queue', [])
-    history = downloads.get('history', [])
+    queue = downloads.get("queue", [])
+    history = downloads.get("history", [])
 
     # Separate Quasarr packages from others
-    quasarr_queue = [p for p in queue if p.get('cat') != 'not_quasarr']
-    other_queue = [p for p in queue if p.get('cat') == 'not_quasarr']
-    quasarr_history = [p for p in history if p.get('category') != 'not_quasarr']
-    other_history = [p for p in history if p.get('category') == 'not_quasarr']
+    quasarr_queue = [p for p in queue if p.get("cat") != "not_quasarr"]
+    other_queue = [p for p in queue if p.get("cat") == "not_quasarr"]
+    quasarr_history = [p for p in history if p.get("category") != "not_quasarr"]
+    other_history = [p for p in history if p.get("category") == "not_quasarr"]
 
     # Check if there's anything at all
     has_quasarr_content = quasarr_queue or quasarr_history
@@ -216,42 +239,50 @@ def _render_packages_content():
     has_any_content = has_quasarr_content or has_other_content
 
     # Build queue section (only if has items)
-    queue_html = ''
+    queue_html = ""
     if quasarr_queue:
-        queue_items = ''.join(_render_queue_item(item) for item in quasarr_queue)
-        queue_html = f'''
+        queue_items = "".join(_render_queue_item(item) for item in quasarr_queue)
+        queue_html = f"""
             <div class="section">
                 <h3>⬇️ Downloading</h3>
                 <div class="packages-list">{queue_items}</div>
             </div>
-        '''
+        """
 
     # Build history section (only if has items)
-    history_html = ''
+    history_html = ""
     if quasarr_history:
-        history_items = ''.join(_render_history_item(item) for item in quasarr_history[:10])
-        history_html = f'''
+        history_items = "".join(
+            _render_history_item(item) for item in quasarr_history[:10]
+        )
+        history_html = f"""
             <div class="section">
                 <h3>📜 Recent History</h3>
                 <div class="packages-list">{history_items}</div>
             </div>
-        '''
+        """
 
     # Build "other packages" section (non-Quasarr)
-    other_html = ''
+    other_html = ""
     other_count = len(other_queue) + len(other_history)
     if other_count > 0:
-        other_items = ''
+        other_items = ""
         if other_queue:
-            other_items += f'<h4>Queue ({len(other_queue)})</h4>'
-            other_items += ''.join(_render_queue_item(item) for item in other_queue)
+            other_items += f"<h4>Queue ({len(other_queue)})</h4>"
+            other_items += "".join(_render_queue_item(item) for item in other_queue)
         if other_history:
-            other_items += f'<h4>History ({len(other_history)})</h4>'
-            other_items += ''.join(_render_history_item(item) for item in other_history[:5])
+            other_items += f"<h4>History ({len(other_history)})</h4>"
+            other_items += "".join(
+                _render_history_item(item) for item in other_history[:5]
+            )
 
-        plural = 's' if other_count != 1 else ''
+        plural = "s" if other_count != 1 else ""
         # Only add separator class if there's Quasarr content above
-        section_class = 'other-packages-section' if has_quasarr_content else 'other-packages-section no-separator'
+        section_class = (
+            "other-packages-section"
+            if has_quasarr_content
+            else "other-packages-section no-separator"
+        )
         other_html = f'''
             <div class="{section_class}">
                 <details id="otherPackagesDetails">
@@ -262,33 +293,34 @@ def _render_packages_content():
         '''
 
     # Only show "no downloads" if there's literally nothing
-    empty_html = ''
+    empty_html = ""
     if not has_any_content:
         empty_html = '<p class="empty-message">No packages</p>'
 
-    return f'''
+    return f"""
         <div class="packages-container">
             {queue_html}
             {history_html}
             {other_html}
             {empty_html}
         </div>
-    '''
+    """
 
 
 def setup_packages_routes(app):
-    @app.get('/packages/delete/<package_id>')
+    @app.get("/packages/delete/<package_id>")
     def delete_package_route(package_id):
         success = delete_package(shared_state, package_id)
 
         # Redirect back to packages page with status message via query param
         from bottle import redirect
-        if success:
-            redirect('/packages?deleted=1')
-        else:
-            redirect('/packages?deleted=0')
 
-    @app.get('/api/packages/content')
+        if success:
+            redirect("/packages?deleted=1")
+        else:
+            redirect("/packages?deleted=0")
+
+    @app.get("/api/packages/content")
     def packages_content_api():
         """AJAX endpoint - returns just the packages content HTML for background refresh."""
         try:
@@ -297,17 +329,17 @@ def setup_packages_routes(app):
             device = None
 
         if not device:
-            return '''
+            return """
                 <div class="status-bar">
                     <span class="status-pill error">
                         ❌ JDownloader disconnected
                     </span>
                 </div>
-            '''
+            """
 
         return _render_packages_content()
 
-    @app.get('/packages')
+    @app.get("/packages")
     def packages_status():
         from bottle import request
 
@@ -317,7 +349,9 @@ def setup_packages_routes(app):
             device = None
 
         if not device:
-            back_btn = render_button("Back", "secondary", {"onclick": "location.href='/'"})
+            back_btn = render_button(
+                "Back", "secondary", {"onclick": "location.href='/'"}
+            )
             return render_centered_html(f'''
                 <h1><img src="{images.logo}" type="image/png" alt="Quasarr logo" class="logo"/>Quasarr</h1>
                 <div class="status-bar">
@@ -329,12 +363,14 @@ def setup_packages_routes(app):
             ''')
 
         # Check for delete status from redirect
-        deleted = request.query.get('deleted')
+        deleted = request.query.get("deleted")
         status_message = ""
-        if deleted == '1':
+        if deleted == "1":
             status_message = '<div class="status-message success">✅ Package deleted successfully.</div>'
-        elif deleted == '0':
-            status_message = '<div class="status-message error">❌ Failed to delete package.</div>'
+        elif deleted == "0":
+            status_message = (
+                '<div class="status-message error">❌ Failed to delete package.</div>'
+            )
 
         # Get rendered packages content using shared helper
         packages_content = _render_packages_content()

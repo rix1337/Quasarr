@@ -11,6 +11,4 @@ def get_sj_download_links(shared_state, url, mirror, title, password):
     Returns the URL for CAPTCHA solving via userscript.
     """
 
-    return {
-        "links": [[url, "junkies"]]
-    }
+    return {"links": [[url, "junkies"]]}

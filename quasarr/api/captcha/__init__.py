@@ -4,24 +4,23 @@
 
 import json
 import re
-from base64 import urlsafe_b64encode, urlsafe_b64decode
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from urllib.parse import quote, unquote
 
 import requests
-from bottle import request, response, redirect, HTTPResponse
+from bottle import HTTPResponse, redirect, request, response
 
 import quasarr.providers.html_images as images
-from quasarr.downloads.linkcrypters.filecrypt import get_filecrypt_links, DLC
+from quasarr.downloads.linkcrypters.filecrypt import DLC, get_filecrypt_links
 from quasarr.downloads.packages import delete_package
-from quasarr.providers import obfuscated
-from quasarr.providers import shared_state
+from quasarr.providers import obfuscated, shared_state
 from quasarr.providers.html_templates import render_button, render_centered_html
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 from quasarr.providers.statistics import StatsHelper
 
 
 def js_single_quoted_string_safe(text):
-    return text.replace('\\', '\\\\').replace("'", "\\'")
+    return text.replace("\\", "\\\\").replace("'", "\\'")
 
 
 def check_package_exists(package_id):
@@ -35,12 +34,12 @@ def check_package_exists(package_id):
                     {render_button("Back", "secondary", {"onclick": "location.href='/captcha'"})}
                 </p>
             '''),
-            content_type="text/html"
+            content_type="text/html",
         )
 
 
 def setup_captcha_routes(app):
-    @app.get('/captcha')
+    @app.get("/captcha")
     def check_captcha():
         try:
             device = shared_state.values["device"]
@@ -66,7 +65,7 @@ def setup_captcha_routes(app):
             </p>''')
         else:
             # Check if a specific package_id was requested
-            requested_package_id = request.query.get('package_id')
+            requested_package_id = request.query.get("package_id")
             package = None
 
             if requested_package_id:
@@ -114,7 +113,9 @@ def setup_captcha_routes(app):
             def is_junkies_link(link):
                 """Check if link is a junkies link (handles [[url, mirror]] format)."""
                 url = link[0] if isinstance(link, (list, tuple)) else link
-                mirror = link[1] if isinstance(link, (list, tuple)) and len(link) > 1 else ""
+                mirror = (
+                    link[1] if isinstance(link, (list, tuple)) and len(link) > 1 else ""
+                )
                 if mirror == "junkies":
                     return True
                 return (sj and sj in url) or (dj and dj in url)
@@ -123,19 +124,31 @@ def setup_captcha_routes(app):
 
             # Hide uses nested arrays like FileCrypt: [["url", "mirror"]]
             has_hide_links = any(
-                ("hide." in link[0] if isinstance(link, (list, tuple)) else "hide." in link)
+                (
+                    "hide." in link[0]
+                    if isinstance(link, (list, tuple))
+                    else "hide." in link
+                )
                 for link in prioritized_links
             )
 
             # KeepLinks uses nested arrays like FileCrypt: [["url", "mirror"]]
             has_keeplinks_links = any(
-                ("keeplinks." in link[0] if isinstance(link, (list, tuple)) else "keeplinks." in link)
+                (
+                    "keeplinks." in link[0]
+                    if isinstance(link, (list, tuple))
+                    else "keeplinks." in link
+                )
                 for link in prioritized_links
             )
 
             # ToLink uses nested arrays like FileCrypt: [["url", "mirror"]]
             has_tolink_links = any(
-                ("tolink." in link[0] if isinstance(link, (list, tuple)) else "tolink." in link)
+                (
+                    "tolink." in link[0]
+                    if isinstance(link, (list, tuple))
+                    else "tolink." in link
+                )
                 for link in prioritized_links
             )
 
@@ -162,14 +175,16 @@ def setup_captcha_routes(app):
             </p>''')
 
     def decode_payload():
-        encoded = request.query.get('data')
+        encoded = request.query.get("data")
         try:
             decoded = urlsafe_b64decode(unquote(encoded)).decode()
             return json.loads(decoded)
         except Exception as e:
             return {"error": f"Failed to decode payload: {str(e)}"}
 
-    def render_userscript_section(url, package_id, title, password, provider_type="junkies"):
+    def render_userscript_section(
+        url, package_id, title, password, provider_type="junkies"
+    ):
         """Render the userscript UI section for Junkies, KeepLinks, ToLink, or Hide pages
 
         This is the MAIN solution for these providers (not a bypass/fallback).
@@ -182,13 +197,18 @@ def setup_captcha_routes(app):
             provider_type: Either "hide", "junkies", "keeplinks", or "tolink"
         """
 
-        provider_names = {"hide": "Hide", "junkies": "Junkies", "keeplinks": "KeepLinks", "tolink": "ToLink"}
+        provider_names = {
+            "hide": "Hide",
+            "junkies": "Junkies",
+            "keeplinks": "KeepLinks",
+            "tolink": "ToLink",
+        }
         provider_name = provider_names.get(provider_type, "Provider")
         userscript_url = f"/captcha/{provider_type}.user.js"
         storage_key = f"hide{provider_name}SetupInstructions"
 
         # Generate userscript URL with transfer params
-        base_url = request.urlparts.scheme + '://' + request.urlparts.netloc
+        base_url = request.urlparts.scheme + "://" + request.urlparts.netloc
         transfer_url = f"{base_url}/captcha/quick-transfer"
 
         url_with_quick_transfer_params = (
@@ -324,7 +344,7 @@ def setup_captcha_routes(app):
 
         source_button = ""
         if original_url:
-            source_button = f'<p>{render_button("Source", "secondary", {"onclick": f"window.open(\'{js_single_quoted_string_safe(original_url)}\', \'_blank\')"})}</p>'
+            source_button = f"<p>{render_button('Source', 'secondary', {'onclick': f"window.open('{js_single_quoted_string_safe(original_url)}', '_blank')"})}</p>"
 
         return render_centered_html(f"""
         <!DOCTYPE html>
@@ -370,7 +390,7 @@ def setup_captcha_routes(app):
 
         source_button = ""
         if original_url:
-            source_button = f'<p>{render_button("Source", "secondary", {"onclick": f"window.open(\'{js_single_quoted_string_safe(original_url)}\', \'_blank\')"})}</p>'
+            source_button = f"<p>{render_button('Source', 'secondary', {'onclick': f"window.open('{js_single_quoted_string_safe(original_url)}', '_blank')"})}</p>"
 
         return render_centered_html(f"""
         <!DOCTYPE html>
@@ -417,7 +437,7 @@ def setup_captcha_routes(app):
 
         source_button = ""
         if original_url:
-            source_button = f'<p>{render_button("Source", "secondary", {"onclick": f"window.open(\'{js_single_quoted_string_safe(original_url)}\', \'_blank\')"})}</p>'
+            source_button = f"<p>{render_button('Source', 'secondary', {'onclick': f"window.open('{js_single_quoted_string_safe(original_url)}', '_blank')"})}</p>"
 
         return render_centered_html(f"""
         <!DOCTYPE html>
@@ -464,7 +484,7 @@ def setup_captcha_routes(app):
 
         source_button = ""
         if original_url:
-            source_button = f'<p>{render_button("Source", "secondary", {"onclick": f"window.open(\'{js_single_quoted_string_safe(original_url)}\', \'_blank\')"})}</p>'
+            source_button = f"<p>{render_button('Source', 'secondary', {'onclick': f"window.open('{js_single_quoted_string_safe(original_url)}', '_blank')"})}</p>"
 
         return render_centered_html(f"""
         <!DOCTYPE html>
@@ -485,37 +505,37 @@ def setup_captcha_routes(app):
           </body>
         </html>""")
 
-    @app.get('/captcha/filecrypt.user.js')
+    @app.get("/captcha/filecrypt.user.js")
     def serve_filecrypt_user_js():
         content = obfuscated.filecrypt_user_js()
-        response.content_type = 'application/javascript'
+        response.content_type = "application/javascript"
         return content
 
-    @app.get('/captcha/hide.user.js')
+    @app.get("/captcha/hide.user.js")
     def serve_hide_user_js():
         content = obfuscated.hide_user_js()
-        response.content_type = 'application/javascript'
+        response.content_type = "application/javascript"
         return content
 
-    @app.get('/captcha/junkies.user.js')
+    @app.get("/captcha/junkies.user.js")
     def serve_junkies_user_js():
         sj = shared_state.values["config"]("Hostnames").get("sj")
         dj = shared_state.values["config"]("Hostnames").get("dj")
 
         content = obfuscated.junkies_user_js(sj, dj)
-        response.content_type = 'application/javascript'
+        response.content_type = "application/javascript"
         return content
 
-    @app.get('/captcha/keeplinks.user.js')
+    @app.get("/captcha/keeplinks.user.js")
     def serve_keeplinks_user_js():
         content = obfuscated.keeplinks_user_js()
-        response.content_type = 'application/javascript'
+        response.content_type = "application/javascript"
         return content
 
-    @app.get('/captcha/tolink.user.js')
+    @app.get("/captcha/tolink.user.js")
     def serve_tolink_user_js():
         content = obfuscated.tolink_user_js()
-        response.content_type = 'application/javascript'
+        response.content_type = "application/javascript"
         return content
 
     def render_filecrypt_bypass_section(url, package_id, title, password):
@@ -523,7 +543,7 @@ def setup_captcha_routes(app):
 
         # Generate userscript URL with transfer params
         # Get base URL of current request
-        base_url = request.urlparts.scheme + '://' + request.urlparts.netloc
+        base_url = request.urlparts.scheme + "://" + request.urlparts.netloc
         transfer_url = f"{base_url}/captcha/quick-transfer"
 
         url_with_quick_transfer_params = (
@@ -648,11 +668,11 @@ def setup_captcha_routes(app):
         # Single package - just show the title without dropdown
         if len(protected) <= 1:
             if current_title:
-                return f'''
+                return f"""
                     <div class="package-selector" style="margin-bottom: 20px; padding: 12px; background: rgba(128, 128, 128, 0.1); border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 8px;">
                         <p style="margin: 0; word-break: break-all;"><b>📦 Package:</b> {current_title}</p>
                     </div>
-                '''
+                """
             return ""
 
         sj = shared_state.values["config"]("Hostnames").get("sj")
@@ -660,17 +680,28 @@ def setup_captcha_routes(app):
 
         def is_junkies_link(link):
             url = link[0] if isinstance(link, (list, tuple)) else link
-            mirror = link[1] if isinstance(link, (list, tuple)) and len(link) > 1 else ""
+            mirror = (
+                link[1] if isinstance(link, (list, tuple)) and len(link) > 1 else ""
+            )
             if mirror == "junkies":
                 return True
             return (sj and sj in url) or (dj and dj in url)
 
         def get_captcha_type_for_links(links):
             """Determine which captcha type to use based on links"""
-            has_hide = any(("hide." in (l[0] if isinstance(l, (list, tuple)) else l)) for l in links)
+            has_hide = any(
+                ("hide." in (l[0] if isinstance(l, (list, tuple)) else l))
+                for l in links
+            )
             has_junkies = any(is_junkies_link(l) for l in links)
-            has_keeplinks = any(("keeplinks." in (l[0] if isinstance(l, (list, tuple)) else l)) for l in links)
-            has_tolink = any(("tolink." in (l[0] if isinstance(l, (list, tuple)) else l)) for l in links)
+            has_keeplinks = any(
+                ("keeplinks." in (l[0] if isinstance(l, (list, tuple)) else l))
+                for l in links
+            )
+            has_tolink = any(
+                ("tolink." in (l[0] if isinstance(l, (list, tuple)) else l))
+                for l in links
+            )
 
             if has_hide:
                 return "hide"
@@ -712,11 +743,13 @@ def setup_captcha_routes(app):
             selected = "selected" if pkg_id == current_package_id else ""
             # Truncate long titles for display
             display_title = (title[:50] + "...") if len(title) > 53 else title
-            options.append(f'<option value="{captcha_type}|{quote(encoded)}" {selected}>{display_title}</option>')
+            options.append(
+                f'<option value="{captcha_type}|{quote(encoded)}" {selected}>{display_title}</option>'
+            )
 
         options_html = "\n".join(options)
 
-        return f'''
+        return f"""
             <div class="package-selector" style="margin-bottom: 20px; padding: 12px; background: rgba(128, 128, 128, 0.1); border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 8px;">
                 <label for="package-select" style="display: block; margin-bottom: 8px; font-weight: bold;">📦 Select Package:</label>
                 <select id="package-select" style="width: 100%; padding: 8px; border-radius: 4px; background: inherit; color: inherit; border: 1px solid rgba(128, 128, 128, 0.5); cursor: pointer;">
@@ -729,9 +762,11 @@ def setup_captcha_routes(app):
                     window.location.href = '/captcha/' + captchaType + '?data=' + encodedData;
                 }});
             </script>
-        '''
+        """
 
-    def render_failed_attempts_warning(package_id, include_delete_button=True, fallback_url=None):
+    def render_failed_attempts_warning(
+        package_id, include_delete_button=True, fallback_url=None
+    ):
         """Render a warning block that shows after 2+ failed attempts per package_id.
         Uses localStorage to track attempts by package_id to ensure reliable tracking
         even when package titles are duplicated.
@@ -748,8 +783,11 @@ def setup_captcha_routes(app):
 
         delete_button = ""
         if include_delete_button:
-            delete_button = render_button("Delete Package", "primary",
-                                          {"onclick": f"location.href='/captcha/delete/{package_id}'"})
+            delete_button = render_button(
+                "Delete Package",
+                "primary",
+                {"onclick": f"location.href='/captcha/delete/{package_id}'"},
+            )
 
         fallback_link = ""
         if fallback_url:
@@ -759,7 +797,7 @@ def setup_captcha_routes(app):
                 </p>
             '''
 
-        return f'''
+        return f"""
             <div id="failed-attempts-warning" class="warning-box" style="display: none; background: #fee2e2; border: 2px solid #dc2626; border-radius: 8px; padding: 16px; margin-bottom: 20px; text-align: center; color: #991b1b;">
                 <h3 style="color: #dc2626; margin-top: 0;">⚠️ Multiple Failed Attempts Detected</h3>
                 <p style="margin-bottom: 12px; color: #7f1d1d;">This CAPTCHA has failed multiple times. The link may be <b>offline</b> or require a different solution method.</p>
@@ -811,7 +849,7 @@ def setup_captcha_routes(app):
                     }};
                 }})();
             </script>
-        '''
+        """
 
     @app.get("/captcha/filecrypt")
     def serve_filecrypt_fallback():
@@ -836,7 +874,7 @@ def setup_captcha_routes(app):
         url = urls[0][0] if isinstance(urls[0], (list, tuple)) else urls[0]
 
         # Generate userscript URL with transfer params
-        base_url = request.urlparts.scheme + '://' + request.urlparts.netloc
+        base_url = request.urlparts.scheme + "://" + request.urlparts.netloc
         transfer_url = f"{base_url}/captcha/quick-transfer"
 
         url_with_quick_transfer_params = (
@@ -852,7 +890,7 @@ def setup_captcha_routes(app):
 
         source_button = ""
         if original_url:
-            source_button = f'<p>{render_button("Source", "secondary", {"onclick": f"window.open(\'{js_single_quoted_string_safe(original_url)}\', \'_blank\')"})}</p>'
+            source_button = f"<p>{render_button('Source', 'secondary', {'onclick': f"window.open('{js_single_quoted_string_safe(original_url)}', '_blank')"})}</p>"
 
         return render_centered_html(f"""
         <!DOCTYPE html>
@@ -977,14 +1015,14 @@ def setup_captcha_routes(app):
           </body>
         </html>""")
 
-    @app.get('/captcha/quick-transfer')
+    @app.get("/captcha/quick-transfer")
     def handle_quick_transfer():
         """Handle quick transfer from userscript"""
         import zlib
 
         try:
-            package_id = request.query.get('pkg_id')
-            compressed_links = request.query.get('links', '')
+            package_id = request.query.get("pkg_id")
+            compressed_links = request.query.get("links", "")
 
             if not package_id or not compressed_links:
                 return render_centered_html(f'''<h1><img src="{images.logo}" type="image/png" alt="Quasarr logo" class="logo"/>Quasarr</h1>
@@ -997,7 +1035,7 @@ def setup_captcha_routes(app):
             # Add padding if needed
             padding = 4 - (len(compressed_links) % 4)
             if padding != 4:
-                compressed_links += '=' * padding
+                compressed_links += "=" * padding
 
             try:
                 decoded = urlsafe_b64decode(compressed_links)
@@ -1011,7 +1049,9 @@ def setup_captcha_routes(app):
 
             # Decompress using zlib - use raw deflate format (no header)
             try:
-                decompressed = zlib.decompress(decoded, -15)  # -15 = raw deflate, no zlib header
+                decompressed = zlib.decompress(
+                    decoded, -15
+                )  # -15 = raw deflate, no zlib header
             except Exception as e:
                 debug(f"Decompression error: {e}, trying with header...")
                 try:
@@ -1025,14 +1065,16 @@ def setup_captcha_routes(app):
                         {render_button("Back", "secondary", {"onclick": "location.href='/captcha'"})}
                     </p>''')
 
-            links_text = decompressed.decode('utf-8')
+            links_text = decompressed.decode("utf-8")
 
             # Parse links and restore protocols
-            raw_links = [link.strip() for link in links_text.split('\n') if link.strip()]
+            raw_links = [
+                link.strip() for link in links_text.split("\n") if link.strip()
+            ]
             links = []
             for link in raw_links:
-                if not link.startswith(('http://', 'https://')):
-                    link = 'https://' + link
+                if not link.startswith(("http://", "https://")):
+                    link = "https://" + link
                 links.append(link)
 
             info(f"Quick transfer received {len(links)} links for package {package_id}")
@@ -1051,7 +1093,9 @@ def setup_captcha_routes(app):
             password = data.get("password", "")
 
             # Download the package
-            downloaded = shared_state.download_package(links, title, password, package_id)
+            downloaded = shared_state.download_package(
+                links, title, password, package_id
+            )
 
             if downloaded:
                 StatsHelper(shared_state).increment_package_with_links(links)
@@ -1061,12 +1105,17 @@ def setup_captcha_routes(app):
                 info(f"Quick transfer successful: {len(links)} links processed")
 
                 # Check if more CAPTCHAs remain
-                remaining_protected = shared_state.get_db("protected").retrieve_all_titles()
+                remaining_protected = shared_state.get_db(
+                    "protected"
+                ).retrieve_all_titles()
                 has_more_captchas = bool(remaining_protected)
 
                 if has_more_captchas:
-                    solve_button = render_button("Solve another CAPTCHA", "primary",
-                                                 {"onclick": "location.href='/captcha'"})
+                    solve_button = render_button(
+                        "Solve another CAPTCHA",
+                        "primary",
+                        {"onclick": "location.href='/captcha'"},
+                    )
                 else:
                     solve_button = "<b>No more CAPTCHAs</b>"
 
@@ -1096,7 +1145,7 @@ def setup_captcha_routes(app):
                 {render_button("Back", "secondary", {"onclick": "location.href='/captcha'"})}
             </p>''')
 
-    @app.get('/captcha/delete/<package_id>')
+    @app.get("/captcha/delete/<package_id>")
     def delete_captcha_package(package_id):
         success = delete_package(shared_state, package_id)
 
@@ -1105,9 +1154,13 @@ def setup_captcha_routes(app):
         has_more_captchas = bool(remaining_protected)
 
         if has_more_captchas:
-            solve_button = render_button("Solve another CAPTCHA", "primary", {
-                "onclick": "location.href='/captcha'",
-            })
+            solve_button = render_button(
+                "Solve another CAPTCHA",
+                "primary",
+                {
+                    "onclick": "location.href='/captcha'",
+                },
+            )
         else:
             solve_button = "<b>No more CAPTCHAs</b>"
 
@@ -1132,7 +1185,7 @@ def setup_captcha_routes(app):
             </p>''')
 
     # The following routes are for cutcaptcha
-    @app.get('/captcha/cutcaptcha')
+    @app.get("/captcha/cutcaptcha")
     def serve_cutcaptcha():
         payload = decode_payload()
 
@@ -1171,7 +1224,7 @@ def setup_captcha_routes(app):
             for link in prioritized_links:
                 if "filecrypt." in link[0]:
                     link_options += f'<option value="{link[0]}">{link[1]}</option>'
-            link_select = f'''<div id="mirrors-select">
+            link_select = f"""<div id="mirrors-select">
                     <label for="link-select">Mirror:</label>
                     <select id="link-select">
                         {link_options}
@@ -1183,18 +1236,24 @@ def setup_captcha_routes(app):
                         document.getElementById("link-hidden").value = selectedLink;
                     }});
                 </script>
-            '''
+            """
         else:
             link_select = f'<div id="mirrors-select">Mirror: <b>{prioritized_links[0][1]}</b></div>'
 
         # Pre-render button HTML in Python
-        solve_another_html = render_button("Solve another CAPTCHA", "primary", {"onclick": "location.href='/captcha'"})
-        back_button_html = render_button("Back", "secondary", {"onclick": "location.href='/'"})
+        solve_another_html = render_button(
+            "Solve another CAPTCHA", "primary", {"onclick": "location.href='/captcha'"}
+        )
+        back_button_html = render_button(
+            "Back", "secondary", {"onclick": "location.href='/'"}
+        )
 
         url = prioritized_links[0][0]
 
         # Add bypass section
-        bypass_section = render_filecrypt_bypass_section(url, package_id, title, password)
+        bypass_section = render_filecrypt_bypass_section(
+            url, package_id, title, password
+        )
 
         # Add package selector and failed attempts warning
         package_selector = render_package_selector(package_id, title)
@@ -1208,20 +1267,29 @@ def setup_captcha_routes(app):
             "links": prioritized_links,
             "original_url": original_url,
         }
-        fallback_encoded = urlsafe_b64encode(json.dumps(fallback_payload).encode()).decode()
+        fallback_encoded = urlsafe_b64encode(
+            json.dumps(fallback_payload).encode()
+        ).decode()
         filecrypt_fallback_url = f"/captcha/filecrypt?data={quote(fallback_encoded)}"
 
-        failed_warning = render_failed_attempts_warning(package_id, include_delete_button=False,
-                                                        fallback_url=filecrypt_fallback_url)  # Delete button is already below
+        failed_warning = render_failed_attempts_warning(
+            package_id, include_delete_button=False, fallback_url=filecrypt_fallback_url
+        )  # Delete button is already below
 
         # Escape title for safe use in JavaScript string
-        escaped_title_js = title.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+        escaped_title_js = (
+            title.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+        )
 
         source_button_html = ""
         if original_url:
-            source_button_html = f'<p>{render_button("Source", "secondary", {"onclick": f"window.open(\'{js_single_quoted_string_safe(original_url)}\', \'_blank\')"})}</p>'
+            source_button_html = f"<p>{render_button('Source', 'secondary', {'onclick': f"window.open('{js_single_quoted_string_safe(original_url)}', '_blank')"})}</p>"
 
-        content = render_centered_html(r'''
+        content = render_centered_html(
+            r'''
             <style>
                 /* Fix captcha container to shrink-wrap iframe on desktop */
                 .captcha-container {
@@ -1237,23 +1305,37 @@ def setup_captcha_routes(app):
             </style>
             <script type="text/javascript">
                 // Package title for result display
-                var packageTitleText = "''' + escaped_title_js + r'''";
+                var packageTitleText = "'''
+            + escaped_title_js
+            + r"""";
 
                 // Check if we should redirect to fallback due to failed attempts
                 (function() {
-                    const storageKey = 'captcha_attempts_''' + package_id + r'''';
+                    const storageKey = 'captcha_attempts_"""
+            + package_id
+            + r"""';
                     const attempts = parseInt(localStorage.getItem(storageKey) || '0', 10);
                     if (attempts >= 2) {
                         // Redirect to FileCrypt fallback page
-                        window.location.href = '''' + filecrypt_fallback_url + r'''';
+                        window.location.href = """
+            " + filecrypt_fallback_url + r"
+            ''';
                         return;
                     }
                 })();
 
-                var api_key = "''' + obfuscated.captcha_values()["api_key"] + r'''";
+                var api_key = "'''
+            + obfuscated.captcha_values()["api_key"]
+            + r"""";
                 var endpoint = '/' + window.location.pathname.split('/')[1] + '/' + api_key + '.html';
-                var solveAnotherHtml = `<p>''' + solve_another_html + r'''</p><p>''' + back_button_html + r'''</p>`;
-                var noMoreHtml = `<p><b>No more CAPTCHAs</b></p><p>''' + back_button_html + r'''</p>`;
+                var solveAnotherHtml = `<p>"""
+            + solve_another_html
+            + r"""</p><p>"""
+            + back_button_html
+            + r"""</p>`;
+                var noMoreHtml = `<p><b>No more CAPTCHAs</b></p><p>"""
+            + back_button_html
+            + r"""</p>`;
 
                 function handleToken(token) {
                     document.getElementById("puzzle-captcha").remove();
@@ -1279,12 +1361,14 @@ def setup_captcha_routes(app):
                         },
                         body: JSON.stringify({ 
                             token: token,
-                            ''' + f'''package_id: '{package_id}',
+                            """
+            + f"""package_id: '{package_id}',
                             title: '{js_single_quoted_string_safe(title)}',
                             link: link,
                             password: '{password}',
                             mirror: '{desired_mirror}',
-                        ''' + '''})
+                        """
+            + """})
                     })
                     .then(response => response.json())
                     .then(data => {
@@ -1314,7 +1398,9 @@ def setup_captcha_routes(app):
                         reloadSection.style.display = "block";
                     });
                 }
-                ''' + obfuscated.cutcaptcha_custom_js() + f'''</script>
+                """
+            + obfuscated.cutcaptcha_custom_js()
+            + f'''</script>
                 <div>
                     <h1><img src="{images.logo}" type="image/png" alt="Quasarr logo" class="logo"/>Quasarr</h1>
                     <div id="package-selector-section">
@@ -1333,7 +1419,9 @@ def setup_captcha_routes(app):
                     </div>
             <br>
             <div id="delete-package-section">
-            ''' + source_button_html + f'''
+            '''
+            + source_button_html
+            + f"""
             <p>
                 {render_button("Delete Package", "secondary", {"onclick": f"location.href='/captcha/delete/{package_id}'"})}
             </p>
@@ -1347,42 +1435,47 @@ def setup_captcha_routes(app):
                 {bypass_section}
             </div>
                 </div>
-                </html>''')
+                </html>"""
+        )
 
         return content
 
-    @app.post('/captcha/<captcha_id>.html')
+    @app.post("/captcha/<captcha_id>.html")
     def proxy_html(captcha_id):
-        target_url = f"{obfuscated.captcha_values()["url"]}/captcha/{captcha_id}.html"
+        target_url = f"{obfuscated.captcha_values()['url']}/captcha/{captcha_id}.html"
 
-        headers = {key: value for key, value in request.headers.items() if key != 'Host'}
+        headers = {
+            key: value for key, value in request.headers.items() if key != "Host"
+        }
         data = request.body.read()
         resp = requests.post(target_url, headers=headers, data=data, verify=False)
 
-        response.content_type = resp.headers.get('Content-Type')
+        response.content_type = resp.headers.get("Content-Type")
 
         content = resp.text
         content = re.sub(
-            r'''<script\s+src="/(jquery(?:-ui|\.ui\.touch-punch\.min)?\.js)(?:\?[^"]*)?"></script>''',
-            r'''<script src="/captcha/js/\1"></script>''',
-            content
+            r"""<script\s+src="/(jquery(?:-ui|\.ui\.touch-punch\.min)?\.js)(?:\?[^"]*)?"></script>""",
+            r"""<script src="/captcha/js/\1"></script>""",
+            content,
         )
 
-        response.content_type = 'text/html'
+        response.content_type = "text/html"
         return content
 
-    @app.post('/captcha/<captcha_id>.json')
+    @app.post("/captcha/<captcha_id>.json")
     def proxy_json(captcha_id):
-        target_url = f"{obfuscated.captcha_values()["url"]}/captcha/{captcha_id}.json"
+        target_url = f"{obfuscated.captcha_values()['url']}/captcha/{captcha_id}.json"
 
-        headers = {key: value for key, value in request.headers.items() if key != 'Host'}
+        headers = {
+            key: value for key, value in request.headers.items() if key != "Host"
+        }
         data = request.body.read()
         resp = requests.post(target_url, headers=headers, data=data, verify=False)
 
-        response.content_type = resp.headers.get('Content-Type')
+        response.content_type = resp.headers.get("Content-Type")
         return resp.content
 
-    @app.get('/captcha/js/<filename>')
+    @app.get("/captcha/js/<filename>")
     def serve_local_js(filename):
         upstream = f"{obfuscated.captcha_values()['url']}/{filename}"
         try:
@@ -1392,27 +1485,27 @@ def setup_captcha_routes(app):
             response.status = 502
             return f"/* Error proxying {filename}: {e} */"
 
-        response.content_type = 'application/javascript'
+        response.content_type = "application/javascript"
         return upstream_resp.iter_content(chunk_size=8192)
 
-    @app.get('/captcha/<captcha_id>/<uuid>/<filename>')
+    @app.get("/captcha/<captcha_id>/<uuid>/<filename>")
     def proxy_pngs(captcha_id, uuid, filename):
-        new_url = f"{obfuscated.captcha_values()["url"]}/captcha/{captcha_id}/{uuid}/{filename}"
+        new_url = f"{obfuscated.captcha_values()['url']}/captcha/{captcha_id}/{uuid}/{filename}"
 
         try:
             external_response = requests.get(new_url, stream=True, verify=False)
             external_response.raise_for_status()
-            response.content_type = 'image/png'
-            response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
+            response.content_type = "image/png"
+            response.headers["Content-Disposition"] = f'inline; filename="{filename}"'
             return external_response.iter_content(chunk_size=8192)
 
         except requests.RequestException as e:
             response.status = 502
             return f"Error fetching resource: {e}"
 
-    @app.post('/captcha/<captcha_id>/check')
+    @app.post("/captcha/<captcha_id>/check")
     def proxy_check(captcha_id):
-        new_url = f"{obfuscated.captcha_values()["url"]}/captcha/{captcha_id}/check"
+        new_url = f"{obfuscated.captcha_values()['url']}/captcha/{captcha_id}/check"
         headers = {key: value for key, value in request.headers.items()}
 
         data = request.body.read()
@@ -1420,19 +1513,24 @@ def setup_captcha_routes(app):
 
         response.status = resp.status_code
         for header in resp.headers:
-            if header.lower() not in ['content-encoding', 'transfer-encoding', 'content-length', 'connection']:
+            if header.lower() not in [
+                "content-encoding",
+                "transfer-encoding",
+                "content-length",
+                "connection",
+            ]:
                 response.set_header(header, resp.headers[header])
         return resp.content
 
-    @app.post('/captcha/bypass-submit')
+    @app.post("/captcha/bypass-submit")
     def handle_bypass_submit():
         """Handle bypass submission with either links or DLC file"""
         try:
-            package_id = request.forms.get('package_id')
-            title = request.forms.get('title')
-            password = request.forms.get('password', '')
-            links_input = request.forms.get('links', '').strip()
-            dlc_upload = request.files.get('dlc_file')
+            package_id = request.forms.get("package_id")
+            title = request.forms.get("title")
+            password = request.forms.get("password", "")
+            links_input = request.forms.get("links", "").strip()
+            dlc_upload = request.files.get("dlc_file")
 
             if not package_id or not title:
                 return render_centered_html(f'''<h1><img src="{images.logo}" type="image/png" alt="Quasarr logo" class="logo"/>Quasarr</h1>
@@ -1446,11 +1544,19 @@ def setup_captcha_routes(app):
             # Process links input
             if links_input:
                 info(f"Processing direct links bypass for {title}")
-                raw_links = [link.strip() for link in links_input.split('\n') if link.strip()]
-                links = [l for l in raw_links if l.lower().startswith(("http://", "https://"))]
+                raw_links = [
+                    link.strip() for link in links_input.split("\n") if link.strip()
+                ]
+                links = [
+                    l
+                    for l in raw_links
+                    if l.lower().startswith(("http://", "https://"))
+                ]
 
-                info(f"Received {len(links)} valid direct download links "
-                     f"(from {len(raw_links)} provided)")
+                info(
+                    f"Received {len(links)} valid direct download links "
+                    f"(from {len(raw_links)} provided)"
+                )
 
             # Process DLC file
             elif dlc_upload:
@@ -1479,20 +1585,28 @@ def setup_captcha_routes(app):
 
             # Download the package
             if links:
-                downloaded = shared_state.download_package(links, title, password, package_id)
+                downloaded = shared_state.download_package(
+                    links, title, password, package_id
+                )
                 if downloaded:
                     StatsHelper(shared_state).increment_package_with_links(links)
                     StatsHelper(shared_state).increment_captcha_decryptions_manual()
                     shared_state.get_db("protected").delete(package_id)
 
                     # Check if there are more CAPTCHAs to solve
-                    remaining_protected = shared_state.get_db("protected").retrieve_all_titles()
+                    remaining_protected = shared_state.get_db(
+                        "protected"
+                    ).retrieve_all_titles()
                     has_more_captchas = bool(remaining_protected)
 
                     if has_more_captchas:
-                        solve_button = render_button("Solve another CAPTCHA", "primary", {
-                            "onclick": "location.href='/captcha'",
-                        })
+                        solve_button = render_button(
+                            "Solve another CAPTCHA",
+                            "primary",
+                            {
+                                "onclick": "location.href='/captcha'",
+                            },
+                        )
                     else:
                         solve_button = "<b>No more CAPTCHAs</b>"
 
@@ -1528,33 +1642,40 @@ def setup_captcha_routes(app):
                 {render_button("Back", "secondary", {"onclick": "location.href='/captcha'"})}
             </p>''')
 
-    @app.post('/captcha/decrypt-filecrypt')
+    @app.post("/captcha/decrypt-filecrypt")
     def submit_token():
         protected = shared_state.get_db("protected").retrieve_all_titles()
         if not protected:
-            return {"success": False, "title": "No protected packages found! CAPTCHA not needed."}
+            return {
+                "success": False,
+                "title": "No protected packages found! CAPTCHA not needed.",
+            }
 
         links = []
         title = "Unknown Package"
         try:
             data = request.json
-            token = data.get('token')
-            package_id = data.get('package_id')
-            title = data.get('title')
-            link = data.get('link')
-            password = data.get('password')
-            mirror = None if (mirror := data.get('mirror')) == "None" else mirror
+            token = data.get("token")
+            package_id = data.get("package_id")
+            title = data.get("title")
+            link = data.get("link")
+            password = data.get("password")
+            mirror = None if (mirror := data.get("mirror")) == "None" else mirror
 
             if token:
                 info(f"Received token: {token}")
                 info(f"Decrypting links for {title}")
-                decrypted = get_filecrypt_links(shared_state, token, title, link, password=password, mirror=mirror)
+                decrypted = get_filecrypt_links(
+                    shared_state, token, title, link, password=password, mirror=mirror
+                )
                 if decrypted:
                     links = decrypted.get("links", [])
                     info(f"Decrypted {len(links)} download links for {title}")
                     if not links:
                         raise ValueError("No download links found after decryption")
-                    downloaded = shared_state.download_package(links, title, password, package_id)
+                    downloaded = shared_state.download_package(
+                        links, title, password, package_id
+                    )
                     if downloaded:
                         StatsHelper(shared_state).increment_package_with_links(links)
                         shared_state.get_db("protected").delete(package_id)
@@ -1577,4 +1698,8 @@ def setup_captcha_routes(app):
         remaining_protected = shared_state.get_db("protected").retrieve_all_titles()
         has_more_captchas = bool(remaining_protected)
 
-        return {"success": success, "title": title, "has_more_captchas": has_more_captchas}
+        return {
+            "success": success,
+            "title": title,
+            "has_more_captchas": has_more_captchas,
+        }

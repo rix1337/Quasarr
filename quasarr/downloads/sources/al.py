@@ -7,16 +7,21 @@ import json
 import re
 import time
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List, Optional
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 
 from quasarr.downloads.linkcrypters.al import decrypt_content, solve_captcha
 from quasarr.providers.hostname_issues import mark_hostname_issue
-from quasarr.providers.log import info, debug
-from quasarr.providers.sessions.al import retrieve_and_validate_session, invalidate_session, unwrap_flaresolverr_body, \
-    fetch_via_flaresolverr, fetch_via_requests_session
+from quasarr.providers.log import debug, info
+from quasarr.providers.sessions.al import (
+    fetch_via_flaresolverr,
+    fetch_via_requests_session,
+    invalidate_session,
+    retrieve_and_validate_session,
+    unwrap_flaresolverr_body,
+)
 from quasarr.providers.statistics import StatsHelper
 from quasarr.providers.utils import is_flaresolverr_available
 
@@ -40,7 +45,7 @@ class ReleaseInfo:
 
 
 def roman_to_int(r: str) -> int:
-    roman_map = {'I': 1, 'V': 5, 'X': 10}
+    roman_map = {"I": 1, "V": 5, "X": 10}
     total = 0
     prev = 0
     for ch in r.upper()[::-1]:
@@ -56,9 +61,9 @@ def roman_to_int(r: str) -> int:
 def derive_mirror(url):
     try:
         hostname = urlparse(url).netloc.lower()
-        if hostname.startswith('www.'):
+        if hostname.startswith("www."):
             hostname = hostname[4:]
-        parts = hostname.split('.')
+        parts = hostname.split(".")
         return parts[-2] if len(parts) >= 2 else hostname
     except:
         return "unknown"
@@ -70,10 +75,10 @@ def extract_season_from_synonyms(soup):
     Only scans the synonyms cell—no fallback to whole document.
     """
     syn_td = None
-    for tr in soup.select('tr'):
-        th = tr.find('th')
-        if th and 'synonym' in th.get_text(strip=True).lower():
-            syn_td = tr.find('td')
+    for tr in soup.select("tr"):
+        th = tr.find("th")
+        if th and "synonym" in th.get_text(strip=True).lower():
+            syn_td = tr.find("td")
             break
 
     if not syn_td:
@@ -120,20 +125,20 @@ def find_season_in_release_notes(soup):
         re.compile(r"\b([IVXLCDM]+)\b(?=\s*$)"),  # uppercase Roman at end
     ]
 
-    for tr in soup.select('tr'):
-        th = tr.find('th')
+    for tr in soup.select("tr"):
+        th = tr.find("th")
         if not th:
             continue
 
         header = th.get_text(strip=True)
-        if 'release ' not in header.lower():  # release notes or release anmerkungen
+        if "release " not in header.lower():  # release notes or release anmerkungen
             continue
 
-        td = tr.find('td')
+        td = tr.find("td")
         if not td:
             continue
 
-        content = td.get_text(' ', strip=True)
+        content = td.get_text(" ", strip=True)
         for pat in patterns:
             m = pat.search(content)
             if not m:
@@ -141,7 +146,7 @@ def find_season_in_release_notes(soup):
 
             token = m.group(1)
             # Roman numeral detection only uppercase
-            if pat.pattern.endswith('(?=\\s*$)'):
+            if pat.pattern.endswith("(?=\\s*$)"):
                 if token.isupper():
                     return roman_to_int(token)
                 else:
@@ -171,7 +176,9 @@ def extract_season_number_from_title(page_title, release_type, release_title="")
     season_num = None
 
     if release_title:
-        match = re.search(r'\.(?:S(\d{1,4})|R(2))(?:E\d{1,4})?', release_title, re.IGNORECASE)
+        match = re.search(
+            r"\.(?:S(\d{1,4})|R(2))(?:E\d{1,4})?", release_title, re.IGNORECASE
+        )
         if match:
             if match.group(1) is not None:
                 season_num = int(match.group(1))
@@ -180,8 +187,16 @@ def extract_season_number_from_title(page_title, release_type, release_title="")
 
     if season_num is None:
         page_title = page_title or ""
-        if "staffel" in page_title.lower() or "season" in page_title.lower() or release_type == "series":
-            match = re.search(r'\b(?:Season|Staffel)\s+(\d+|[IVX]+)\b|\bR(2)\b', page_title, re.IGNORECASE)
+        if (
+            "staffel" in page_title.lower()
+            or "season" in page_title.lower()
+            or release_type == "series"
+        ):
+            match = re.search(
+                r"\b(?:Season|Staffel)\s+(\d+|[IVX]+)\b|\bR(2)\b",
+                page_title,
+                re.IGNORECASE,
+            )
             if match:
                 if match.group(1) is not None:
                     num = match.group(1)
@@ -189,7 +204,9 @@ def extract_season_number_from_title(page_title, release_type, release_title="")
                 elif match.group(2) is not None:
                     season_num = int(match.group(2))
             else:
-                trailing_match = re.search(r'\s+([2-9]\d*|[IVXLCDM]+)\s*$', page_title, re.IGNORECASE)
+                trailing_match = re.search(
+                    r"\s+([2-9]\d*|[IVXLCDM]+)\s*$", page_title, re.IGNORECASE
+                )
                 if trailing_match:
                     num = trailing_match.group(1)
                     season_candidate = int(num) if num.isdigit() else roman_to_int(num)
@@ -224,10 +241,15 @@ def parse_info_from_feed_entry(block, series_page_title, release_type) -> Releas
     audio_icon = block.find("i", class_="fa-volume-up")
     if audio_icon:
         for sib in audio_icon.find_next_siblings():
-            if sib.name == "i" and "fa-closed-captioning" in sib.get("class", []): break
+            if sib.name == "i" and "fa-closed-captioning" in sib.get("class", []):
+                break
             if sib.name == "i" and "flag" in sib.get("class", []):
                 code = sib["class"][1].replace("flag-", "").lower()
-                audio_langs.append({'jp': 'Japanese', 'de': 'German', 'en': 'English'}.get(code, code.title()))
+                audio_langs.append(
+                    {"jp": "Japanese", "de": "German", "en": "English"}.get(
+                        code, code.title()
+                    )
+                )
 
     # parse subtitle flags
     subtitle_langs: List[str] = []
@@ -236,7 +258,11 @@ def parse_info_from_feed_entry(block, series_page_title, release_type) -> Releas
         for sib in subtitle_icon.find_next_siblings():
             if sib.name == "i" and "flag" in sib.get("class", []):
                 code = sib["class"][1].replace("flag-", "").lower()
-                subtitle_langs.append({'jp': 'Japanese', 'de': 'German', 'en': 'English'}.get(code, code.title()))
+                subtitle_langs.append(
+                    {"jp": "Japanese", "de": "German", "en": "English"}.get(
+                        code, code.title()
+                    )
+                )
 
     # resolution
     m_res = re.search(r":\s*([0-9]{3,4}p)", text, re.IGNORECASE)
@@ -267,12 +293,13 @@ def parse_info_from_feed_entry(block, series_page_title, release_type) -> Releas
         season_part=None,
         season=season_num,
         episode_min=episode_min,
-        episode_max=episode_max
+        episode_max=episode_max,
     )
 
 
-def parse_info_from_download_item(tab, content, page_title=None, release_type=None,
-                                  requested_episode=None) -> ReleaseInfo:
+def parse_info_from_download_item(
+    tab, content, page_title=None, release_type=None, requested_episode=None
+) -> ReleaseInfo:
     """
     Parse a BeautifulSoup 'tab' from a download item into ReleaseInfo.
     """
@@ -284,7 +311,7 @@ def parse_info_from_download_item(tab, content, page_title=None, release_type=No
     release_title = None
     if notes_text:
         rn_with_dots = notes_text.replace(" ", ".").replace(".-.", "-")
-        rn_no_dot_duplicates = re.sub(r'\.{2,}', '.', rn_with_dots)
+        rn_no_dot_duplicates = re.sub(r"\.{2,}", ".", rn_with_dots)
         if "." in rn_with_dots and "-" in rn_with_dots:
             # Check if string ends with Group tag (word after dash) - this should prevent false positives
             if re.search(r"-[\s.]?\w+$", rn_with_dots):
@@ -297,17 +324,25 @@ def parse_info_from_download_item(tab, content, page_title=None, release_type=No
         match = re.search(r"(\d+)\s*x\s*(\d+)", res_td.get_text(strip=True))
         if match:
             h = int(match.group(2))
-            resolution = '2160p' if h >= 2000 else '1080p' if h >= 1000 else '720p'
+            resolution = "2160p" if h >= 2000 else "1080p" if h >= 1000 else "720p"
 
     # audio and subtitles
-    audio_codes = [icon["class"][1].replace("flag-", "") for icon in
-                   tab.select("tr:has(th>i.fa-volume-up) i.flag")]
-    audio_langs = [{'jp': 'Japanese', 'de': 'German', 'en': 'English'}.get(c, c.title())
-                   for c in audio_codes]
-    sub_codes = [icon["class"][1].replace("flag-", "") for icon in
-                 tab.select("tr:has(th>i.fa-closed-captioning) i.flag")]
-    subtitle_langs = [{'jp': 'Japanese', 'de': 'German', 'en': 'English'}.get(c, c.title())
-                      for c in sub_codes]
+    audio_codes = [
+        icon["class"][1].replace("flag-", "")
+        for icon in tab.select("tr:has(th>i.fa-volume-up) i.flag")
+    ]
+    audio_langs = [
+        {"jp": "Japanese", "de": "German", "en": "English"}.get(c, c.title())
+        for c in audio_codes
+    ]
+    sub_codes = [
+        icon["class"][1].replace("flag-", "")
+        for icon in tab.select("tr:has(th>i.fa-closed-captioning) i.flag")
+    ]
+    subtitle_langs = [
+        {"jp": "Japanese", "de": "German", "en": "English"}.get(c, c.title())
+        for c in sub_codes
+    ]
 
     # audio codec
     if "flac" in notes_lower:
@@ -365,18 +400,27 @@ def parse_info_from_download_item(tab, content, page_title=None, release_type=No
     if not season_num:
         season_num = find_season_in_release_notes(content)
     if not season_num:
-        season_num = extract_season_number_from_title(page_title, release_type, release_title=release_title)
+        season_num = extract_season_number_from_title(
+            page_title, release_type, release_title=release_title
+        )
 
     # check if season part info is present
     season_part: Optional[int] = None
     if page_title:
-        match = re.search(r'(?i)\b(?:Part|Teil)\s+(\d+|[IVX]+)\b', page_title, re.IGNORECASE)
+        match = re.search(
+            r"(?i)\b(?:Part|Teil)\s+(\d+|[IVX]+)\b", page_title, re.IGNORECASE
+        )
         if match:
             num = match.group(1)
             season_part = int(num) if num.isdigit() else roman_to_int(num)
             part_string = f"Part.{season_part}"
             if release_title and part_string not in release_title:
-                release_title = re.sub(r"\.(German|Japanese|English)\.", f".{part_string}.\\1.", release_title, 1)
+                release_title = re.sub(
+                    r"\.(German|Japanese|English)\.",
+                    f".{part_string}.\\1.",
+                    release_title,
+                    1,
+                )
 
     # determine if optional episode exists on release page
     episode_min: Optional[int] = None
@@ -384,7 +428,9 @@ def parse_info_from_download_item(tab, content, page_title=None, release_type=No
     if requested_episode:
         episodes_div = tab.find("div", class_="episodes")
         if episodes_div:
-            episode_links = episodes_div.find_all("a", attrs={"data-loop": re.compile(r"^\d+$")})
+            episode_links = episodes_div.find_all(
+                "a", attrs={"data-loop": re.compile(r"^\d+$")}
+            )
             total_episodes = len(episode_links)
             if total_episodes > 0:
                 ep = int(requested_episode)
@@ -393,11 +439,11 @@ def parse_info_from_download_item(tab, content, page_title=None, release_type=No
                     episode_max = total_episodes
                     if release_title:
                         release_title = re.sub(
-                            r'(?<=\.)S(\d{1,4})(?=\.)',
+                            r"(?<=\.)S(\d{1,4})(?=\.)",
                             lambda m: f"S{int(m.group(1)):02d}E{ep:02d}",
                             release_title,
                             count=1,
-                            flags=re.IGNORECASE
+                            flags=re.IGNORECASE,
                         )
 
     return ReleaseInfo(
@@ -412,16 +458,16 @@ def parse_info_from_download_item(tab, content, page_title=None, release_type=No
         season_part=season_part,
         season=season_num,
         episode_min=episode_min,
-        episode_max=episode_max
+        episode_max=episode_max,
     )
 
 
 def guess_title(shared_state, page_title, release_info: ReleaseInfo) -> str:
     # remove labels
-    clean_title = page_title.rsplit('(', 1)[0].strip()
+    clean_title = page_title.rsplit("(", 1)[0].strip()
     # Remove season/staffel info
-    pattern = r'(?i)\b(?:Season|Staffel)\s*\.?\s*\d+\b|\bR\d+\b'
-    clean_title = re.sub(pattern, '', clean_title)
+    pattern = r"(?i)\b(?:Season|Staffel)\s*\.?\s*\d+\b|\bR\d+\b"
+    clean_title = re.sub(pattern, "", clean_title)
 
     # determine season token
     if release_info.season is not None:
@@ -430,13 +476,13 @@ def guess_title(shared_state, page_title, release_info: ReleaseInfo) -> str:
         season_token = ""
 
     # episode token
-    ep_token = ''
+    ep_token = ""
     if release_info.episode_min is not None:
         s = release_info.episode_min
         e = release_info.episode_max if release_info.episode_max is not None else s
         ep_token = f"E{s:02d}" + (f"-{e:02d}" if e != s else "")
 
-    title_core = clean_title.strip().replace(' ', '.')
+    title_core = clean_title.strip().replace(" ", ".")
     if season_token:
         title_core += f".{season_token}{ep_token}"
     elif ep_token:
@@ -450,23 +496,24 @@ def guess_title(shared_state, page_title, release_info: ReleaseInfo) -> str:
         if part_string not in title_core:
             parts.append(part_string)
 
-    prefix = ''
+    prefix = ""
     a, su = release_info.audio_langs, release_info.subtitle_langs
-    if len(a) > 2 and 'German' in a:
-        prefix = 'German.ML'
-    elif len(a) == 2 and 'German' in a:
-        prefix = 'German.DL'
-    elif len(a) == 1 and 'German' in a:
-        prefix = 'German'
-    elif a and 'German' in su:
+    if len(a) > 2 and "German" in a:
+        prefix = "German.ML"
+    elif len(a) == 2 and "German" in a:
+        prefix = "German.DL"
+    elif len(a) == 1 and "German" in a:
+        prefix = "German"
+    elif a and "German" in su:
         prefix = f"{a[0]}.Subbed"
-    if prefix: parts.append(prefix)
+    if prefix:
+        parts.append(prefix)
 
     if release_info.audio:
         parts.append(release_info.audio)
 
     parts.extend([release_info.resolution, release_info.source, release_info.video])
-    title = '.'.join(parts)
+    title = ".".join(parts)
     if release_info.release_group:
         title += f"-{release_info.release_group}"
     return shared_state.sanitize_title(title)
@@ -476,7 +523,9 @@ def check_release(shared_state, details_html, release_id, title, episode_in_titl
     soup = BeautifulSoup(details_html, "html.parser")
 
     if int(release_id) == 0:
-        info("Feed download detected, hard-coding release_id to 1 to achieve successful download")
+        info(
+            "Feed download detected, hard-coding release_id to 1 to achieve successful download"
+        )
         release_id = 1
         # The following logic works, but the highest release ID sometimes does not have the desired episode
         #
@@ -507,12 +556,19 @@ def check_release(shared_state, details_html, release_id, title, episode_in_titl
             else:
                 release_type = "movie"
 
-            release_info = parse_info_from_download_item(tab, soup, page_title=page_title, release_type=release_type,
-                                                         requested_episode=episode_in_title)
+            release_info = parse_info_from_download_item(
+                tab,
+                soup,
+                page_title=page_title,
+                release_type=release_type,
+                requested_episode=episode_in_title,
+            )
             real_title = release_info.release_title
             if real_title:
                 if real_title.lower() != title.lower():
-                    info(f'Identified true release title "{real_title}" on details page')
+                    info(
+                        f'Identified true release title "{real_title}" on details page'
+                    )
                     return real_title, release_id
             else:
                 # Overwrite values so guessing the title only applies the requested episode
@@ -522,22 +578,26 @@ def check_release(shared_state, details_html, release_id, title, episode_in_titl
 
                 guessed_title = guess_title(shared_state, page_title, release_info)
                 if guessed_title and guessed_title.lower() != title.lower():
-                    info(f'Adjusted guessed release title to "{guessed_title}" from details page')
+                    info(
+                        f'Adjusted guessed release title to "{guessed_title}" from details page'
+                    )
                     return guessed_title, release_id
         except Exception as e:
             info(f"Error guessing release title from release: {e}")
-            mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
+            mark_hostname_issue(
+                hostname, "download", str(e) if "e" in dir() else "Download error"
+            )
 
     return title, release_id
 
 
 def extract_episode(title: str) -> int | None:
-    match = re.search(r'\bS\d{1,4}E(\d+)\b(?![\-E\d])', title)
+    match = re.search(r"\bS\d{1,4}E(\d+)\b(?![\-E\d])", title)
     if match:
         return int(match.group(1))
 
-    if not re.search(r'\bS\d{1,4}\b', title):
-        match = re.search(r'\.E(\d+)\b(?![\-E\d])', title)
+    if not re.search(r"\bS\d{1,4}\b", title):
+        match = re.search(r"\.E(\d+)\b(?![\-E\d])", title)
         if match:
             return int(match.group(1))
 
@@ -557,8 +617,10 @@ def get_al_download_links(shared_state, url, mirror, title, password):
 
     # Check if FlareSolverr is available - AL requires it
     if not is_flaresolverr_available(shared_state):
-        info(f'"{hostname.upper()}" requires FlareSolverr which is not configured. '
-             f'Please configure FlareSolverr in the web UI to use this site.')
+        info(
+            f'"{hostname.upper()}" requires FlareSolverr which is not configured. '
+            f"Please configure FlareSolverr in the web UI to use this site."
+        )
         return {}
 
     release_id = password  # password field carries release_id for AL
@@ -583,7 +645,9 @@ def get_al_download_links(shared_state, url, mirror, title, password):
     else:
         selection = "cnl"
 
-    title, release_id = check_release(shared_state, details_html, release_id, title, episode_in_title)
+    title, release_id = check_release(
+        shared_state, details_html, release_id, title, episode_in_title
+    )
     if int(release_id) == 0:
         info(f"No valid release ID found for {title} - Download failed!")
         return {}
@@ -607,7 +671,7 @@ def get_al_download_links(shared_state, url, mirror, title, password):
             method="POST",
             target_url=post_url,
             post_data=payload,
-            timeout=30
+            timeout=30,
         )
 
         status = result.get("status_code")
@@ -630,9 +694,9 @@ def get_al_download_links(shared_state, url, mirror, title, password):
 
             tries = 0
             if code == "success" and content_items:
-                info('CAPTCHA not required')
+                info("CAPTCHA not required")
             elif message == "cnl_login":
-                info('Login expired, re-creating session...')
+                info("Login expired, re-creating session...")
                 invalidate_session(shared_state)
             else:
                 tries = 0
@@ -643,10 +707,16 @@ def get_al_download_links(shared_state, url, mirror, title, password):
                             f"Starting attempt {tries} to solve CAPTCHA for "
                             f"{f'episode {episode_in_title}' if selection and selection != 'cnl' else 'all links'}"
                         )
-                        attempt = solve_captcha(hostname, shared_state, fetch_via_flaresolverr,
-                                                fetch_via_requests_session)
+                        attempt = solve_captcha(
+                            hostname,
+                            shared_state,
+                            fetch_via_flaresolverr,
+                            fetch_via_requests_session,
+                        )
 
-                        solved = (unwrap_flaresolverr_body(attempt.get("response")) == "1")
+                        solved = (
+                            unwrap_flaresolverr_body(attempt.get("response")) == "1"
+                        )
                         captcha_id = attempt.get("captcha_id", None)
 
                         if solved and captcha_id:
@@ -654,18 +724,21 @@ def get_al_download_links(shared_state, url, mirror, title, password):
                                 "enc": b64,
                                 "response": "captcha",
                                 "captcha-idhf": 0,
-                                "captcha-hf": captcha_id
+                                "captcha-hf": captcha_id,
                             }
-                            check_solution = fetch_via_flaresolverr(shared_state,
-                                                                    method="POST",
-                                                                    target_url=post_url,
-                                                                    post_data=payload,
-                                                                    timeout=30)
+                            check_solution = fetch_via_flaresolverr(
+                                shared_state,
+                                method="POST",
+                                target_url=post_url,
+                                post_data=payload,
+                                timeout=30,
+                            )
                             try:
                                 response_json = check_solution.get("json", {})
                             except ValueError:
                                 raise RuntimeError(
-                                    f"Unexpected /ajax/captcha response: {check_solution.get('text', '')}")
+                                    f"Unexpected /ajax/captcha response: {check_solution.get('text', '')}"
+                                )
 
                             code = response_json.get("code", "")
                             message = response_json.get("message", "")
@@ -673,32 +746,50 @@ def get_al_download_links(shared_state, url, mirror, title, password):
 
                             if code == "success":
                                 if content_items:
-                                    info("CAPTCHA solved successfully on attempt {}.".format(tries))
+                                    info(
+                                        "CAPTCHA solved successfully on attempt {}.".format(
+                                            tries
+                                        )
+                                    )
                                     break
                                 else:
-                                    info(f"CAPTCHA was solved, but no links are available for the selection!")
-                                    StatsHelper(shared_state).increment_failed_decryptions_automatic()
+                                    info(
+                                        f"CAPTCHA was solved, but no links are available for the selection!"
+                                    )
+                                    StatsHelper(
+                                        shared_state
+                                    ).increment_failed_decryptions_automatic()
                                     return {}
                             elif message == "cnl_login":
-                                info('Login expired, re-creating session...')
+                                info("Login expired, re-creating session...")
                                 invalidate_session(shared_state)
                             else:
                                 info(
-                                    f"CAPTCHA POST returned code={code}, message={message}. Retrying... (attempt {tries})")
+                                    f"CAPTCHA POST returned code={code}, message={message}. Retrying... (attempt {tries})"
+                                )
 
                                 if "slowndown" in str(message).lower():
                                     wait_period = 30
                                     info(
-                                        f"CAPTCHAs solved too quickly. Waiting {wait_period} seconds before next attempt...")
+                                        f"CAPTCHAs solved too quickly. Waiting {wait_period} seconds before next attempt..."
+                                    )
                                     time.sleep(wait_period)
                         else:
-                            info(f"CAPTCHA solver returned invalid solution, retrying... (attempt {tries})")
+                            info(
+                                f"CAPTCHA solver returned invalid solution, retrying... (attempt {tries})"
+                            )
 
                     except RuntimeError as e:
                         info(f"Error solving CAPTCHA: {e}")
-                        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
+                        mark_hostname_issue(
+                            hostname,
+                            "download",
+                            str(e) if "e" in dir() else "Download error",
+                        )
                     else:
-                        info(f"CAPTCHA solver returned invalid solution, retrying... (attempt {tries})")
+                        info(
+                            f"CAPTCHA solver returned invalid solution, retrying... (attempt {tries})"
+                        )
 
             if code != "success":
                 info(
@@ -714,10 +805,14 @@ def get_al_download_links(shared_state, url, mirror, title, password):
                 debug(f"Decrypted URLs: {links}")
             except Exception as e:
                 info(f"Error during decryption: {e}")
-                mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
+                mark_hostname_issue(
+                    hostname, "download", str(e) if "e" in dir() else "Download error"
+                )
     except Exception as e:
         info(f"Error loading AL download: {e}")
-        mark_hostname_issue(hostname, "download", str(e) if "e" in dir() else "Download error")
+        mark_hostname_issue(
+            hostname, "download", str(e) if "e" in dir() else "Download error"
+        )
         invalidate_session(shared_state)
 
     success = bool(links)
@@ -728,8 +823,4 @@ def get_al_download_links(shared_state, url, mirror, title, password):
 
     links_with_mirrors = [[url, derive_mirror(url)] for url in links]
 
-    return {
-        "links": links_with_mirrors,
-        "password": f"www.{al}",
-        "title": title
-    }
+    return {"links": links_with_mirrors, "password": f"www.{al}", "title": title}

@@ -5,24 +5,26 @@
 import html
 import re
 from datetime import datetime, timedelta
-from json import loads, dumps
+from json import dumps, loads
 from urllib.parse import quote
 
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 
 
 def _get_db(table_name):
     """Lazy import to avoid circular dependency."""
     from quasarr.storage.sqlite_database import DataBase
+
     return DataBase(table_name)
 
 
 def _get_config(section):
     """Lazy import to avoid circular dependency."""
     from quasarr.storage.config import Config
+
     return Config(section)
 
 
@@ -32,9 +34,11 @@ class TitleCleaner:
         if not title:
             return ""
         sanitized_title = html.unescape(title)
-        sanitized_title = re.sub(r"[^a-zA-Z0-9äöüÄÖÜß&-']", ' ', sanitized_title).strip()
+        sanitized_title = re.sub(
+            r"[^a-zA-Z0-9äöüÄÖÜß&-']", " ", sanitized_title
+        ).strip()
         sanitized_title = sanitized_title.replace(" - ", "-")
-        sanitized_title = re.sub(r'\s{2,}', ' ', sanitized_title)
+        sanitized_title = re.sub(r"\s{2,}", " ", sanitized_title)
         return sanitized_title
 
     @staticmethod
@@ -49,10 +53,18 @@ class TitleCleaner:
                 extracted_title = title
 
             tags_to_remove = [
-                r'[\.\s]UNRATED.*', r'[\.\s]Unrated.*', r'[\.\s]Uncut.*', r'[\.\s]UNCUT.*',
-                r'[\.\s]Directors[\.\s]Cut.*', r'[\.\s]Final[\.\s]Cut.*', r'[\.\s]DC.*',
-                r'[\.\s]REMASTERED.*', r'[\.\s]EXTENDED.*', r'[\.\s]Extended.*',
-                r'[\.\s]Theatrical.*', r'[\.\s]THEATRICAL.*'
+                r"[\.\s]UNRATED.*",
+                r"[\.\s]Unrated.*",
+                r"[\.\s]Uncut.*",
+                r"[\.\s]UNCUT.*",
+                r"[\.\s]Directors[\.\s]Cut.*",
+                r"[\.\s]Final[\.\s]Cut.*",
+                r"[\.\s]DC.*",
+                r"[\.\s]REMASTERED.*",
+                r"[\.\s]EXTENDED.*",
+                r"[\.\s]Extended.*",
+                r"[\.\s]Theatrical.*",
+                r"[\.\s]THEATRICAL.*",
             ]
 
             clean_title = extracted_title
@@ -60,7 +72,7 @@ class TitleCleaner:
                 clean_title = re.sub(tag, "", clean_title, flags=re.IGNORECASE)
 
             clean_title = clean_title.replace(".", " ").strip()
-            clean_title = re.sub(r'\s+', ' ', clean_title)
+            clean_title = re.sub(r"\s+", " ", clean_title)
             clean_title = clean_title.replace(" ", "+")
 
             return clean_title
@@ -71,6 +83,7 @@ class TitleCleaner:
 
 class IMDbAPI:
     """Tier 1: api.imdbapi.dev - Primary, fast, comprehensive."""
+
     BASE_URL = "https://api.imdbapi.dev"
 
     @staticmethod
@@ -86,7 +99,9 @@ class IMDbAPI:
     @staticmethod
     def get_akas(imdb_id):
         try:
-            response = requests.get(f"{IMDbAPI.BASE_URL}/titles/{imdb_id}/akas", timeout=30)
+            response = requests.get(
+                f"{IMDbAPI.BASE_URL}/titles/{imdb_id}/akas", timeout=30
+            )
             response.raise_for_status()
             return response.json().get("akas", [])
         except Exception as e:
@@ -96,7 +111,10 @@ class IMDbAPI:
     @staticmethod
     def search_titles(query):
         try:
-            response = requests.get(f"{IMDbAPI.BASE_URL}/search/titles?query={quote(query)}&limit=5", timeout=30)
+            response = requests.get(
+                f"{IMDbAPI.BASE_URL}/search/titles?query={quote(query)}&limit=5",
+                timeout=30,
+            )
             response.raise_for_status()
             return response.json().get("titles", [])
         except Exception as e:
@@ -106,6 +124,7 @@ class IMDbAPI:
 
 class IMDbCDN:
     """Tier 2: v2.sg.media-imdb.com - Fast fallback for English data."""
+
     CDN_URL = "https://v2.sg.media-imdb.com/suggestion"
 
     @staticmethod
@@ -115,9 +134,9 @@ class IMDbCDN:
                 return None
 
             headers = {
-                'Accept-Language': f'{language},en;q=0.9',
-                'User-Agent': user_agent,
-                'Accept': 'application/json'
+                "Accept-Language": f"{language},en;q=0.9",
+                "User-Agent": user_agent,
+                "Accept": "application/json",
             }
 
             first_char = imdb_id[0].lower()
@@ -141,7 +160,7 @@ class IMDbCDN:
 
     @staticmethod
     def get_poster(imdb_id, user_agent):
-        data = IMDbCDN._get_cdn_data(imdb_id, 'en', user_agent)
+        data = IMDbCDN._get_cdn_data(imdb_id, "en", user_agent)
         if data:
             image_node = data.get("i")
             if image_node and "imageUrl" in image_node:
@@ -151,7 +170,7 @@ class IMDbCDN:
     @staticmethod
     def get_title(imdb_id, user_agent):
         """Returns the English title from CDN."""
-        data = IMDbCDN._get_cdn_data(imdb_id, 'en', user_agent)
+        data = IMDbCDN._get_cdn_data(imdb_id, "en", user_agent)
         if data and "l" in data:
             return data["l"]
         return None
@@ -160,11 +179,12 @@ class IMDbCDN:
     def search_titles(query, ttype, language, user_agent):
         try:
             clean_query = quote(query.lower().replace(" ", "_"))
-            if not clean_query: return []
+            if not clean_query:
+                return []
 
             headers = {
-                'Accept-Language': f'{language},en;q=0.9',
-                'User-Agent': user_agent
+                "Accept-Language": f"{language},en;q=0.9",
+                "User-Agent": user_agent,
             }
 
             first_char = clean_query[0]
@@ -177,15 +197,18 @@ class IMDbCDN:
                 results = []
                 if "d" in data:
                     for item in data["d"]:
-                        results.append({
-                            'id': item.get('id'),
-                            'titleNameText': item.get('l'),
-                            'titleReleaseText': item.get('y')
-                        })
+                        results.append(
+                            {
+                                "id": item.get("id"),
+                                "titleNameText": item.get("l"),
+                                "titleReleaseText": item.get("y"),
+                            }
+                        )
                 return results
 
         except Exception as e:
             from quasarr.providers.log import debug
+
             debug(f"IMDb CDN search failed: {e}")
 
         return []
@@ -193,11 +216,12 @@ class IMDbCDN:
 
 class IMDbFlareSolverr:
     """Tier 3: FlareSolverr - Robust fallback using browser automation."""
+
     WEB_URL = "https://www.imdb.com"
 
     @staticmethod
     def _request(url):
-        flaresolverr_url = _get_config('FlareSolverr').get('url')
+        flaresolverr_url = _get_config("FlareSolverr").get("url")
         flaresolverr_skipped = _get_db("skip_flaresolverr").retrieve("skipped")
 
         if not flaresolverr_url or flaresolverr_skipped:
@@ -210,8 +234,12 @@ class IMDbFlareSolverr:
                 "maxTimeout": 60000,
             }
 
-            response = requests.post(flaresolverr_url, json=post_data, headers={"Content-Type": "application/json"},
-                                     timeout=60)
+            response = requests.post(
+                flaresolverr_url,
+                json=post_data,
+                headers={"Content-Type": "application/json"},
+                timeout=60,
+            )
             if response.status_code == 200:
                 json_response = response.json()
                 if json_response.get("status") == "ok":
@@ -223,11 +251,13 @@ class IMDbFlareSolverr:
 
     @staticmethod
     def get_poster(imdb_id):
-        html_content = IMDbFlareSolverr._request(f"{IMDbFlareSolverr.WEB_URL}/title/{imdb_id}/")
+        html_content = IMDbFlareSolverr._request(
+            f"{IMDbFlareSolverr.WEB_URL}/title/{imdb_id}/"
+        )
         if html_content:
             try:
                 soup = BeautifulSoup(html_content, "html.parser")
-                poster_div = soup.find('div', class_='ipc-poster')
+                poster_div = soup.find("div", class_="ipc-poster")
                 if poster_div and poster_div.div and poster_div.div.img:
                     poster_set = poster_div.div.img.get("srcset")
                     if poster_set:
@@ -250,14 +280,14 @@ class IMDbFlareSolverr:
 
                 # Map language codes to country names commonly used in IMDb AKAs
                 country_map = {
-                    'de': ['Germany', 'Austria', 'Switzerland', 'West Germany'],
-                    'fr': ['France', 'Canada', 'Belgium'],
-                    'es': ['Spain', 'Mexico', 'Argentina'],
-                    'it': ['Italy'],
-                    'pt': ['Portugal', 'Brazil'],
-                    'ru': ['Russia', 'Soviet Union'],
-                    'ja': ['Japan'],
-                    'hi': ['India']
+                    "de": ["Germany", "Austria", "Switzerland", "West Germany"],
+                    "fr": ["France", "Canada", "Belgium"],
+                    "es": ["Spain", "Mexico", "Argentina"],
+                    "it": ["Italy"],
+                    "pt": ["Portugal", "Brazil"],
+                    "ru": ["Russia", "Soviet Union"],
+                    "ja": ["Japan"],
+                    "hi": ["India"],
                 }
 
                 target_countries = country_map.get(language, [])
@@ -267,17 +297,24 @@ class IMDbFlareSolverr:
                 items = soup.find_all("li", class_="ipc-metadata-list__item")
 
                 for item in items:
-                    label_span = item.find("span", class_="ipc-metadata-list-item__label")
+                    label_span = item.find(
+                        "span", class_="ipc-metadata-list-item__label"
+                    )
                     if not label_span:
                         # Sometimes it's an anchor if it's a link
-                        label_span = item.find("a", class_="ipc-metadata-list-item__label")
+                        label_span = item.find(
+                            "a", class_="ipc-metadata-list-item__label"
+                        )
 
                     if label_span:
                         country = label_span.get_text(strip=True)
                         # Check if this country matches our target language
                         if any(c in country for c in target_countries):
                             # Found a matching country, get the title
-                            title_span = item.find("span", class_="ipc-metadata-list-item__list-content-item")
+                            title_span = item.find(
+                                "span",
+                                class_="ipc-metadata-list-item__list-content-item",
+                            )
                             if title_span:
                                 return title_span.get_text(strip=True)
 
@@ -297,21 +334,27 @@ class IMDbFlareSolverr:
                 props = soup.find("script", text=re.compile("props"))
                 if props:
                     details = loads(props.string)
-                    results = details['props']['pageProps']['titleResults']['results']
+                    results = details["props"]["pageProps"]["titleResults"]["results"]
                     mapped_results = []
                     for result in results:
                         try:
-                            mapped_results.append({
-                                'id': result["listItem"]["titleId"],
-                                'titleNameText': result["listItem"]["titleText"],
-                                'titleReleaseText': result["listItem"].get("releaseYear")
-                            })
+                            mapped_results.append(
+                                {
+                                    "id": result["listItem"]["titleId"],
+                                    "titleNameText": result["listItem"]["titleText"],
+                                    "titleReleaseText": result["listItem"].get(
+                                        "releaseYear"
+                                    ),
+                                }
+                            )
                         except KeyError:
-                            mapped_results.append({
-                                'id': result.get('id'),
-                                'titleNameText': result.get("titleNameText"),
-                                'titleReleaseText': result.get("titleReleaseText")
-                            })
+                            mapped_results.append(
+                                {
+                                    "id": result.get("id"),
+                                    "titleNameText": result.get("titleNameText"),
+                                    "titleReleaseText": result.get("titleReleaseText"),
+                                }
+                            )
                     return mapped_results
 
                 results = []
@@ -322,11 +365,13 @@ class IMDbFlareSolverr:
                         href = a_tag.get("href", "")
                         id_match = re.search(r"(tt\d+)", href)
                         if id_match:
-                            results.append({
-                                'id': id_match.group(1),
-                                'titleNameText': a_tag.get_text(strip=True),
-                                'titleReleaseText': ""
-                            })
+                            results.append(
+                                {
+                                    "id": id_match.group(1),
+                                    "titleNameText": a_tag.get_text(strip=True),
+                                    "titleReleaseText": "",
+                                }
+                            )
                 return results
 
             except Exception as e:
@@ -337,6 +382,7 @@ class IMDbFlareSolverr:
 # =============================================================================
 # Main Functions (Chain of Responsibility)
 # =============================================================================
+
 
 def _update_cache(imdb_id, key, value, language=None):
     db = _get_db("imdb_metadata")
@@ -350,11 +396,13 @@ def _update_cache(imdb_id, key, value, language=None):
                 "year": None,
                 "poster_link": None,
                 "localized": {},
-                "ttl": 0
+                "ttl": 0,
             }
 
         if key == "localized" and language:
-            if "localized" not in metadata or not isinstance(metadata["localized"], dict):
+            if "localized" not in metadata or not isinstance(
+                metadata["localized"], dict
+            ):
                 metadata["localized"] = {}
             metadata["localized"][language] = value
         else:
@@ -391,18 +439,19 @@ def get_poster_link(shared_state, imdb_id):
     return None
 
 
-def get_localized_title(shared_state, imdb_id, language='de'):
+def get_localized_title(shared_state, imdb_id, language="de"):
     # 0. Check Cache (via get_imdb_metadata)
     imdb_metadata = get_imdb_metadata(imdb_id)
     if imdb_metadata:
         localized = imdb_metadata.get("localized", {}).get(language)
-        if localized: return localized
-        if language == 'en' and imdb_metadata.get("title"):
+        if localized:
+            return localized
+        if language == "en" and imdb_metadata.get("title"):
             return imdb_metadata.get("title")
 
     user_agent = shared_state.values["user_agent"]
 
-    if language == 'en':
+    if language == "en":
         title = IMDbCDN.get_title(imdb_id, user_agent)
         if title:
             sanitized_title = TitleCleaner.sanitize(title)
@@ -447,14 +496,16 @@ def get_imdb_metadata(imdb_id):
         "year": None,
         "poster_link": None,
         "localized": {},
-        "ttl": 0
+        "ttl": 0,
     }
 
     # 1. Try API
     response_json = IMDbAPI.get_title(imdb_id)
 
     if response_json:
-        imdb_metadata["title"] = TitleCleaner.sanitize(response_json.get("primaryTitle", ""))
+        imdb_metadata["title"] = TitleCleaner.sanitize(
+            response_json.get("primaryTitle", "")
+        )
         imdb_metadata["year"] = response_json.get("startYear")
 
         days = 7 if imdb_metadata.get("title") and imdb_metadata.get("year") else 1
@@ -468,9 +519,12 @@ def get_imdb_metadata(imdb_id):
         akas = IMDbAPI.get_akas(imdb_id)
         if akas:
             for aka in akas:
-                if aka.get("language"): continue
+                if aka.get("language"):
+                    continue
                 if aka.get("country", {}).get("code", "").lower() == "de":
-                    imdb_metadata["localized"]["de"] = TitleCleaner.sanitize(aka.get("text"))
+                    imdb_metadata["localized"]["de"] = TitleCleaner.sanitize(
+                        aka.get("text")
+                    )
                     break
 
         db.update_store(imdb_id, dumps(imdb_metadata))
@@ -483,7 +537,7 @@ def get_imdb_metadata(imdb_id):
     # 2. Fallback: Try CDN for basic info (English title, Year, Poster)
     # We can't get localized titles from CDN, but we can get the rest.
     # We need a user agent, but this function doesn't receive shared_state.
-    # We'll skip CDN fallback here to avoid circular deps or complexity, 
+    # We'll skip CDN fallback here to avoid circular deps or complexity,
     # as get_poster_link and get_localized_title handle their own fallbacks.
     # But to populate the DB, we could try. For now, return empty/partial if API fails.
 
@@ -508,8 +562,9 @@ def get_imdb_id_from_title(shared_state, title, language="de"):
         cached_data = db.retrieve(title)
         if cached_data:
             data = loads(cached_data)
-            if data.get("timestamp") and datetime.fromtimestamp(data["timestamp"]) > datetime.now() - timedelta(
-                    hours=48):
+            if data.get("timestamp") and datetime.fromtimestamp(
+                data["timestamp"]
+            ) > datetime.now() - timedelta(hours=48):
                 return data.get("imdb_id")
     except Exception:
         pass
@@ -519,26 +574,31 @@ def get_imdb_id_from_title(shared_state, title, language="de"):
     # 1. Try API
     search_results = IMDbAPI.search_titles(title)
     if search_results:
-        imdb_id = _match_result(shared_state, title, search_results, ttype_api, is_api=True)
+        imdb_id = _match_result(
+            shared_state, title, search_results, ttype_api, is_api=True
+        )
 
     # 2. Try CDN (Fallback)
     if not imdb_id:
         search_results = IMDbCDN.search_titles(title, ttype_web, language, user_agent)
         if search_results:
-            imdb_id = _match_result(shared_state, title, search_results, ttype_api, is_api=False)
+            imdb_id = _match_result(
+                shared_state, title, search_results, ttype_api, is_api=False
+            )
 
     # 3. Try FlareSolverr (Last Resort)
     if not imdb_id:
         search_results = IMDbFlareSolverr.search_titles(title, ttype_web)
         if search_results:
-            imdb_id = _match_result(shared_state, title, search_results, ttype_api, is_api=False)
+            imdb_id = _match_result(
+                shared_state, title, search_results, ttype_api, is_api=False
+            )
 
     # Update Cache
     try:
-        db.update_store(title, dumps({
-            "imdb_id": imdb_id,
-            "timestamp": datetime.now().timestamp()
-        }))
+        db.update_store(
+            title, dumps({"imdb_id": imdb_id, "timestamp": datetime.now().timestamp()})
+        )
     except Exception:
         pass
 
@@ -550,19 +610,28 @@ def get_imdb_id_from_title(shared_state, title, language="de"):
 
 def _match_result(shared_state, title, results, ttype_api, is_api=False):
     for result in results:
-        found_title = result.get("primaryTitle") if is_api else result.get("titleNameText")
+        found_title = (
+            result.get("primaryTitle") if is_api else result.get("titleNameText")
+        )
         found_id = result.get("id")
 
         if is_api:
             found_type = result.get("type")
-            if ttype_api == "TV_SERIES" and found_type not in ["tvSeries", "tvMiniSeries"]: continue
-            if ttype_api == "MOVIE" and found_type not in ["movie", "tvMovie"]: continue
+            if ttype_api == "TV_SERIES" and found_type not in [
+                "tvSeries",
+                "tvMiniSeries",
+            ]:
+                continue
+            if ttype_api == "MOVIE" and found_type not in ["movie", "tvMovie"]:
+                continue
 
         if shared_state.search_string_in_sanitized_title(title, found_title):
             return found_id
 
     for result in results:
-        found_title = result.get("primaryTitle") if is_api else result.get("titleNameText")
+        found_title = (
+            result.get("primaryTitle") if is_api else result.get("titleNameText")
+        )
         found_id = result.get("id")
         if shared_state.search_string_in_sanitized_title(title, found_title):
             return found_id

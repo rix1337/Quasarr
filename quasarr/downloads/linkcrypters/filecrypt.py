@@ -11,11 +11,14 @@ from urllib.parse import urlparse
 
 import dukpy
 import requests
-from Cryptodome.Cipher import AES
 from bs4 import BeautifulSoup
+from Cryptodome.Cipher import AES
 
-from quasarr.providers.cloudflare import is_cloudflare_challenge, ensure_session_cf_bypassed
-from quasarr.providers.log import info, debug
+from quasarr.providers.cloudflare import (
+    ensure_session_cf_bypassed,
+    is_cloudflare_challenge,
+)
+from quasarr.providers.log import debug, info
 
 
 class CNL:
@@ -61,7 +64,9 @@ class CNL:
             raise ValueError("Decryption failed") from e
 
         try:
-            decoded = decrypted_data.decode('utf-8').replace('\x00', '').replace('\x08', '')
+            decoded = (
+                decrypted_data.decode("utf-8").replace("\x00", "").replace("\x08", "")
+            )
             debug("Decoded AES output successfully.")
             return decoded
         except UnicodeDecodeError as e:
@@ -71,7 +76,7 @@ class CNL:
     def decrypt(self):
         debug("Starting Click'N'Load decrypt sequence.")
         crypted = self.crypted_data[2]
-        jk = "function f(){ return \'" + self.crypted_data[1] + "';}"
+        jk = "function f(){ return '" + self.crypted_data[1] + "';}"
         key = self.jk_eval(jk)
         uncrypted = self.aes_decrypt(crypted, key)
         urls = [result for result in uncrypted.split("\r\n") if len(result) > 0]
@@ -93,7 +98,7 @@ class DLC:
         return [
             (
                 base64.b64decode(node.getAttribute("name")).decode("utf-8"),
-                self.parse_links(node)
+                self.parse_links(node),
             )
             for node in start_node.getElementsByTagName("package")
         ]
@@ -101,7 +106,9 @@ class DLC:
     def parse_links(self, start_node):
         debug("Parsing DLC links in package.")
         return [
-            base64.b64decode(node.getElementsByTagName("url")[0].firstChild.data).decode("utf-8")
+            base64.b64decode(
+                node.getElementsByTagName("url")[0].firstChild.data
+            ).decode("utf-8")
             for node in start_node.getElementsByTagName("file")
         ]
 
@@ -122,12 +129,16 @@ class DLC:
             dlc_data = base64.b64decode(data[:-88])
             debug("DLC base64 decode successful.")
 
-            headers = {'User-Agent': self.shared_state.values["user_agent"]}
+            headers = {"User-Agent": self.shared_state.values["user_agent"]}
 
             debug("Requesting DLC decryption service.")
-            dlc_content = requests.get(self.API_URL + dlc_key, headers=headers, timeout=10).content.decode("utf-8")
+            dlc_content = requests.get(
+                self.API_URL + dlc_key, headers=headers, timeout=10
+            ).content.decode("utf-8")
 
-            rc = base64.b64decode(re.search(r"<rc>(.+)</rc>", dlc_content, re.S).group(1))[:16]
+            rc = base64.b64decode(
+                re.search(r"<rc>(.+)</rc>", dlc_content, re.S).group(1)
+            )[:16]
             debug("Received DLC RC block.")
 
             cipher = AES.new(self.KEY, AES.MODE_CBC, self.IV)
@@ -161,28 +172,37 @@ def get_filecrypt_links(shared_state, token, title, url, password=None, mirror=N
     info("Attempting to decrypt Filecrypt link: " + url)
     debug("Initializing Filecrypt session & headers.")
     session = requests.Session()
-    headers = {'User-Agent': shared_state.values["user_agent"]}
+    headers = {"User-Agent": shared_state.values["user_agent"]}
 
     debug("Ensuring Cloudflare bypass is ready.")
-    session, headers, output = ensure_session_cf_bypassed(info, shared_state, session, url, headers)
+    session, headers, output = ensure_session_cf_bypassed(
+        info, shared_state, session, url, headers
+    )
     if not session or not output:
         debug("Cloudflare bypass failed.")
         return False
 
-    soup = BeautifulSoup(output.text, 'html.parser')
+    soup = BeautifulSoup(output.text, "html.parser")
     debug("Parsed initial Filecrypt HTML.")
 
     password_field = None
     try:
         debug("Attempting password field auto-detection.")
-        input_elem = soup.find('input', attrs={'type': 'password'})
+        input_elem = soup.find("input", attrs={"type": "password"})
         if not input_elem:
-            input_elem = soup.find('input', placeholder=lambda v: v and 'password' in v.lower())
+            input_elem = soup.find(
+                "input", placeholder=lambda v: v and "password" in v.lower()
+            )
         if not input_elem:
-            input_elem = soup.find('input',
-                                   attrs={'name': lambda v: v and ('pass' in v.lower() or 'password' in v.lower())})
-        if input_elem and input_elem.has_attr('name'):
-            password_field = input_elem['name']
+            input_elem = soup.find(
+                "input",
+                attrs={
+                    "name": lambda v: v
+                    and ("pass" in v.lower() or "password" in v.lower())
+                },
+            )
+        if input_elem and input_elem.has_attr("name"):
+            password_field = input_elem["name"]
             info("Password field name identified: " + password_field)
             debug(f"Password field detected: {password_field}")
     except Exception as e:
@@ -192,11 +212,15 @@ def get_filecrypt_links(shared_state, token, title, url, password=None, mirror=N
     if password and password_field:
         info("Using Password: " + password)
         debug("Submitting password via POST.")
-        post_headers = {'User-Agent': shared_state.values["user_agent"],
-                        'Content-Type': 'application/x-www-form-urlencoded'}
+        post_headers = {
+            "User-Agent": shared_state.values["user_agent"],
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
         data = {password_field: password}
         try:
-            output = session.post(output.url, data=data, headers=post_headers, timeout=30)
+            output = session.post(
+                output.url, data=data, headers=post_headers, timeout=30
+            )
             debug("Password POST request successful.")
         except requests.RequestException as e:
             info(f"POSTing password failed: {e}")
@@ -204,15 +228,19 @@ def get_filecrypt_links(shared_state, token, title, url, password=None, mirror=N
             return False
 
         if output.status_code == 403 or is_cloudflare_challenge(output.text):
-            info("Encountered Cloudflare after password POST. Re-running FlareSolverr...")
+            info(
+                "Encountered Cloudflare after password POST. Re-running FlareSolverr..."
+            )
             debug("Cloudflare reappeared after password submit, retrying bypass.")
-            session, headers, output = ensure_session_cf_bypassed(info, shared_state, session, output.url, headers)
+            session, headers, output = ensure_session_cf_bypassed(
+                info, shared_state, session, output.url, headers
+            )
             if not session or not output:
                 debug("Cloudflare bypass failed after password POST.")
                 return False
 
     url = output.url
-    soup = BeautifulSoup(output.text, 'html.parser')
+    soup = BeautifulSoup(output.text, "html.parser")
     debug("Re-parsed HTML after password submit or initial load.")
 
     if bool(soup.find_all("input", {"id": "p4assw0rt"})):
@@ -232,25 +260,38 @@ def get_filecrypt_links(shared_state, token, title, url, password=None, mirror=N
             debug(f"Submitting fake circle captcha click attempt {i + 1}.")
             random_x = str(random.randint(100, 200))
             random_y = str(random.randint(100, 200))
-            output = session.post(url, data="buttonx.x=" + random_x + "&buttonx.y=" + random_y,
-                                  headers={'User-Agent': shared_state.values["user_agent"],
-                                           'Content-Type': 'application/x-www-form-urlencoded'})
+            output = session.post(
+                url,
+                data="buttonx.x=" + random_x + "&buttonx.y=" + random_y,
+                headers={
+                    "User-Agent": shared_state.values["user_agent"],
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            )
             url = output.url
-            soup = BeautifulSoup(output.text, 'html.parser')
+            soup = BeautifulSoup(output.text, "html.parser")
             circle_captcha = bool(soup.find_all("div", {"class": "circle_captcha"}))
             i += 1
             debug(f"Circle captcha still present: {circle_captcha}")
 
         debug("Submitting final CAPTCHA token.")
-        output = session.post(url, data="cap_token=" + token, headers={'User-Agent': shared_state.values["user_agent"],
-                                                                       'Content-Type': 'application/x-www-form-urlencoded'})
+        output = session.post(
+            url,
+            data="cap_token=" + token,
+            headers={
+                "User-Agent": shared_state.values["user_agent"],
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+        )
     url = output.url
 
     if "/404.html" in url:
-        info("Filecrypt returned 404 - current IP is likely banned or the link is offline.")
+        info(
+            "Filecrypt returned 404 - current IP is likely banned or the link is offline."
+        )
         debug("Detected Filecrypt 404 page.")
 
-    soup = BeautifulSoup(output.text, 'html.parser')
+    soup = BeautifulSoup(output.text, "html.parser")
     debug("Parsed post-captcha response HTML.")
 
     solved = bool(soup.find_all("div", {"class": "container"}))
@@ -263,8 +304,10 @@ def get_filecrypt_links(shared_state, token, title, url, password=None, mirror=N
 
         season_number = ""
         episode_number = ""
-        episode_in_title = re.findall(r'.*\.s(\d{1,3})e(\d{1,3})\..*', title, re.IGNORECASE)
-        season_in_title = re.findall(r'.*\.s(\d{1,3})\..*', title, re.IGNORECASE)
+        episode_in_title = re.findall(
+            r".*\.s(\d{1,3})e(\d{1,3})\..*", title, re.IGNORECASE
+        )
+        season_in_title = re.findall(r".*\.s(\d{1,3})\..*", title, re.IGNORECASE)
         debug("Attempting episode/season number parsing from title.")
 
         if episode_in_title:
@@ -289,7 +332,6 @@ def get_filecrypt_links(shared_state, token, title, url, password=None, mirror=N
         debug(f"TV show selector found: {bool(tv_show_selector)}")
 
         if tv_show_selector:
-
             season = "season="
             episode = "episode="
 
@@ -312,7 +354,9 @@ def get_filecrypt_links(shared_state, token, title, url, password=None, mirror=N
                 pass
 
         if episode_number and not episode:
-            info(f"Missing select for episode number {episode_number}! Expect undesired links in the output.")
+            info(
+                f"Missing select for episode number {episode_number}! Expect undesired links in the output."
+            )
             debug("Episode number present but no episode selector container found.")
 
         links = []
@@ -340,11 +384,13 @@ def get_filecrypt_links(shared_state, token, title, url, password=None, mirror=N
                 debug(f"Loading mirror: {mirror}")
                 output = session.get(mirror, headers=headers)
                 url = output.url
-                soup = BeautifulSoup(output.text, 'html.parser')
+                soup = BeautifulSoup(output.text, "html.parser")
 
             try:
                 debug("Attempting Click'n'Load decrypt.")
-                crypted_payload = soup.find("form", {"class": "cnlform"}).get('onsubmit')
+                crypted_payload = soup.find("form", {"class": "cnlform"}).get(
+                    "onsubmit"
+                )
                 crypted_data = re.findall(r"'(.*?)'", crypted_payload)
                 if not title:
                     title = crypted_data[3]
@@ -352,16 +398,19 @@ def get_filecrypt_links(shared_state, token, title, url, password=None, mirror=N
                     crypted_data[0],
                     crypted_data[1],
                     crypted_data[2],
-                    title
+                    title,
                 ]
 
                 if episode and season:
                     debug("Applying episode/season filtering to CNL.")
                     domain = urlparse(url).netloc
-                    filtered_cnl_secret = soup.find("input", {"name": "hidden_cnl_id"}).attrs["value"]
+                    filtered_cnl_secret = soup.find(
+                        "input", {"name": "hidden_cnl_id"}
+                    ).attrs["value"]
                     filtered_cnl_link = f"https://{domain}/_CNL/{filtered_cnl_secret}.html?{season}&{episode}"
-                    filtered_cnl_result = session.post(filtered_cnl_link,
-                                                       headers=headers)
+                    filtered_cnl_result = session.post(
+                        filtered_cnl_link, headers=headers
+                    )
                     if filtered_cnl_result.status_code == 200:
                         filtered_cnl_data = json.loads(filtered_cnl_result.text)
                         if filtered_cnl_data["success"]:
@@ -370,12 +419,15 @@ def get_filecrypt_links(shared_state, token, title, url, password=None, mirror=N
                                 crypted_data[0],
                                 filtered_cnl_data["data"][0],
                                 filtered_cnl_data["data"][1],
-                                title
+                                title,
                             ]
                 links.extend(CNL(crypted_data).decrypt())
             except:
                 debug("CNL decrypt failed; trying DLC fallback.")
-                if "The owner of this folder has deactivated all hosts in this container in their settings." in soup.text:
+                if (
+                    "The owner of this folder has deactivated all hosts in this container in their settings."
+                    in soup.text
+                ):
                     info(f"Mirror deactivated by the owner: {mirror}")
                     debug("Mirror deactivated detected in page text.")
                     continue
@@ -383,19 +435,25 @@ def get_filecrypt_links(shared_state, token, title, url, password=None, mirror=N
                 info("Click'n'Load not found! Falling back to DLC...")
                 try:
                     debug("Attempting DLC fallback.")
-                    crypted_payload = soup.find("button", {"class": "dlcdownload"}).get("onclick")
+                    crypted_payload = soup.find("button", {"class": "dlcdownload"}).get(
+                        "onclick"
+                    )
                     crypted_data = re.findall(r"'(.*?)'", crypted_payload)
                     dlc_secret = crypted_data[0]
                     domain = urlparse(url).netloc
                     if episode and season:
-                        dlc_link = f"https://{domain}/DLC/{dlc_secret}.dlc?{episode}&{season}"
+                        dlc_link = (
+                            f"https://{domain}/DLC/{dlc_secret}.dlc?{episode}&{season}"
+                        )
                     else:
                         dlc_link = f"https://{domain}/DLC/{dlc_secret}.dlc"
                     dlc_file = session.get(dlc_link, headers=headers).content
                     links.extend(DLC(shared_state, dlc_file).decrypt())
                 except:
                     debug("DLC fallback failed, trying button fallback.")
-                    info("Click'n'Load and DLC not found. Please use the fallback userscript instead!")
+                    info(
+                        "Click'n'Load and DLC not found. Please use the fallback userscript instead!"
+                    )
                     return False
 
     if not links:
@@ -404,7 +462,4 @@ def get_filecrypt_links(shared_state, token, title, url, password=None, mirror=N
         return False
 
     debug(f"Returning success with {len(links)} extracted links.")
-    return {
-        "status": "success",
-        "links": links
-    }
+    return {"status": "success", "links": links}

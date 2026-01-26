@@ -11,18 +11,18 @@ from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.hostname_issues import mark_hostname_issue, clear_hostname_issue
+from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title
-from quasarr.providers.log import info, debug
+from quasarr.providers.log import debug, info
 
 hostname = "dj"
 
 
 def convert_to_rss_date(date_str):
     try:
-        return datetime.fromisoformat(
-            date_str.replace("Z", "+00:00")
-        ).strftime("%a, %d %b %Y %H:%M:%S +0000")
+        return datetime.fromisoformat(date_str.replace("Z", "+00:00")).strftime(
+            "%a, %d %b %Y %H:%M:%S +0000"
+        )
     except Exception:
         return ""
 
@@ -31,7 +31,9 @@ def dj_feed(shared_state, start_time, request_from, mirror=None):
     releases = []
 
     if "sonarr" not in request_from.lower():
-        debug(f'Skipping {request_from} search on "{hostname.upper()}" (unsupported media type)!')
+        debug(
+            f'Skipping {request_from} search on "{hostname.upper()}" (unsupported media type)!'
+        )
         return releases
 
     sj_host = shared_state.values["config"]("Hostnames").get(hostname)
@@ -46,7 +48,9 @@ def dj_feed(shared_state, start_time, request_from, mirror=None):
         data = json.loads(r.content)
     except Exception as e:
         info(f"{hostname.upper()}: feed load error: {e}")
-        mark_hostname_issue(hostname, "feed", str(e) if "e" in dir() else "Error occurred")
+        mark_hostname_issue(
+            hostname, "feed", str(e) if "e" in dir() else "Error occurred"
+        )
         return releases
 
     for release in data:
@@ -71,24 +75,30 @@ def dj_feed(shared_state, start_time, request_from, mirror=None):
             imdb_id = None
 
             payload = urlsafe_b64encode(
-                f"{title}|{series_url}|{mirror}|{mb}|{password}|{imdb_id}|{hostname}".encode("utf-8")
+                f"{title}|{series_url}|{mirror}|{mb}|{password}|{imdb_id}|{hostname}".encode(
+                    "utf-8"
+                )
             ).decode("utf-8")
 
-            link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
+            link = (
+                f"{shared_state.values['internal_address']}/download/?payload={payload}"
+            )
 
-            releases.append({
-                "details": {
-                    "title": title,
-                    "hostname": hostname,
-                    "imdb_id": imdb_id,
-                    "link": link,
-                    "mirror": mirror,
-                    "size": size,
-                    "date": published,
-                    "source": series_url
-                },
-                "type": "protected"
-            })
+            releases.append(
+                {
+                    "details": {
+                        "title": title,
+                        "hostname": hostname,
+                        "imdb_id": imdb_id,
+                        "link": link,
+                        "mirror": mirror,
+                        "size": size,
+                        "date": published,
+                        "source": series_url,
+                    },
+                    "type": "protected",
+                }
+            )
 
         except Exception as e:
             debug(f"{hostname.upper()}: feed parse error: {e}")
@@ -101,11 +111,21 @@ def dj_feed(shared_state, start_time, request_from, mirror=None):
     return releases
 
 
-def dj_search(shared_state, start_time, request_from, search_string, mirror=None, season=None, episode=None):
+def dj_search(
+    shared_state,
+    start_time,
+    request_from,
+    search_string,
+    mirror=None,
+    season=None,
+    episode=None,
+):
     releases = []
 
     if "sonarr" not in request_from.lower():
-        debug(f'Skipping {request_from} search on "{hostname.upper()}" (unsupported media type)!')
+        debug(
+            f'Skipping {request_from} search on "{hostname.upper()}" (unsupported media type)!'
+        )
         return releases
 
     sj_host = shared_state.values["config"]("Hostnames").get(hostname)
@@ -130,10 +150,12 @@ def dj_search(shared_state, start_time, request_from, search_string, mirror=None
         results = soup.find_all("a", href=re.compile(r"^/serie/"))
     except Exception as e:
         info(f"{hostname.upper()}: search load error: {e}")
-        mark_hostname_issue(hostname, "search", str(e) if "e" in dir() else "Error occurred")
+        mark_hostname_issue(
+            hostname, "search", str(e) if "e" in dir() else "Error occurred"
+        )
         return releases
 
-    one_hour_ago = (datetime.now() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+    one_hour_ago = (datetime.now() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
     sanitized_search_string = shared_state.sanitize_string(localized_title)
 
     for result in results:
@@ -143,8 +165,7 @@ def dj_search(shared_state, start_time, request_from, search_string, mirror=None
             sanitized_title = shared_state.sanitize_string(result_title)
 
             if not re.search(
-                    rf"\b{re.escape(sanitized_search_string)}\b",
-                    sanitized_title
+                rf"\b{re.escape(sanitized_search_string)}\b", sanitized_title
             ):
                 debug(
                     f"Search string '{localized_title}' doesn't match '{result_title}'"
@@ -177,11 +198,7 @@ def dj_search(shared_state, start_time, request_from, search_string, mirror=None
                         continue
 
                     if not shared_state.is_valid_release(
-                            title,
-                            request_from,
-                            search_string,
-                            season,
-                            episode
+                        title, request_from, search_string, season, episode
                     ):
                         continue
 
@@ -194,24 +211,28 @@ def dj_search(shared_state, start_time, request_from, search_string, mirror=None
                     size = 0
 
                     payload = urlsafe_b64encode(
-                        f"{title}|{series_url}|{mirror}|{mb}|{password}|{imdb_id}|{hostname}".encode("utf-8")
+                        f"{title}|{series_url}|{mirror}|{mb}|{password}|{imdb_id}|{hostname}".encode(
+                            "utf-8"
+                        )
                     ).decode("utf-8")
 
                     link = f"{shared_state.values['internal_address']}/download/?payload={payload}"
 
-                    releases.append({
-                        "details": {
-                            "title": title,
-                            "hostname": hostname,
-                            "imdb_id": imdb_id,
-                            "link": link,
-                            "mirror": mirror,
-                            "size": size,
-                            "date": published,
-                            "source": series_url
-                        },
-                        "type": "protected"
-                    })
+                    releases.append(
+                        {
+                            "details": {
+                                "title": title,
+                                "hostname": hostname,
+                                "imdb_id": imdb_id,
+                                "link": link,
+                                "mirror": mirror,
+                                "size": size,
+                                "date": published,
+                                "source": series_url,
+                            },
+                            "type": "protected",
+                        }
+                    )
 
         except Exception as e:
             debug(f"{hostname.upper()}: search parse error: {e}")

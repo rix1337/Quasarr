@@ -7,12 +7,15 @@ from quasarr.providers.version import get_version
 
 
 def render_centered_html(inner_content, footer_content=""):
-    head = '''
+    head = (
+        '''
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Quasarr</title>
-        <link rel="icon" href="''' + images.favicon + '''" type="image/png">
+        <link rel="icon" href="'''
+        + images.favicon
+        + """" type="image/png">
         <style>
             /* Theme variables */
             :root {
@@ -330,7 +333,8 @@ def render_centered_html(inner_content, footer_content=""):
                 justify-content: flex-end;
             }
         </style>
-    </head>'''
+    </head>"""
+    )
 
     # Build footer content
     version_text = f"Quasarr v.{get_version()}"
@@ -340,7 +344,7 @@ def render_centered_html(inner_content, footer_content=""):
         footer_html = version_text
 
     # Global modal script
-    modal_script = '''
+    modal_script = """
     <script>
         function showModal(title, content, buttonsHtml) {
             let overlay = document.getElementById('global-modal-overlay');
@@ -384,9 +388,9 @@ def render_centered_html(inner_content, footer_content=""):
             }
         }
     </script>
-    '''
+    """
 
-    body = f'''
+    body = f"""
     {head}
     <body>
         <div class="outer">
@@ -399,15 +403,15 @@ def render_centered_html(inner_content, footer_content=""):
         </footer>
         {modal_script}
     </body>
-    '''
-    return f'<html>{body}</html>'
+    """
+    return f"<html>{body}</html>"
 
 
 def render_button(text, button_type="primary", attributes=None):
     cls = "btn-primary" if button_type == "primary" else "btn-secondary"
-    attr_str = ''
+    attr_str = ""
     if attributes:
-        attr_str = ' '.join(f'{key}="{value}"' for key, value in attributes.items())
+        attr_str = " ".join(f'{key}="{value}"' for key, value in attributes.items())
     return f'<button class="{cls}" {attr_str}>{text}</button>'
 
 
@@ -422,8 +426,10 @@ def render_form(header, form="", script="", footer_content=""):
 
 
 def render_success(message, timeout=10, optional_text=""):
-    button_html = render_button(f"Wait time... {timeout}", "secondary", {"id": "nextButton", "disabled": "true"})
-    script = f'''
+    button_html = render_button(
+        f"Wait time... {timeout}", "secondary", {"id": "nextButton", "disabled": "true"}
+    )
+    script = f"""
         <script>
             let counter = {timeout};
             const btn = document.getElementById('nextButton');
@@ -439,7 +445,7 @@ def render_success(message, timeout=10, optional_text=""):
                 }}
             }}, 1000);
         </script>
-    '''
+    """
     content = f'''<h1><img src="{images.logo}" type="image/png" alt="Quasarr logo" class="logo"/>Quasarr</h1>
     <h2>{message}</h2>
     {optional_text}
@@ -450,7 +456,9 @@ def render_success(message, timeout=10, optional_text=""):
 
 
 def render_fail(message):
-    button_html = render_button("Back", "secondary", {"onclick": "window.location.href='/'"})
+    button_html = render_button(
+        "Back", "secondary", {"onclick": "window.location.href='/'"}
+    )
     return render_centered_html(f"""<h1><img src="{images.logo}" type="image/png" alt="Quasarr logo" class="logo"/>Quasarr</h1>
         <h2>{message}</h2>
         {button_html}
