@@ -1,256 +1,131 @@
-name: Hostname Redaction
+name: PrQualityCheck
 
 on:
-  issues:
-    types: [ opened, edited ]
   pull_request:
-    types: [ opened, edited ]
-  issue_comment:
-    types: [ created, edited ]
-  pull_request_review_comment:
-    types: [ created, edited ]
+    types: [ opened, synchronize, reopened ]
 
 jobs:
-  redact-hostnames:
+  auto-fix:
     runs-on: ubuntu-latest
     permissions:
-      issues: write
-      pull-requests: write
+      contents: write      # Needed to push fixes
+      pull-requests: write # Needed to comment
 
     steps:
-      - name: Redact hostnames
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HOSTNAMES_URL: ${{ secrets.HOSTNAMES_URL }}
-          EVENT_NAME: ${{ github.event_name }}
-          REPO: ${{ github.repository }}
-          SENDER: ${{ github.event.sender.login }}
-          # Issue fields
-          ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          # PR fields
-          PR_BODY: ${{ github.event.pull_request.body }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          # Comment fields
-          COMMENT_BODY: ${{ github.event.comment.body }}
-          COMMENT_ID: ${{ github.event.comment.id }}
+      - name: Checkout PR Branch
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Auto-Format Code
         run: |
-          python - <<'EOF'
-          import json
-          import os
+          # 1. Sort Imports (Isort via Ruff)
+          uv run ruff check --select I --fix .
+          # 2. Reformat Code (Black style via Ruff)
+          uv run ruff format .
+
+      - name: Auto-Bump Version (if needed)
+        run: |
+          uv run python - <<'EOF'
           import re
           import subprocess
-          import urllib.request
+          from pathlib import Path
 
-          # Load environment
-          HOSTNAMES_URL = os.environ.get("HOSTNAMES_URL", "")
-          EVENT_NAME = os.environ.get("EVENT_NAME", "")
-          REPO = os.environ.get("REPO", "")
-          SENDER = os.environ.get("SENDER", "")
+          VERSION_FILE = Path("quasarr/providers/version.py")
 
-          ISSUE_BODY = os.environ.get("ISSUE_BODY") or ""
-          ISSUE_TITLE = os.environ.get("ISSUE_TITLE") or ""
-          ISSUE_NUMBER = os.environ.get("ISSUE_NUMBER") or ""
+          def get_version_from_content(content):
+              m = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', content)
+              return m.group(1) if m else None
 
-          PR_BODY = os.environ.get("PR_BODY") or ""
-          PR_TITLE = os.environ.get("PR_TITLE") or ""
-          PR_NUMBER = os.environ.get("PR_NUMBER") or ""
+          def get_main_version():
+              try:
+                  subprocess.run(["git", "fetch", "origin", "main"], check=True, capture_output=True)
+                  base_ref = subprocess.check_output(["git", "merge-base", "HEAD", "origin/main"], text=True).strip()
+                  subprocess.run(["git", "checkout", base_ref, "--", str(VERSION_FILE)], check=True, capture_output=True)
+                  content = VERSION_FILE.read_text()
+                  # Restore file to HEAD immediately
+                  subprocess.run(["git", "checkout", "HEAD", "--", str(VERSION_FILE)], check=True, capture_output=True)
+                  return get_version_from_content(content)
+              except Exception as e:
+                  print(f"Error fetching main version: {e}")
+                  return "0.0.0"
 
-          COMMENT_BODY = os.environ.get("COMMENT_BODY") or ""
-          COMMENT_ID = os.environ.get("COMMENT_ID") or ""
+          def bump_patch(v_str):
+              parts = v_str.split('.')
+              while len(parts) < 3: parts.append('0')
+              try:
+                  parts[-1] = str(int(parts[-1]) + 1)
+              except ValueError:
+                  parts.append('1')
+              return ".".join(parts)
 
-          # Determine event type
-          is_pr_event = EVENT_NAME == "pull_request"
-          is_issue_event = EVENT_NAME == "issues"
-          is_issue_comment = EVENT_NAME == "issue_comment"
-          is_pr_review_comment = EVENT_NAME == "pull_request_review_comment"
-          is_comment = is_issue_comment or is_pr_review_comment
+          current_content = VERSION_FILE.read_text()
+          current_ver = get_version_from_content(current_content)
+          main_ver = get_main_version()
 
-          # Get the right number for commenting
-          if is_pr_event or is_pr_review_comment:
-              NUMBER = PR_NUMBER
+          print(f"Main: {main_ver} | Current: {current_ver}")
+
+          if current_ver == main_ver:
+              new_ver = bump_patch(current_ver)
+              print(f"Bumping version: {current_ver} -> {new_ver}")
+              new_content = current_content.replace(f'"{current_ver}"', f'"{new_ver}"')
+              VERSION_FILE.write_text(new_content)
           else:
-              NUMBER = ISSUE_NUMBER
-
-          # Prevent infinite loop when the action itself edits
-          if SENDER.endswith("[bot]"):
-              print(f"Edit by bot ({SENDER}), skipping")
-              exit(0)
-
-          if not HOSTNAMES_URL:
-              print("HOSTNAMES_URL secret not set, skipping")
-              exit(0)
-
-          if not NUMBER:
-              print("Could not determine issue/PR number, skipping")
-              exit(0)
-
-          # Fetch hostname list
-          try:
-              req = urllib.request.Request(HOSTNAMES_URL, headers={"User-Agent": "Mozilla/5.0"})
-              with urllib.request.urlopen(req, timeout=10) as resp:
-                  hostnames_data = resp.read().decode("utf-8")
-          except Exception as e:
-              print(f"Failed to fetch hostnames: {e}")
-              exit(1)
-
-          # Parse hostname list into domain_base -> alias mapping
-          domain_to_alias = {}
-          for line in hostnames_data.strip().splitlines():
-              if "=" not in line:
-                  continue
-              alias, hostname = line.split("=", 1)
-              alias = alias.strip()
-              hostname = hostname.strip()
-              if "." in hostname:
-                  domain_base = hostname.rsplit(".", 1)[0]
-                  domain_to_alias[domain_base.lower()] = alias
-
-          if not domain_to_alias:
-              print("No hostnames parsed, skipping")
-              exit(0)
-
-          # Build regex pattern to match domains with any TLD
-          escaped_domains = [re.escape(d) for d in domain_to_alias.keys()]
-          pattern = re.compile(
-              r'\b(' + '|'.join(escaped_domains) + r')\.[a-z]{2,}(?![a-z.])',
-              re.IGNORECASE
-          )
-
-          redacted_count = 0
-          redacted_aliases = set()
-
-          def replace_hostname(match):
-              global redacted_count
-              domain_base = match.group(1).lower()
-              alias = domain_to_alias.get(domain_base, "??")
-              redacted_count += 1
-              redacted_aliases.add(alias)
-              return f"({alias} redacted)"
-
-          def post_warning(count, target_type):
-              """Post a warning comment about redacted hostnames."""
-              if count == 1:
-                  msg = f"⚠️ **1 hostname was automatically redacted from this {target_type}.**"
-              else:
-                  msg = f"⚠️ **{count} hostnames were automatically redacted from this {target_type}.**"
-              msg += "\n\nPlease use two-letter aliases (e.g. `al`, `dd`, `nx`) instead of actual hostnames."
-
-              if is_pr_event or is_pr_review_comment:
-                  subprocess.run(
-                      ["gh", "pr", "comment", NUMBER, "--body", msg, "-R", REPO],
-                      check=True
-                  )
-              else:
-                  subprocess.run(
-                      ["gh", "issue", "comment", NUMBER, "--body", msg, "-R", REPO],
-                      check=True
-                  )
-
-          # Handle comments (issue comments, PR comments, PR review comments)
-          if is_comment:
-              if not COMMENT_BODY:
-                  print("Comment is empty, skipping")
-                  exit(0)
-
-              matches = pattern.findall(COMMENT_BODY)
-
-              if not matches:
-                  print("No hostnames found in comment")
-                  exit(0)
-
-              # Count unique aliases found
-              for domain_base in matches:
-                  alias = domain_to_alias.get(domain_base.lower(), "??")
-                  redacted_count += 1
-                  redacted_aliases.add(alias)
-
-              print(f"Found {redacted_count} hostname(s) in comment: {', '.join(sorted(redacted_aliases))}")
-
-              # Delete the comment (editing leaves visible history)
-              if is_pr_review_comment:
-                  api_endpoint = f"/repos/{REPO}/pulls/comments/{COMMENT_ID}"
-              else:
-                  api_endpoint = f"/repos/{REPO}/issues/comments/{COMMENT_ID}"
-
-              subprocess.run(
-                  ["gh", "api", "--method", "DELETE", api_endpoint],
-                  check=True
-              )
-
-              # Post explanation
-              if redacted_count == 1:
-                  msg = f"🗑️ **A comment was automatically deleted because it contained a hostname.**"
-              else:
-                  msg = f"🗑️ **A comment was automatically deleted because it contained {redacted_count} hostnames.**"
-              msg += "\n\nPlease repost using two-letter aliases (e.g. `al`, `dd`, `nx`) instead of actual hostnames."
-
-              if is_pr_review_comment:
-                  subprocess.run(
-                      ["gh", "pr", "comment", NUMBER, "--body", msg, "-R", REPO],
-                      check=True
-                  )
-              else:
-                  subprocess.run(
-                      ["gh", "issue", "comment", NUMBER, "--body", msg, "-R", REPO],
-                      check=True
-                  )
-
-          # Handle issues
-          elif is_issue_event:
-              if not ISSUE_TITLE and not ISSUE_BODY:
-                  print("Issue is empty, skipping")
-                  exit(0)
-
-              new_title = pattern.sub(replace_hostname, ISSUE_TITLE)
-              new_body = pattern.sub(replace_hostname, ISSUE_BODY)
-
-              if redacted_count == 0:
-                  print("No hostnames found in issue")
-                  exit(0)
-
-              print(f"Redacted {redacted_count} hostname(s) from issue: {', '.join(sorted(redacted_aliases))}")
-
-              with open("new_body.md", "w") as f:
-                  f.write(new_body)
-
-              cmd = ["gh", "issue", "edit", NUMBER, "--body-file", "new_body.md", "-R", REPO]
-              if new_title != ISSUE_TITLE:
-                  cmd.extend(["--title", new_title])
-
-              subprocess.run(cmd, check=True)
-              post_warning(redacted_count, "issue")
-
-          # Handle pull requests
-          elif is_pr_event:
-              if not PR_TITLE and not PR_BODY:
-                  print("PR is empty, skipping")
-                  exit(0)
-
-              new_title = pattern.sub(replace_hostname, PR_TITLE)
-              new_body = pattern.sub(replace_hostname, PR_BODY)
-
-              if redacted_count == 0:
-                  print("No hostnames found in PR")
-                  exit(0)
-
-              print(f"Redacted {redacted_count} hostname(s) from PR: {', '.join(sorted(redacted_aliases))}")
-
-              with open("new_body.md", "w") as f:
-                  f.write(new_body)
-
-              cmd = ["gh", "pr", "edit", NUMBER, "--body-file", "new_body.md", "-R", REPO]
-              if new_title != PR_TITLE:
-                  cmd.extend(["--title", new_title])
-
-              subprocess.run(cmd, check=True)
-              post_warning(redacted_count, "pull request")
-
-          else:
-              print(f"Unknown event type: {EVENT_NAME}")
-              exit(0)
-
-          print("Done")
+              print("Version already newer or changed. Skipping bump.")
           EOF
+
+      - name: Commit and Push Changes
+        id: git_push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [[ `git status --porcelain` ]]; then
+            echo "Changes detected. Pushing..."
+            git add .
+            git commit -m "chore: auto-format and bump version [skip ci]"
+            git push origin HEAD:${{ github.head_ref }}
+            echo "PUSHED=true" >> $GITHUB_ENV
+          else
+            echo "PUSHED=false" >> $GITHUB_ENV
+          fi
+
+      - name: Notify User
+        if: env.PUSHED == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body "
+          ### 🤖 Auto-Fix Applied
+          
+          I detected some unformatted code or an unchanged version number, so I fixed it for you.
+          
+          **Action Required:**
+          Please pull the changes to your local branch to stay in sync:
+          \`\`\`bash
+          git pull origin ${{ github.head_ref }}
+          \`\`\`
+          
+          ---
+          #### 💡 For future reference:
+          
+          **1. To check formatting before pushing:**
+          \`\`\`bash
+          uv run ruff check --select I --fix .  # Fix imports
+          uv run ruff format .                  # Fix layout
+          \`\`\`
+          
+          **2. To update the version manually:**
+          Edit the \`__version__\` string in:
+          \`quasarr/providers/version.py\`
+          "
