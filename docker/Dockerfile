@@ -13,12 +13,13 @@ COPY --from=uv /uv /usr/local/bin/uv
 # install local package
 COPY dist/*.whl /tmp/
 
-# Updated: Added cache mount for uv to speed up installation
+# Configure uv to install tools in globally accessible paths
+ENV UV_TOOL_DIR=/opt/uv-tools
+ENV UV_TOOL_BIN_DIR=/usr/local/bin
+
+# The binary will now automatically appear in /usr/local/bin
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv tool install /tmp/*.whl --force && rm /tmp/*.whl
-
-# Ensure the binary is in the PATH
-ENV PATH="/root/.local/bin:$PATH"
 
 # volumes and ports
 VOLUME /config
