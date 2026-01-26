@@ -1,0 +1,370 @@
+name: CI/CD & Beta Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [ dev ]
+
+env:
+  GHCR_ENDPOINT: "ghcr.io/rix1337/quasarr"
+  DESCRIPTION: "Quasarr connects JDownloader with Radarr, Sonarr and LazyLibrarian."
+
+jobs:
+  quality-check:
+    name: Check & Auto-Fix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # To push commits
+      pull-requests: write # To comment on PRs
+      actions: write       # To trigger the next run
+    outputs:
+      changes_pushed: ${{ steps.manager.outputs.changes_pushed }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+
+      - name: Fix, Bump, Report & Re-Trigger
+        id: manager
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER_ENV: ${{ github.event.pull_request.number }}
+          TARGET_REF: ${{ github.head_ref || github.ref_name }}
+          GITHUB_REPO: ${{ github.repository }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          uv run python - <<'EOF'
+          import os, re, subprocess, sys, json
+          from pathlib import Path
+
+          # --- CONFIG ---
+          VERSION_FILE = Path("quasarr/providers/version.py")
+          TARGET_REF = os.environ["TARGET_REF"]
+          REPO = os.environ["GITHUB_REPO"]
+          WORKFLOW_NAME = os.environ["WORKFLOW_NAME"]
+          fixed_format = False
+          fixed_version = False
+
+          # --- 1. FORMATTING ---
+          print("Running Ruff...")
+          subprocess.run(["uv", "run", "ruff", "check", "--select", "I", "--fix", "."], check=False)
+          subprocess.run(["uv", "run", "ruff", "format", "."], check=False)
+          
+          if subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout.strip():
+              fixed_format = True
+
+          # --- 2. VERSION BUMP ---
+          print("Checking Version...")
+          def get_ver(c): 
+              m = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', c)
+              return m.group(1) if m else None
+
+          def bump(v):
+              p = v.split('.')
+              while len(p)<3: p.append('0')
+              try: p[-1] = str(int(p[-1])+1)
+              except: p.append('1')
+              return ".".join(p)
+
+          try:
+              subprocess.run(["git", "fetch", "origin", "main"], check=True, capture_output=True)
+              try: base = subprocess.check_output(["git", "merge-base", "HEAD", "origin/main"], text=True).strip()
+              except: base = "origin/main"
+          
+              subprocess.run(["git", "checkout", base, "--", str(VERSION_FILE)], check=True, capture_output=True)
+              main_v = get_ver(VERSION_FILE.read_text())
+              subprocess.run(["git", "checkout", "HEAD", "--", str(VERSION_FILE)], check=True, capture_output=True)
+              curr_v = get_ver(VERSION_FILE.read_text())
+
+              print(f"Main: {main_v} | Current: {curr_v}")
+              if curr_v == main_v:
+                  new_v = bump(curr_v)
+                  print(f">> Bumping to {new_v}")
+                  VERSION_FILE.write_text(VERSION_FILE.read_text().replace(f'"{curr_v}"', f'"{new_v}"'))
+                  fixed_version = True
+          except Exception as e:
+              print(f"Version check warning (non-fatal): {e}")
+
+          # --- 3. PUSH & REPORT ---
+          if fixed_format or fixed_version:
+              try:
+                  print(">> Committing fixes...")
+                  subprocess.run(["git", "add", "."], check=True)
+                  msg = "chore: auto-fix " + ("fmt & ver" if fixed_format and fixed_version else "fmt" if fixed_format else "ver")
+                  subprocess.run(["git", "commit", "-m", msg], check=True)
+          
+                  # Pull --rebase to avoid race conditions (crashes) if remote changed
+                  subprocess.run(["git", "pull", "--rebase", "origin", TARGET_REF], check=False)
+                  subprocess.run(["git", "push", "origin", f"HEAD:{TARGET_REF}"], check=True)
+          
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as f: f.write("changes_pushed=true\n")
+              except subprocess.CalledProcessError as e:
+                  print(f"::error::Failed to push fixes. Please pull the latest changes and try again. ({e})")
+                  # Exit 1 so the job shows red, but cleanly.
+                  sys.exit(1)
+
+              # --- FIND PR ---
+              pr_num = os.environ.get("PR_NUMBER_ENV")
+              if not pr_num:
+                  try:
+                      pr_json = subprocess.check_output(["gh", "pr", "list", "--head", TARGET_REF, "--json", "number"], text=True)
+                      prs = json.loads(pr_json)
+                      if prs: pr_num = str(prs[0]['number'])
+                  except: pass
+
+              # --- POST "AUTO-FIX" COMMENT (Original Formatting) ---
+              if pr_num:
+                  fixes_list = ""
+                  if fixed_format: fixes_list += "- ✅ **Formatted Code** (Imports & Layout)\n"
+                  if fixed_version: fixes_list += "- ✅ **Bumped Version**\n"
+
+                  body = "### 🤖 Auto-Fix Applied\n"
+                  body += "I fixed the following issues so we can merge:\n"
+                  body += fixes_list + "\n"
+                  body += "**Note:** The build is now **GREEN** 🟢, but your local branch is out of sync.\n"
+                  body += f"Please run this locally:\n```bash\ngit pull origin {TARGET_REF}\n```\n"
+                  body += "\n---\n#### 💡 For future reference:\n\n"
+                  if fixed_format:
+                      body += "**To check formatting before pushing:**\n```bash\nuv run ruff check --select I --fix .\nuv run ruff format .\n```\n\n"
+                  if fixed_version:
+                      body += "**To update the version manually:**\nEdit the `__version__` string in:\n`quasarr/providers/version.py`\n"
+
+                  Path("comment.md").write_text(body, encoding="utf-8")
+                  subprocess.run(["gh", "pr", "comment", pr_num, "--body-file", "comment.md"], check=False)
+
+              # --- POST "RE-TRIGGER" COMMENT ---
+              print(f">> Triggering new workflow run for: {WORKFLOW_NAME}...")
+          
+              if pr_num:
+                  actions_url = f"https://github.com/{REPO}/actions?query=branch%3A{TARGET_REF}"
+                  retrigger_body = "🚀 **Beta Build Triggered!**\n\n"
+                  retrigger_body += "I have automatically started a new workflow run on the updated branch.\n"
+                  retrigger_body += f"\n[**👉 Click here to view the new run**]({actions_url})"
+          
+                  Path("retrigger.md").write_text(retrigger_body, encoding="utf-8")
+                  subprocess.run(["gh", "pr", "comment", pr_num, "--body-file", "retrigger.md"], check=False)
+
+              # --- FIRE THE TRIGGER ---
+              ret = subprocess.run(["gh", "workflow", "run", WORKFLOW_NAME, "--ref", TARGET_REF], check=False)
+          
+              if ret.returncode != 0:
+                  print("::warning::Could not auto-trigger next run. Please retry the job manually.")
+          
+              sys.exit(0)
+          
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f: f.write("changes_pushed=false\n")
+          print("Clean run.")
+          EOF
+
+  version:
+    needs: [ quality-check ]
+    if: needs.quality-check.outputs.changes_pushed != 'true' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - id: version
+        run: echo "version=$(uv run python quasarr/providers/version.py)" >> $GITHUB_OUTPUT
+
+  build-wheel:
+    needs: [ quality-check, version ]
+    if: needs.quality-check.outputs.changes_pushed != 'true' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    outputs:
+      attestation-id: ${{ steps.attest.outputs.attestation-id }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv build
+      - id: attest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*.whl"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: ./dist/*
+
+  build-exe:
+    needs: [ quality-check, version ]
+    if: needs.quality-check.outputs.changes_pushed != 'true' && github.ref == 'refs/heads/dev'
+    runs-on: windows-latest
+    env:
+      TMP: "D:\\a\\temp"
+      TEMP: "D:\\a\\temp"
+    steps:
+      - run: mkdir D:\a\temp -Force
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - shell: powershell
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+      - run: uv sync --group build
+      - run: |
+          uv run python -c "from PIL import Image; Image.open('Quasarr.png').save('Quasarr.ico')"
+          uv run python quasarr/providers/version.py --create-version-file
+          uv run pyinstaller --clean --onefile -y --version-file "file_version_info.txt" --icon "Quasarr.ico" "Quasarr.py" -n "quasarr-${{ needs.version.outputs.version }}-standalone-win64"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exe-amd64
+          path: ./dist/*.exe
+
+  upload-exe-beta:
+    needs: [ version, build-wheel, build-exe ]
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheel
+          path: ./wheel
+      - uses: actions/download-artifact@v4
+        with:
+          name: exe-amd64
+          path: ./exe-amd64
+      - id: changelog
+        uses: metcalfc/changelog-generator@v4.6.2
+        with:
+          myToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release Body
+        run: |
+          echo "### Docker:" > release_body.md
+          echo "\`docker pull ${{ env.GHCR_ENDPOINT }}:beta\`" >> release_body.md
+          echo "### Python:" >> release_body.md
+          echo "\`uv tool upgrade quasarr\`" >> release_body.md
+          echo "### Changelog:" >> release_body.md
+          echo "${{ steps.changelog.outputs.changelog }}" >> release_body.md
+          echo "[Attestation](https://github.com/${{ github.repository }}/attestations/${{ needs.build-wheel.outputs.attestation-id }})" >> release_body.md
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "./wheel/*.whl,./exe-amd64/*.exe"
+          allowUpdates: true
+          removeArtifacts: true
+          replacesArtifacts: true
+          tag: beta
+          name: Beta Build
+          bodyFile: "release_body.md"
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  build-docker-amd64:
+    needs: [ quality-check, version, build-wheel ]
+    if: needs.quality-check.outputs.changes_pushed != 'true' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheel
+          path: ./docker/dist
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./docker
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          annotations: org.opencontainers.image.description=${{ env.DESCRIPTION }}
+          tags: |
+            ${{ env.GHCR_ENDPOINT }}:beta-amd64
+            ${{ env.GHCR_ENDPOINT }}:${{ needs.version.outputs.version }}-beta-amd64
+          build-args: VS=${{ needs.version.outputs.version }}
+          cache-from: type=gha,scope=beta-amd64
+          cache-to: type=gha,mode=max,scope=beta-amd64
+
+  build-docker-arm64:
+    needs: [ quality-check, version, build-wheel ]
+    if: needs.quality-check.outputs.changes_pushed != 'true' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheel
+          path: ./docker/dist
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./docker
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          annotations: org.opencontainers.image.description=${{ env.DESCRIPTION }}
+          tags: |
+            ${{ env.GHCR_ENDPOINT }}:beta-arm64
+            ${{ env.GHCR_ENDPOINT }}:${{ needs.version.outputs.version }}-beta-arm64
+          build-args: VS=${{ needs.version.outputs.version }}
+          cache-from: type=gha,scope=beta-arm64
+          cache-to: type=gha,mode=max,scope=beta-arm64
+
+  merge-docker-manifest:
+    needs: [ version, build-docker-amd64, build-docker-arm64 ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          TAG_AMD64="${{ needs.version.outputs.version }}-beta-amd64"
+          TAG_ARM64="${{ needs.version.outputs.version }}-beta-arm64"
+          ANNOTATION="index:org.opencontainers.image.description=$DESCRIPTION"
+          
+          docker buildx imagetools create -t ${{ env.GHCR_ENDPOINT }}:beta \
+            --annotation "$ANNOTATION" \
+            ${{ env.GHCR_ENDPOINT }}:beta-amd64 \
+            ${{ env.GHCR_ENDPOINT }}:beta-arm64
+
+          docker buildx imagetools create -t ${{ env.GHCR_ENDPOINT }}:${{ needs.version.outputs.version }}-beta \
+            --annotation "$ANNOTATION" \
+            ${{ env.GHCR_ENDPOINT }}:${TAG_AMD64} \
+            ${{ env.GHCR_ENDPOINT }}:${TAG_ARM64}
