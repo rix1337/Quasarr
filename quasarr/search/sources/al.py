@@ -286,6 +286,14 @@ def al_search(
 ):
     releases = []
     host = shared_state.values["config"]("Hostnames").get(hostname)
+    year_filter = shared_state.values["config"]("AL").get("year_filter").lower() in [
+        "true",
+        "1",
+    ]
+    safe_search = shared_state.values["config"]("AL").get("safe_search").lower() in [
+        "true",
+        "1",
+    ]
 
     base_category = get_base_search_category_id(search_category)
 
@@ -314,14 +322,21 @@ def al_search(
 
     encoded_search_string = quote_plus(search_string)
 
+    debug(f"Searching for '{search_string}'")
+
     try:
         url = f"https://www.{host}/search?q={encoded_search_string}"
+        trace(f"Search using URL '{url}'")
+        trace(
+            f"{'Filtering' if year_filter else 'Would filter'} for year {get_year(imdb_id) if imdb_id else None}{'.' if not year_filter else ', but year filter is disabled.'}"
+        )
         r = fetch_via_requests_session(
             shared_state,
             method="GET",
             target_url=url,
             timeout=10,
-            year=get_year(imdb_id) if imdb_id else None,
+            year=get_year(imdb_id) if (imdb_id and year_filter) else None,
+            safe_search=safe_search,
         )
         r.raise_for_status()
     except Exception as e:
@@ -340,7 +355,7 @@ def al_search(
             last_redirect.url, redirect_location
         )  # in case of relative URL
         debug(
-            f"{search_string} redirected to {absolute_redirect_url} instead of search results page"
+            f"'{search_string}' redirected to {absolute_redirect_url} instead of search results page"
         )
 
         try:
@@ -378,6 +393,12 @@ def al_search(
                 if "/anime-series" in href:
                     type_label = "series"
                     break
+                if "/web" in href:
+                    type_label = "series"
+                    break
+                if not safe_search and "/hentai" in href:
+                    type_label = "series"
+                    break
                 if "/anime-movies" in href:
                     type_label = "movie"
                     break
@@ -386,6 +407,8 @@ def al_search(
                 continue
 
             results.append({"url": url, "title": name})
+
+    debug(f"Retrieved {len(results)} result(s)")
 
     for result in results:
         try:

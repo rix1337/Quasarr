@@ -369,6 +369,7 @@ def fetch_via_requests_session(
     post_data: dict = None,
     timeout: int = 30,
     year: int = None,
+    safe_search: bool = True,
 ):
     """
     - method: "GET" or "POST"
@@ -383,6 +384,9 @@ def fetch_via_requests_session(
 
     if year:
         sess.cookies["filter"] = f'{{"year":{{"from":{year},"to":{year}}}}}'
+
+    # True -> show 18+
+    sess.cookies["safe_search"] = f"{'1' if safe_search else '0'}"
 
     # Execute request
     if method.upper() == "GET":

@@ -33,7 +33,12 @@ class Config(object):
         "FlareSolverr": [
             ("url", "str", ""),
         ],
-        "AL": [("user", "secret", ""), ("password", "secret", "")],
+        "AL": [
+            ("user", "secret", ""),
+            ("password", "secret", ""),
+            ("year_filter", "str", "False"),
+            ("safe_search", "str", "False"),
+        ],
         "DD": [("user", "secret", ""), ("password", "secret", "")],
         "DL": [("user", "secret", ""), ("password", "secret", "")],
         "NX": [("user", "secret", ""), ("password", "secret", "")],
