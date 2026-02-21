@@ -69,8 +69,20 @@ def get_search_categories():
     # Ensure default categories always exist in DB (for whitelists)
     for cat_id, cat_info in SEARCH_CATEGORIES.items():
         cat_id = int(cat_id)
-        if not db.retrieve(str(cat_id)):
-            db.store(str(cat_id), json.dumps(cat_info))
+        try:
+            stored_cat = db.retrieve(str(cat_id))
+            cat_data = json.loads(stored_cat)
+
+            if (
+                cat_data["name"] != cat_info["name"]
+                or cat_data["emoji"] != cat_info["emoji"]
+            ):
+                cat_data["name"] = cat_info["name"]
+                cat_data["emoji"] = cat_info["emoji"]
+                db.update_store(str(cat_id), json.dumps(cat_data))
+                info(f"Updated default search category: {cat_id} ({cat_info['name']})")
+        except:
+            db.update_store(str(cat_id), json.dumps(cat_info))
             info(f"Restored default search category: {cat_id} ({cat_info['name']})")
 
     # Start with default categories
