@@ -1,7 +1,5 @@
 # Project by https://github.com/rix1337
 
-.claude/*.local.json
-
 # Python
 *.pyc
 *.bak
@@ -24,3 +22,4 @@
 *.db
 *.ini
 .env
+log.txt

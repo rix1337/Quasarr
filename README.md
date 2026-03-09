@@ -271,6 +271,11 @@ Most feature requests can be satisfied by:
       The simplest CAPTCHA bypass involves creating a Tampermonkey user script.
     - Please provide proof of functionality (screenshots/examples) when submitting your pull request.
 
+# Development
+
+Development setup, local run commands, tests, and linting instructions now live in [docs/Development.md](docs/Development.md).
+
+
 # SponsorsHelper
 
 <img src="https://imgur.com/iHBqLwT.png" width="64" height="64" />
