@@ -17,3 +17,6 @@ Root entrypoints:
 - `pre-commit.py`: repository maintenance and formatting workflow
 
 When adding code, keep it near the feature boundary that already exists. Hostname-specific logic belongs with the existing source modules and helpers rather than in shared glue code.
+
+When adding a new source integration, use the same two-letter module key under both `quasarr/search/sources/` and `quasarr/downloads/sources/` whenever release links need source-specific extraction.
+
