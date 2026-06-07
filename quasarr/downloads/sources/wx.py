@@ -62,10 +62,15 @@ class Source(AbstractDownloadSource):
 
     def get_download_links(self, shared_state, url, mirrors, title, password):
         """
-        WX source handler - Grabs download links from API based on title.
-        Finds the best mirror (M1, M2, M3...) by checking online status.
-        Returns all online links from the first complete mirror, or the best partial mirror.
-        Prefers hide.cx links over other crypters (filecrypt, etc.) when online counts are equal.
+        WX source handler. Picks the mirror/link set with the best
+        source-provided online signal and hands it to JDownloader; it never
+        probes a direct hoster link itself (liveness is JDownloader's job).
+
+        Priority (see docs/Mirror-Selection.md):
+          1. green hide.cx container   (resolved downstream by hide.py, no CAPTCHA)
+          2. green filecrypt container (handed to JDownloader, may need CAPTCHA)
+          3. green direct links        (no badge of their own; best effort)
+          4. first offline-flagged mirror as a last resort
         """
         host = shared_state.values["config"]("Hostnames").get(Source.initials)
 
@@ -125,126 +130,134 @@ class Source(AbstractDownloadSource):
 
             debug(f"Found {len(matching_releases)} mirror(s) for: {title}")
 
-            # PRIORITY: WX exposes ready-to-use direct download links in the
-            # 'links' field for every release. They need no crypter and no
-            # CAPTCHA, so prefer them over the filecrypt/hide containers in
-            # 'crypted_links' (which can break on CAPTCHA, IP bans or FSG).
-            best_direct = None  # (online_hoster_count, links)
-            for idx, release in enumerate(matching_releases):
-                count, direct_links = _collect_online_direct_links(
-                    release, mirrors, shared_state
-                )
-                if direct_links:
-                    debug(f"M{idx + 1} direct links: {count} online hoster(s)")
-                    if best_direct is None or count > best_direct[0]:
-                        best_direct = (count, direct_links)
+            # SELECTION POLICY (see docs/Mirror-Selection.md):
+            # Quasarr picks the link set with the best *source-provided* online
+            # signal and hands it to JDownloader. It never probes a direct
+            # hoster link itself - liveness is JDownloader's job. WX's status
+            # badge (options.check) certifies the crypted *container*, not the
+            # separate direct 'links' upload, so containers rank above direct
+            # links. A dead pick is expected to fail in JDownloader, which
+            # Quasarr reports so Radarr/Sonarr can blacklist and try the next
+            # release.
+            #
+            # Each mirror (M1, M2, ...) is a distinct upload of the release, so
+            # link sets are NEVER merged across mirrors - that would enqueue
+            # duplicate copies of the same release in JDownloader. We evaluate
+            # mirror by mirror and return a single mirror's set. Within that one
+            # mirror, every online hoster is kept on purpose (redundant hoster
+            # choices for the same files; the automation submits them and the
+            # manual flow lets the user pick one).
 
-            if best_direct and best_direct[1]:
-                debug(
-                    f"Using {len(best_direct[1])} direct download link(s) "
-                    f"from best mirror ({best_direct[0]} online hoster(s))"
-                )
-                return {"links": best_direct[1]}
+            # Best single mirror per tier: (online_count, links).
+            best_hide = None
+            best_fc = None
+            best_direct = None
+            # Last-resort offline pick, hide > filecrypt > direct preference.
+            red_hide = red_fc = red_direct = None
 
-            # FALLBACK: no usable direct links → resolve crypted containers.
-            # Evaluate each mirror and find the best one
-            # Track: (online_count, is_hide, online_links)
-            best_mirror = None  # (online_count, is_hide, online_links)
+            for release in matching_releases:
+                crypted_links = release.get("crypted_links", {}) or {}
+                check_urls = release.get("options", {}).get("check", {}) or {}
 
-            for idx, release in enumerate(matching_releases):
-                crypted_links = release.get("crypted_links", {})
-                check_urls = release.get("options", {}).get("check", {})
-
-                if not crypted_links:
-                    continue
-
-                # Separate hide.cx links from other crypters
-                hide_links = []
-                other_links = []
-
+                hide_candidates = []  # [container_url, hoster, status_url]
+                fc_candidates = []
                 for hoster, container_url in crypted_links.items():
-                    # Filter by requested mirrors if specified
                     if mirrors and not any(
                         m.lower() in hoster.lower() for m in mirrors
                     ):
                         continue
-
                     state_url = check_urls.get(hoster)
                     if re.search(r"hide\.", container_url, re.IGNORECASE):
-                        hide_links.append([container_url, hoster, state_url])
+                        hide_candidates.append([container_url, hoster, state_url])
                     elif re.search(r"filecrypt\.", container_url, re.IGNORECASE):
-                        other_links.append([container_url, hoster, state_url])
-                    # Skip other crypters we don't support
+                        fc_candidates.append([container_url, hoster, state_url])
+                    # Other crypters are unsupported and ignored.
 
-                # Check hide.cx links first (preferred)
-                hide_online = 0
-                online_hide = []
-                if hide_links:
-                    online_hide = check_links_online_status(hide_links, shared_state)
-                    hide_total = len(hide_links)
-                    hide_online = len(online_hide)
-
-                    debug(f"M{idx + 1} hide.cx: {hide_online}/{hide_total} online")
-
-                    # If all hide.cx links are online, use this mirror immediately
-                    if hide_online == hide_total and hide_online > 0:
-                        debug(
-                            f"M{idx + 1} is complete (all {hide_online} hide.cx links online), using this mirror"
-                        )
-                        return {"links": online_hide}
-
-                # Check other crypters (filecrypt, etc.) - no early return, always check all mirrors for hide.cx first
-                other_online = 0
-                online_other = []
-                if other_links:
-                    online_other = check_links_online_status(other_links, shared_state)
-                    other_total = len(other_links)
-                    other_online = len(online_other)
-
-                    debug(
-                        f"M{idx + 1} other crypters: {other_online}/{other_total} online"
-                    )
-
-                # Determine best option for this mirror (prefer hide.cx on ties)
-                mirror_links = None
-                mirror_count = 0
-                mirror_is_hide = False
-
-                if hide_online > 0 and hide_online >= other_online:
-                    # hide.cx wins (more links or tie)
-                    mirror_links = online_hide
-                    mirror_count = hide_online
-                    mirror_is_hide = True
-                elif other_online > hide_online:
-                    # other crypter has more online links
-                    mirror_links = online_other
-                    mirror_count = other_online
-                    mirror_is_hide = False
-
-                # Update best_mirror if this mirror is better
-                # Priority: 1) more online links, 2) hide.cx preference on ties
-                if mirror_links:
-                    if best_mirror is None:
-                        best_mirror = (mirror_count, mirror_is_hide, mirror_links)
-                    elif mirror_count > best_mirror[0]:
-                        best_mirror = (mirror_count, mirror_is_hide, mirror_links)
-                    elif (
-                        mirror_count == best_mirror[0]
-                        and mirror_is_hide
-                        and not best_mirror[1]
-                    ):
-                        # Same count but this is hide.cx and current best is not
-                        best_mirror = (mirror_count, mirror_is_hide, mirror_links)
-
-            # No complete mirror found, return best partial mirror
-            if best_mirror and best_mirror[2]:
-                crypter_type = "hide.cx" if best_mirror[1] else "other crypter"
-                debug(
-                    f"No complete mirror, using best partial with {best_mirror[0]} online {crypter_type} link(s)"
+                # Tier 1 candidate: this mirror's online hide.cx containers.
+                online_hide = (
+                    check_links_online_status(hide_candidates, shared_state)
+                    if hide_candidates
+                    else []
                 )
-                return {"links": best_mirror[2]}
+                if online_hide and (
+                    best_hide is None or len(online_hide) > best_hide[0]
+                ):
+                    best_hide = (len(online_hide), online_hide)
 
-            info(f"No online links found for: {title}")
+                # Tier 2 candidate: this mirror's online filecrypt containers.
+                online_fc = (
+                    check_links_online_status(fc_candidates, shared_state)
+                    if fc_candidates
+                    else []
+                )
+                if online_fc and (best_fc is None or len(online_fc) > best_fc[0]):
+                    best_fc = (len(online_fc), online_fc)
+
+                # Tier 3 candidate: this mirror's online direct links.
+                count, direct_links = _collect_online_direct_links(
+                    release, mirrors, shared_state
+                )
+                if direct_links and (best_direct is None or count > best_direct[0]):
+                    best_direct = (count, direct_links)
+
+                # Tier 4 fallbacks: first offline-flagged option of each kind.
+                if red_hide is None and hide_candidates:
+                    red_hide = [hide_candidates[0][0], hide_candidates[0][1]]
+                if red_fc is None and fc_candidates:
+                    red_fc = [fc_candidates[0][0], fc_candidates[0][1]]
+                if red_direct is None:
+                    links_field = release.get("links", {}) or {}
+                    for hoster, urls in links_field.items():
+                        if mirrors and not any(
+                            m.lower() in hoster.lower() for m in mirrors
+                        ):
+                            continue
+                        if not isinstance(urls, list):
+                            urls = [urls]
+                        for u in urls:
+                            if isinstance(u, str) and u.strip():
+                                red_direct = [u.strip(), hoster]
+                                break
+                        if red_direct:
+                            break
+
+            # Tier 1: green hide.cx containers from the best single mirror.
+            if best_hide:
+                debug(
+                    f"Tier 1: {best_hide[0]} online hide.cx container(s) "
+                    f"- handing to JDownloader"
+                )
+                return {"links": best_hide[1]}
+
+            # Tier 2: green filecrypt containers from the best single mirror.
+            if best_fc:
+                debug(
+                    f"Tier 2: {best_fc[0]} online filecrypt container(s) "
+                    f"- handing to JDownloader"
+                )
+                return {"links": best_fc[1]}
+
+            # Tier 3: green direct links from the best single mirror.
+            if best_direct and best_direct[1]:
+                debug(
+                    f"Tier 3: {len(best_direct[1])} direct link(s) from best "
+                    f"mirror ({best_direct[0]} online hoster(s)) - handing to JDownloader"
+                )
+                return {"links": best_direct[1]}
+
+            # Tier 4: no online signal anywhere. Hand the first offline-flagged
+            # mirror to JDownloader as a last resort (hide > filecrypt > direct)
+            # so the release is still attempted and, if dead, fails cleanly into
+            # the Radarr/Sonarr blacklist-and-retry path.
+            red_first = red_hide or red_fc or red_direct
+            if red_first:
+                debug(
+                    "Tier 4: no online signal; handing first offline-flagged "
+                    "mirror to JDownloader as last resort"
+                )
+                return {"links": [[red_first[0], red_first[1]]]}
+
+            info(f"No links found for: {title}")
             return {"links": []}
 
         except Exception as e:

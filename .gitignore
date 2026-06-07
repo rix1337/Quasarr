@@ -1,6 +1,6 @@
 # Project by https://github.com/rix1337
 
-.claude/*.local.json
+.claude/
 
 # Python
 *.pyc

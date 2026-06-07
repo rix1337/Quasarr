@@ -28,6 +28,10 @@ Read this when preparing commits or pull requests. It documents the preferred co
 
 Read this for rules around `.env` handling, credentials, tokens, runtime configuration, and the strict rule that source hostnames must never be committed to tracked files.
 
+### [Mirror Selection](Mirror-Selection.md)
+
+Read this before changing how a download source picks between multiple mirrors or link sets. It defines the selection priority (crypter online signal, then newest mirror, then first/arbitrary), the hard rule that Quasarr never probes direct-link liveness (that is JDownloader's job), and why the policy is deliberately not changed.
+
 ### [Sources](sources/README.md)
 
 Read this when working on a specific source integration. The `sources/` folder contains per-source documentation covering API behavior, supported categories, hostname setup, and source-specific details.
