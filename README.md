@@ -180,6 +180,8 @@ docker run -d \
   ghcr.io/rix1337/quasarr:latest
   ```
 
+> 🪟 **Windows users:** the single quotes above are for Linux/macOS shells. In Windows `cmd` and PowerShell the quotes are **not** stripped, so they end up as part of the variable name (`'INTERNAL_ADDRESS'` instead of `INTERNAL_ADDRESS`) and Quasarr stops with `You must set the INTERNAL_ADDRESS variable...`. Drop the single quotes and put everything on one line, e.g. `-e INTERNAL_ADDRESS=http://192.168.0.1:8080`.
+
 | Parameter          | Description                                                                                                |
 |--------------------|------------------------------------------------------------------------------------------------------------|
 | `INTERNAL_ADDRESS` | **Required.** Internal URL so Radarr/Sonarr/Lidarr/Magazarr can reach Quasarr. **Must include port.** |
