@@ -73,10 +73,17 @@ class Source(AbstractSearchSource):
                     i = 0
                     for title in titles:
                         link = title["href"]
+                        entry_context = title.find_parent("td") or article
                         title = sanitize_title(title.text)
 
                         try:
-                            imdb_link = article.find("a", href=re.compile(r"imdb\.com"))
+                            imdb_link = entry_context.find(
+                                "a", href=re.compile(r"imdb\.com")
+                            )
+                            if imdb_link is None and entry_context is not article:
+                                imdb_link = article.find(
+                                    "a", href=re.compile(r"imdb\.com")
+                                )
                             imdb_id = re.search(r"tt\d+", str(imdb_link)).group()
                         except:
                             imdb_id = None
@@ -216,6 +223,7 @@ class Source(AbstractSearchSource):
                         i = 0
                         for title in titles:
                             link = title["href"]
+                            entry_context = title.find_parent("td") or article
                             title = sanitize_title(title.text)
 
                             if not is_valid_release(
@@ -224,9 +232,13 @@ class Source(AbstractSearchSource):
                                 continue
 
                             try:
-                                imdb_link = article.find(
+                                imdb_link = entry_context.find(
                                     "a", href=re.compile(r"imdb\.com")
                                 )
+                                if imdb_link is None and entry_context is not article:
+                                    imdb_link = article.find(
+                                        "a", href=re.compile(r"imdb\.com")
+                                    )
                                 release_imdb_id = re.search(
                                     r"tt\d+", str(imdb_link)
                                 ).group()
