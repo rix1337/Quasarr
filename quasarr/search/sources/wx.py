@@ -38,6 +38,7 @@ warnings.filterwarnings(
 
 class Source(AbstractSearchSource):
     initials = "wx"
+    language = "de"
     supports_imdb = True
     supports_phrase = False
     supported_categories = [SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS, SEARCH_CAT_SHOWS_ANIME]

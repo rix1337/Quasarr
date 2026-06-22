@@ -43,6 +43,7 @@ _LEADING_TAG_REGEX = re.compile(r"^(?:\[[^\]]+\]\s*)+")
 
 class Source(AbstractSearchSource):
     initials = "rm"
+    language = "en"
     supports_imdb = True
     supports_phrase = True
     supported_categories = [SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS]

@@ -34,6 +34,7 @@ from quasarr.search.sources.helpers.search_source import AbstractSearchSource
 
 class Source(AbstractSearchSource):
     initials = "sf"
+    language = "de"
     supports_imdb = True
     supports_phrase = False
     supported_categories = [SEARCH_CAT_SHOWS, SEARCH_CAT_SHOWS_ANIME]

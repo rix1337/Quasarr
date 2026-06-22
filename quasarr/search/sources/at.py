@@ -66,6 +66,7 @@ _SIZE_REGEX = re.compile(r"(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB)", re.I)
 
 class Source(AbstractSearchSource):
     initials = "at"
+    language = "en"
     supports_imdb = True
     supports_phrase = True
     supports_absolute_numbering = True

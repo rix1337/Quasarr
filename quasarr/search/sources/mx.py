@@ -48,6 +48,7 @@ FEED_LIBRARY_LIMIT = 50
 
 class Source(AbstractSearchSource):
     initials = "mx"
+    language = "fr"
     supports_imdb = True
     supports_phrase = False
     supported_categories = [SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS]

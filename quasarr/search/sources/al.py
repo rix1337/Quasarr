@@ -40,6 +40,9 @@ from quasarr.search.sources.helpers.search_source import AbstractSearchSource
 
 class Source(AbstractSearchSource):
     initials = "al"
+    language = "de"
+    requires_account = True
+    requires_flaresolverr = True
     supports_imdb = True
     supports_phrase = False
     supports_absolute_numbering = True

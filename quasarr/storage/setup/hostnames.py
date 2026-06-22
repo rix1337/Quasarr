@@ -2,6 +2,7 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+import json
 from urllib.parse import urlparse
 
 import requests
@@ -12,7 +13,17 @@ import quasarr.providers.sessions.dd
 import quasarr.providers.sessions.dl
 import quasarr.providers.sessions.nx
 import quasarr.providers.web_server
+from quasarr.constants import (
+    SEARCH_CAT_BOOKS,
+    SEARCH_CAT_MOVIES,
+    SEARCH_CAT_MUSIC,
+    SEARCH_CAT_SHOWS,
+    SEARCH_CAT_SHOWS_ANIME,
+    SEARCH_CAT_SHOWS_DOCUMENTARY,
+    SEARCH_CATEGORY_DEFINITIONS,
+)
 from quasarr.providers.hostname_issues import get_all_hostname_issues
+from quasarr.providers.html_images import FLAG_SVGS, LANGUAGE_FLAG_EMOJI
 from quasarr.providers.html_templates import (
     render_button,
     render_fail,
@@ -27,6 +38,7 @@ from quasarr.search.sources.helpers import (
     get_login_required_hostnames,
     get_radarr_required_hostnames,
     get_sonarr_required_hostnames,
+    get_source_metadata,
 )
 from quasarr.storage.config import Config
 from quasarr.storage.setup.common import (
@@ -36,6 +48,73 @@ from quasarr.storage.setup.common import (
 )
 from quasarr.storage.setup.flaresolverr import save_flaresolverr_url
 from quasarr.storage.sqlite_database import DataBase
+
+_CATEGORY_CHIP_ORDER = (
+    (SEARCH_CAT_MOVIES, "MOVIES", "Movies"),
+    (SEARCH_CAT_SHOWS, "SHOWS", "TV"),
+    (SEARCH_CAT_SHOWS_ANIME, "SHOWS_ANIME", "Anime"),
+    (SEARCH_CAT_SHOWS_DOCUMENTARY, "SHOWS_DOCUMENTARY", "Docs"),
+    (SEARCH_CAT_MUSIC, "MUSIC", "Music"),
+    (SEARCH_CAT_BOOKS, "BOOKS", "Books"),
+)
+
+_LANGUAGE_LABELS = {
+    "en": "English",
+    "de": "German",
+    "fr": "French",
+}
+
+
+def _capabilities_html(meta):
+    """Render the per-source capability chips (categories + flags) row."""
+    if not meta:
+        return ""
+
+    categories = set(meta.get("categories", []))
+    chips = []
+
+    language = meta.get("language")
+    if language in LANGUAGE_FLAG_EMOJI:
+        label = _LANGUAGE_LABELS[language]
+        chips.append(
+            f'<span class="cap-chip cap-flag" title="{label}">'
+            f"{_language_flag_html(language)} {label}</span>"
+        )
+
+    if meta.get("invite_only"):
+        chips.append('<span class="cap-chip cap-danger">🔒 Invite Only</span>')
+    if meta.get("requires_login"):
+        chips.append('<span class="cap-chip cap-warn">🔑 Login Required</span>')
+    elif meta.get("requires_account"):
+        chips.append('<span class="cap-chip cap-warn">👤 Account Required</span>')
+    if meta.get("requires_flaresolverr"):
+        chips.append('<span class="cap-chip cap-warn">🛡️ FlareSolverr Required</span>')
+
+    for cat_id, definition_key, label in _CATEGORY_CHIP_ORDER:
+        if cat_id in categories:
+            emoji = SEARCH_CATEGORY_DEFINITIONS[definition_key]["emoji"]
+            chips.append(
+                f'<span class="cap-chip cap-cat" title="{label}">{emoji} {label}</span>'
+            )
+
+    if meta.get("feed_requires_radarr"):
+        chips.append('<span class="cap-chip">📡 Radarr Required</span>')
+    if meta.get("feed_requires_sonarr"):
+        chips.append('<span class="cap-chip">📡 Sonarr Required</span>')
+
+    if not chips:
+        return ""
+    return f'<div class="hostname-caps">{"".join(chips)}</div>'
+
+
+def _language_flag_html(language):
+    """Render the language flag emoji span (swapped to SVG on Windows via JS)."""
+    if not language or language not in LANGUAGE_FLAG_EMOJI:
+        return ""
+    return (
+        f'<span class="lang-flag" data-flag data-lang="{language}">'
+        f"{LANGUAGE_FLAG_EMOJI[language]}</span>"
+    )
 
 
 def _escape_js_for_html_attr(s):
@@ -54,12 +133,13 @@ def _escape_js_for_html_attr(s):
 
 def hostname_form_html(shared_state, message, show_skip_management=False):
     hostname_fields = """
-    <div class="hostname-row">
-        <button type="button" class="{btn_class}" onclick="showStatusDetail(\'{id}\', \'{label}\', \'{status}\', \'{error_details_for_modal}\', \'{timestamp}\', \'{operation}\', \'{url}\', \'{user}\', \'{password}\', {supports_login})" title="{status_title}">
+    <div class="hostname-entry">
+        <button type="button" class="{btn_class}" onclick="showStatusDetail(\'{id}\', \'{label}\', \'{status}\', \'{error_details_for_modal}\', \'{timestamp}\', \'{operation}\', \'{url}\', \'{user}\', \'{password}\', {supports_login}, {requires_flaresolverr})" title="{status_title}">
             <span class="status-indicator" id="status-{id}" data-status="{status}">{status_emoji}</span>
             {label}
         </button>
         <input type="text" id="{id}" name="{id}" placeholder="example.com" autocorrect="off" autocomplete="off" value="{value}">
+        {caps_html}
     </div>
     """
 
@@ -73,6 +153,7 @@ def hostname_form_html(shared_state, message, show_skip_management=False):
     hostnames = Config("Hostnames")
     skip_login_db = DataBase("skip_login")
     hostname_issues = get_all_hostname_issues()
+    source_metadata = get_source_metadata()
 
     from quasarr.storage.setup.radarr import (
         is_radarr_configured,
@@ -163,6 +244,10 @@ def hostname_form_html(shared_state, message, show_skip_management=False):
 
         btn_class = "btn-secondary" if status == "unset" else "btn-primary"
 
+        meta = source_metadata.get(field_id, {})
+        caps_html = _capabilities_html(meta)
+        requires_flaresolverr = "true" if meta.get("requires_flaresolverr") else "false"
+
         field_html.append(
             hostname_fields.format(
                 id=field_id,
@@ -171,6 +256,8 @@ def hostname_form_html(shared_state, message, show_skip_management=False):
                 status=status,
                 status_emoji=status_emoji,
                 status_title=status_title,
+                caps_html=caps_html,
+                requires_flaresolverr=requires_flaresolverr,
                 error_details_for_modal=_escape_js_for_html_attr(
                     error_details_for_modal
                 ),
@@ -251,25 +338,86 @@ def hostname_form_html(shared_state, message, show_skip_management=False):
     .btn-subtle:hover {{
         background: var(--btn-subtle-bg, #e9ecef);
     }}
-    .hostname-row {{
+    .hostname-entry {{
         display: flex;
+        flex-direction: column;
         gap: 0.5rem;
-        margin-bottom: 0.75rem;
         align-items: stretch;
+        margin-bottom: 0.75rem;
+        padding: 0.65rem;
+        border: 1px solid var(--divider-color, #dee2e6);
+        border-radius: 0.5rem;
+        background: rgba(108, 117, 125, 0.045);
     }}
-    .hostname-row button {{
+    .hostname-entry button {{
         margin-top: 0;
         margin-bottom: 0;
         white-space: nowrap;
-        min-width: 6rem;
+        width: auto;
+        min-width: 7rem;
+        align-self: center;
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 0.4rem;
     }}
-    .hostname-row input {{
-        flex: 1;
+    .hostname-entry input {{
         margin-bottom: 0;
+    }}
+    .lang-flag {{
+        display: inline-flex;
+        align-items: center;
+        line-height: 1;
+    }}
+    .lang-flag-svg {{
+        height: 0.95em;
+        width: auto;
+        border-radius: 2px;
+        vertical-align: middle;
+    }}
+    .hostname-caps {{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+    }}
+    .cap-chip {{
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.75rem;
+        padding: 0.18rem 0.5rem;
+        border-radius: 0.65rem;
+        background: rgba(108, 117, 125, 0.08);
+        color: var(--fg-color, #212529);
+        border: 1px solid rgba(108, 117, 125, 0.22);
+        line-height: 1.25;
+        white-space: nowrap;
+    }}
+    .cap-chip.cap-flag {{
+        background: rgba(13, 110, 253, 0.08);
+        border-color: rgba(13, 110, 253, 0.2);
+    }}
+    .cap-chip.cap-warn {{
+        background: #fff3cd;
+        border-color: #d39e00;
+        color: #856404;
+    }}
+    .cap-chip.cap-danger {{
+        background: #f8d7da;
+        border-color: #f5c2c7;
+        color: #842029;
+    }}
+    @media (max-width: 700px) {{
+        .hostname-entry {{
+            gap: 0.45rem;
+            padding: 0.6rem;
+        }}
+        .hostname-entry button {{
+            min-width: 6.5rem;
+        }}
     }}
 </style>
 
@@ -457,7 +605,7 @@ def hostname_form_html(shared_state, message, show_skip_management=False):
   }}
 </script>
 <script>
-    function showStatusDetail(id, label, status, error_details, timestamp, operation, url, user, password, supports_login) {{
+    function showStatusDetail(id, label, status, error_details, timestamp, operation, url, user, password, supports_login, requires_flaresolverr) {{
         var statusTextMap = {{
             ok: 'Operational',
             error: 'Error',
@@ -502,7 +650,7 @@ def hostname_form_html(shared_state, message, show_skip_management=False):
         var credentials_html = '';
         if (url && supports_login) {{
              var flaresolverrWarning = '';
-             if (id === 'al' && isFlaresolverrSkipped) {{
+             if (requires_flaresolverr && isFlaresolverrSkipped) {{
                 flaresolverrWarning = `
                     <div style="margin-bottom: 1rem; padding: 0.75rem; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 0.25rem; color: #856404; font-size: 0.875rem;">
                         <strong>⚠️ flaresolverr-next Required</strong><br>
@@ -591,12 +739,25 @@ def hostname_form_html(shared_state, message, show_skip_management=False):
         }});
     }}
 </script>
+<script>
+    // Windows lacks regional-indicator flag glyphs, so swap the language emoji
+    // for the matching inline SVG (same approach as the hostnames web tool).
+    (function() {{
+        if (!/Windows/.test(navigator.userAgent)) return;
+        var FLAG_SVG = {flag_svg_json};
+        document.querySelectorAll('[data-flag][data-lang]').forEach(function(el) {{
+            var svg = FLAG_SVG[el.getAttribute('data-lang')];
+            if (svg) {{ el.innerHTML = svg; }}
+        }});
+    }})();
+</script>
 """
     return template.format(
         message=message,
         hostname_form_content=hostname_form_content,
         button=button_html,
         stored_url=stored_url,
+        flag_svg_json=json.dumps(FLAG_SVGS),
         is_flaresolverr_skipped="true" if is_flaresolverr_skipped else "false",
     )
 
@@ -867,10 +1028,13 @@ def hostname_credentials_config(shared_state, shorthand, domain):
     @app.get("/")
     def credentials_form():
         flaresolverr_url = Config("FlareSolverr").get("url")
-        is_al_missing_flaresolverr = shorthand == "AL" and not flaresolverr_url
+        source_meta = get_source_metadata().get(shorthand.lower(), {})
+        is_missing_flaresolverr = (
+            source_meta.get("requires_flaresolverr") and not flaresolverr_url
+        )
 
         flaresolverr_section = ""
-        if is_al_missing_flaresolverr:
+        if is_missing_flaresolverr:
             flaresolverr_section = """
              <div style="margin-bottom: 1.5rem; padding: 1rem; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 0.5rem;">
                 <h4 style="margin-top:0; font-size:1rem; color:#856404;">⚠️ flaresolverr-next Required</h4>
@@ -893,7 +1057,7 @@ def hostname_credentials_config(shared_state, shorthand, domain):
              </script>
              """
 
-        disabled_attr = "disabled" if is_al_missing_flaresolverr else ""
+        disabled_attr = "disabled" if is_missing_flaresolverr else ""
 
         credentials_inputs = f"""
         <span>If required register account at: <a href="https://{domain}">{domain}</a>!</span><br><br>
@@ -941,10 +1105,10 @@ def hostname_credentials_config(shared_state, shorthand, domain):
         </p>
         <script>
         var formSubmitted = false;
-        var isAlMissingFlaresolverr = {"true" if is_al_missing_flaresolverr else "false"};
+        var isMissingFlaresolverr = {"true" if is_missing_flaresolverr else "false"};
 
         function handleSubmit(form) {{
-            if (isAlMissingFlaresolverr) {{
+            if (isMissingFlaresolverr) {{
                 showModal('flaresolverr-next Required', 'You must configure flaresolverr-next below or skip login for this site.');
                 return false;
             }}

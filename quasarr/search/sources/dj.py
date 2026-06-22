@@ -31,6 +31,8 @@ from quasarr.search.sources.helpers.search_source import AbstractSearchSource
 
 class Source(AbstractSearchSource):
     initials = "dj"
+    language = "de"
+    requires_account = True
     supports_imdb = True
     supports_phrase = False
     supported_categories = [SEARCH_CAT_SHOWS]

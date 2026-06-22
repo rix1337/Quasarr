@@ -18,7 +18,7 @@ The shared-services layer consumed by every other subsystem: cross-process state
 - `version.py` — `__version__`, the single source of version truth
 - `obfuscated.py` — obfuscated userscripts and captcha-service endpoint values; consumed only by `api/captcha`
 - `cloudflare.py` — challenge detection, `ensure_session_cf_bypassed`, FlareSolverr get/post/session helpers
-- `html_templates.py` / `html_images.py` — UI page shell and base64 image constants
+- `html_templates.py` / `html_images.py` — UI page shell, base64 image constants, and language-flag emoji/SVG fallback assets for setup UI
 - `hostname_issues.py` — DB-backed source health tracker (`mark_/clear_/get_hostname_issue`)
 - `utils.py` — grab-bag: payload generate/parse, category resolvers, title matching, online-status checks, `download_package` (the JD linkgrabber submission)
 - `sessions/` and `notifications/` — see Child DOX Index
