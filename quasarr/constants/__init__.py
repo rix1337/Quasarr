@@ -244,6 +244,7 @@ HOSTERS = [
     ("MultiUp", False),  # Common mirror on anime-focused releases.
     ("RapidRAR", False),  # Common mirror on RM releases.
     ("frdl", False),  # Rarely used in some forums
+    ("Send", False),  # send.cm / send.now — served by MX (French DDL).
 ]
 
 # Used to identify share hosters (lowercase for comparison)

@@ -68,6 +68,21 @@ class SonarrAPIClient:
                 return series
         return None
 
+    def wanted(self, kind, page_size=50):
+        """Return a wanted episodes page (``kind`` is ``missing`` or ``cutoff``);
+        records include the series."""
+        return (
+            self._get(
+                f"/wanted/{kind}",
+                params={
+                    "pageSize": page_size,
+                    "includeSeries": "true",
+                    "monitored": "true",
+                },
+            )
+            or {}
+        )
+
 
 def get_tmdb_id(shared_state, imdb_id):
     """Return the tmdbId Sonarr resolves for the given IMDb ID, or None."""
@@ -109,3 +124,36 @@ def get_tvdb_id(shared_state, imdb_id):
     trace(f"Resolved IMDb ID '{imdb_id}' to TVDB ID '{tvdb_id}'")
 
     return tvdb_id
+
+
+def get_wanted_episodes(shared_state, limit=50):
+    """Return monitored episodes Sonarr wants as ``[{imdb_id, season, episode}]``.
+
+    Covers both missing episodes (no file) and cutoff-unmet ones (present but
+    below the quality cutoff), missing first, capped at ``limit``. Empty when
+    Sonarr is not configured or the request fails. Used to seed a show feed for
+    sources that need a concrete season+episode per request.
+    """
+    client = get_client(shared_state)
+    if client is None:
+        return []
+
+    episodes = []
+    seen = set()
+    for kind in ("missing", "cutoff"):
+        for record in client.wanted(kind, page_size=limit).get("records", []):
+            series = record.get("series") or {}
+            imdb_id = series.get("imdbId")
+            season = record.get("seasonNumber")
+            episode = record.get("episodeNumber")
+            if not imdb_id or season is None or episode is None:
+                continue
+            key = (imdb_id, season, episode)
+            if key in seen:
+                continue
+            seen.add(key)
+            episodes.append({"imdb_id": imdb_id, "season": season, "episode": episode})
+            if len(episodes) >= limit:
+                return episodes
+
+    return episodes

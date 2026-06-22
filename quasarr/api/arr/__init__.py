@@ -83,7 +83,15 @@ def setup_arr_routes(app):
         imdb_id = decoded_payload["imdb_id"] or ""
         source_key = decoded_payload["source_key"] or ""
 
-        return f'<nzb><file title="{title}" url="{url}" size_mb="{size_mb}" password="{password}" imdb_id="{imdb_id}" source_key="{source_key}"/></nzb>'
+        # title/url/password can carry XML-significant characters (e.g. "&" in
+        # 1Fichier URLs, quotes/accents in French titles), so escape those via
+        # the shared helper. size_mb/imdb_id/source_key are constrained values
+        # that never contain such characters.
+        return (
+            f"<nzb><file title={_xml_attr(title)} url={_xml_attr(url)} "
+            f'size_mb="{size_mb}" password={_xml_attr(password)} '
+            f'imdb_id="{imdb_id}" source_key="{source_key}"/></nzb>'
+        )
 
     @app.post("/api")
     @require_api_key

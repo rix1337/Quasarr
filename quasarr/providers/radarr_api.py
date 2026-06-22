@@ -60,6 +60,16 @@ class RadarrAPIClient:
             return None
         return self._get("/movie/lookup/imdb", params={"imdbId": imdb_id})
 
+    def wanted(self, kind, page=1, page_size=50):
+        """Return a wanted movies page (``kind`` is ``missing`` or ``cutoff``)."""
+        return (
+            self._get(
+                f"/wanted/{kind}",
+                params={"page": page, "pageSize": page_size, "monitored": "true"},
+            )
+            or {}
+        )
+
 
 def get_tmdb_id(shared_state, imdb_id):
     """Return the tmdbId Radarr resolves for the given IMDb ID, or None."""
@@ -80,3 +90,51 @@ def get_tmdb_id(shared_state, imdb_id):
     trace(f"Resolved IMDb ID '{imdb_id}' to TMDB ID '{tmdb_id}'")
 
     return tmdb_id
+
+
+# Radarr statuses that mean the movie has at least reached cinemas; anything
+# else (tba, announced) has no release to search for yet.
+_RELEASED_STATUSES = {"inCinemas", "released"}
+
+
+# Cap on wanted pages walked per kind so a library full of announced titles
+# cannot turn one feed run into unbounded Radarr paging.
+_WANTED_MAX_PAGES = 5
+
+
+def get_wanted_imdb_ids(shared_state, limit=50):
+    """Return IMDb IDs of monitored movies Radarr wants as a list.
+
+    Covers both missing movies (no file) and cutoff-unmet ones (present but
+    below the quality cutoff), missing first, capped at ``limit`` — so a huge
+    monitored library does not translate into a huge number of feed lookups.
+    Movies not yet released to cinemas are skipped; pages are walked (bounded by
+    ``_WANTED_MAX_PAGES``) so a wanted list front-loaded with announced titles
+    still yields released ones instead of an empty seed. Empty when Radarr is
+    not configured or the request fails.
+    """
+    client = get_client(shared_state)
+    if client is None:
+        return []
+
+    imdb_ids = []
+    seen = set()
+    for kind in ("missing", "cutoff"):
+        for page in range(1, _WANTED_MAX_PAGES + 1):
+            if len(imdb_ids) >= limit:
+                return imdb_ids
+            records = client.wanted(kind, page=page, page_size=limit).get("records", [])
+            if not records:
+                break  # no more pages for this kind
+            for movie in records:
+                if movie.get("status") not in _RELEASED_STATUSES:
+                    continue
+                imdb_id = movie.get("imdbId")
+                if not imdb_id or imdb_id in seen:
+                    continue
+                seen.add(imdb_id)
+                imdb_ids.append(imdb_id)
+                if len(imdb_ids) >= limit:
+                    return imdb_ids
+
+    return imdb_ids
