@@ -1053,6 +1053,9 @@ def is_valid_release(
     search_string: str,
     season: int = None,
     episode: int = None,
+    episode_year: int = None,
+    episode_month: int = None,
+    episode_day: int = None,
 ) -> bool:
     """
     Return True if the given release title is valid for the given search parameters.
@@ -1090,8 +1093,30 @@ def is_valid_release(
                 return False
             return True
 
+        date_pattern = None
+        if (
+            episode_year is not None
+            and episode_month is not None
+            and episode_day is not None
+        ):
+            date_pattern = re.compile(
+                rf"(?<!\d){int(episode_year):04d}[\s.-]+"
+                rf"{int(episode_month):02d}[\s.-]+"
+                rf"{int(episode_day):02d}(?!\d)"
+            )
+
         # if it's a TV show search, don't allow any movies (check for season or episode tags in the title)
         if is_tv_search:
+            if date_pattern is not None:
+                if not date_pattern.search(title):
+                    trace(
+                        "Skipping {title!r} as it doesn't match date regex: {pattern!r}",
+                        title=title,
+                        pattern=date_pattern.pattern,
+                    )
+                    return False
+                return True
+
             # must have some S/E tag present
             if not SEASON_EP_REGEX.search(title):
                 trace(
