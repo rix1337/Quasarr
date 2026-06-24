@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Per-source scraper modules implementing search and feed against third-party sites. Twenty-one sibling modules share one strict contract that every new source must replicate.
+Per-source scraper modules implementing search and feed against third-party sites. Twenty-two sibling modules share one strict contract that every new source must replicate.
 
 ## Ownership
 
@@ -40,6 +40,7 @@ Capability flags (`supports_*`, `requires_*`) and categories are class attribute
 - **DL** — login (`providers/sessions/dl`); umlauts normalized when building queries. Paginated search is sequential, bounded by a wall-clock budget, and stops on an empty page; yearly magazine threads ("Jahresthema") expand into per-issue entries (requires the current year in the thread); magazine titles use a token-normalized matcher to align month/issue variants.
 - **DT** — no login. Article date parsing assumes a fixed timezone offset; IMDb id parsed from article HTML and propagated; search drops candidates not matching requested resolution/codec (feed keeps them).
 - **DW** — no login. German month names mapped in a local table (new variants go there); IMDb id read from article HTML validates the result still matches the request.
+- **FF** — no login, movie-only. Search uses the public title lookup, then opens each movie page to extract IMDb id and the movie-token release API; releases are emitted from API `div.entry` blocks and use the release page URL as the download payload source. Feed reads recent update rows, then cross-references each movie page/API to fill size and IMDb data for the release anchors; cross-reference stops when the source's global feed budget reaches `FEED_REQUEST_TIMEOUT_SECONDS`.
 - **FX** — no login, search-only (no download module): articles expose multiple filecrypt-protected link blocks iterated by index; default password derived from a fixed portion of the configured hostname; size read from a tagged inline element near the article body. The IMDb link is read from each entry's own `<td>` context (`find_parent("td")`) first, falling back to the whole article only when that `<td>` has none — so one entry's wrong IMDb link only skips that entry instead of discarding every result in the article.
 - **HE** — no login, IMDb-only; the feed is the empty-query case of search (one shared code path); relative timestamps ("X minutes ago" incl. German variants) normalized to RFC dates.
 - **HS** — no login, IMDb-only RSS feed parsed with BeautifulSoup `html.parser` (lxml deliberately avoided); per-episode size = season-pack bitrate × parsed episode duration, falling back to the pack size; episode metadata extracted with a regex constant inside the module.
