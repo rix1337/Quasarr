@@ -319,11 +319,12 @@ class Source(AbstractSearchSource):
 
                     mb = date_release.get("mb", 0)
                     password = ""
+                    source_url = date_release.get("source", thread_url)
 
                     link = generate_download_link(
                         shared_state,
                         title_normalized,
-                        thread_url,
+                        source_url,
                         mb,
                         password,
                         imdb_id or "",
@@ -339,7 +340,7 @@ class Source(AbstractSearchSource):
                                 "link": link,
                                 "size": mb * 1024 * 1024,
                                 "date": published,
-                                "source": thread_url,
+                                "source": source_url,
                             },
                             "type": "protected",
                         }
@@ -418,7 +419,9 @@ class Source(AbstractSearchSource):
         max_search_duration = 15 if episode_year else 7
 
         trace(
-            f"Starting sequential paginated search for '{search_string}' (Season: {season}, Episode: {episode}) - max {max_search_duration}s"
+            f"Starting sequential paginated search for '{search_string}' "
+            f"(Season: {season}, Episode: {episode}) - "
+            f"max {max_search_duration}s"
         )
 
         try:
@@ -765,6 +768,7 @@ def _date_release_from_thread(
             return {
                 "title": arr_title,
                 "mb": _date_release_size_mb_from_post(post),
+                "source": _post_url(thread_url, post),
             }
 
     return {}
@@ -837,7 +841,11 @@ def _date_release_title_for_arr(title, search_string):
         return title
 
     compact_prefix = canonical_prefix.replace(".", r"[\s.]+")
-    raw_prefix = re.sub(r"^(wwe)[\s.]+(?:monday[\s.]+night[\s.]+)?raw", "wwe raw", normalized_search)
+    raw_prefix = re.sub(
+        r"^(wwe)[\s.]+(?:monday[\s.]+night[\s.]+)?raw",
+        "wwe raw",
+        normalized_search,
+    )
     raw_prefix = re.escape(raw_prefix).replace(r"\ ", r"[\s.]+")
     if re.match(rf"(?i)^{raw_prefix}[\s.]+", title):
         return re.sub(rf"(?i)^{raw_prefix}", canonical_prefix, title, count=1)

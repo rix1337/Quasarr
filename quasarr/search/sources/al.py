@@ -197,6 +197,9 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
+        episode_year: int = None,
+        episode_month: int = None,
+        episode_day: int = None,
     ) -> list[SearchRelease]:
         releases = []
 
@@ -405,7 +408,7 @@ class Source(AbstractSearchSource):
                             except Exception as e:
                                 debug(f"Error extracting size for {title}: {e}")
 
-                    if episode:
+                    if episode and not episode_year:
                         try:
                             total_episodes = release_info.episode_max
                             if total_episodes:

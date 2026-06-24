@@ -1066,6 +1066,20 @@ def is_valid_release(
     - episode: desired episode number (or None)
     """
     try:
+        if (
+            episode_year is None
+            and episode_month is None
+            and episode_day is None
+            and season is not None
+            and episode is not None
+            and "/" in str(episode)
+        ):
+            episode_date_raw = str(episode).split("/")
+            if len(episode_date_raw) == 2:
+                episode_year = season
+                episode_month = episode_date_raw[0]
+                episode_day = episode_date_raw[1]
+
         is_movie_search = search_category // 1000 * 1000 == SEARCH_CAT_MOVIES
         is_tv_search = search_category // 1000 * 1000 == SEARCH_CAT_SHOWS
         is_docs_search = search_category // 1000 * 1000 == SEARCH_CAT_BOOKS
@@ -1076,7 +1090,8 @@ def is_valid_release(
         if not is_docs_search and not is_imdb_id(search_string):
             if not search_string_in_sanitized_title(search_string, title):
                 trace(
-                    "Skipping {title!r} as it doesn't match sanitized search string: {search_string!r}",
+                    "Skipping {title!r} as it doesn't match sanitized "
+                    "search string: {search_string!r}",
                     title=title,
                     search_string=search_string,
                 )
@@ -1110,7 +1125,8 @@ def is_valid_release(
             if date_pattern is not None:
                 if not date_pattern.search(title):
                     trace(
-                        "Skipping {title!r} as it doesn't match date regex: {pattern!r}",
+                        "Skipping {title!r} as it doesn't match date regex: "
+                        "{pattern!r}",
                         title=title,
                         pattern=date_pattern.pattern,
                     )
@@ -1129,7 +1145,8 @@ def is_valid_release(
             if season is not None or episode is not None:
                 if not match_in_title(title, season, episode):
                     trace(
-                        "Skipping {title!r} as it doesn't match season {season} and episode {episode}",
+                        "Skipping {title!r} as it doesn't match season "
+                        "{season} and episode {episode}",
                         title=title,
                         season=season,
                         episode=episode,

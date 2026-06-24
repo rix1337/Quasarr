@@ -159,6 +159,9 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
+        episode_year: int = None,
+        episode_month: int = None,
+        episode_day: int = None,
     ) -> list[SearchRelease]:
         releases = []
         fx = shared_state.values["config"]("Hostnames").get(self.initials)

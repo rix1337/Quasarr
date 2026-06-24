@@ -52,6 +52,9 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
+        episode_year: int = None,
+        episode_month: int = None,
+        episode_day: int = None,
     ) -> list[SearchRelease]:
         releases = []
         host = shared_state.values["config"]("Hostnames").get(self.initials)
@@ -74,7 +77,7 @@ class Source(AbstractSearchSource):
                 if not local_title:
                     info(f"No title for IMDb {imdb_id}")
                     return releases
-                if not season:
+                if not season and not episode_year:
                     year = get_year(imdb_id)
                     if year:
                         local_title += f" {year}"
@@ -92,7 +95,9 @@ class Source(AbstractSearchSource):
             search_type = "search"
             timeout = SEARCH_REQUEST_TIMEOUT_SECONDS
 
-        if season:
+        if episode_year:
+            pass
+        elif season:
             source_search += f" S{int(season):02d}"
 
             if episode:
