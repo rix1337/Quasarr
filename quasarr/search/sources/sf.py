@@ -147,9 +147,6 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
-        episode_year: int = None,
-        episode_month: int = None,
-        episode_day: int = None,
     ) -> list[SearchRelease]:
         releases = []
         sf = shared_state.values["config"]("Hostnames").get(self.initials)
@@ -313,7 +310,7 @@ class Source(AbstractSearchSource):
                         debug(f"Error extracting size for {title}: {e}")
                         mb = 0
 
-                    if episode and not episode_year:
+                    if episode:
                         try:
                             if not re.search(r"S\d{1,3}E\d{1,3}", title):
                                 episodes_in_release = len(mirrors["episodes"])

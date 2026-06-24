@@ -262,11 +262,16 @@ class Source(AbstractSearchSource):
                     title = re.sub(r"\s+", " ", title)
                     title = unescape(title)
                     title_normalized = _normalize_title_for_arr(title)
+                    is_date_thread_candidate = (
+                        episode_year
+                        and _should_check_thread_for_date_release(title_normalized)
+                    )
 
                     # Filter: Skip if no resolution or codec info (unless Magazarr/Lidarr)
                     if base_search_category not in [SEARCH_CAT_BOOKS, SEARCH_CAT_MUSIC]:
                         if not (
-                            RESOLUTION_REGEX.search(title_normalized)
+                            is_date_thread_candidate
+                            or RESOLUTION_REGEX.search(title_normalized)
                             or CODEC_REGEX.search(title_normalized)
                         ):
                             continue
@@ -294,7 +299,7 @@ class Source(AbstractSearchSource):
                         episode_day,
                     )
                     if not is_release_valid:
-                        if _should_check_thread_for_date_release(title_normalized):
+                        if is_date_thread_candidate:
                             date_release = _date_release_from_thread(
                                 shared_state,
                                 thread_url,
@@ -765,10 +770,13 @@ def _date_release_from_thread(
             episode_day,
         ):
             arr_title = _date_release_title_for_arr(title, search_string)
+            source = thread_url
+            if _post_contains_supported_download(post):
+                source = _post_url(thread_url, post)
             return {
                 "title": arr_title,
                 "mb": _date_release_size_mb_from_post(post),
-                "source": _post_url(thread_url, post),
+                "source": source,
             }
 
     return {}

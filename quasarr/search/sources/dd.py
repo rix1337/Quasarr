@@ -54,9 +54,6 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
-        episode_year: int = None,
-        episode_month: int = None,
-        episode_day: int = None,
     ) -> list[SearchRelease]:
         releases = []
         dd = shared_state.values["config"]("Hostnames").get(self.initials)
@@ -79,9 +76,7 @@ class Source(AbstractSearchSource):
                 info(f"Could not extract title from IMDb-ID {imdb_id}")
                 return releases
             search_string = html.unescape(search_string)
-            if episode_year:
-                pass
-            elif season:
+            if season:
                 search_string += f" S{int(season):02d}"
                 if episode:
                     search_string += f"E{int(episode):02d}"

@@ -32,7 +32,7 @@ class AbstractSearchSource(ABC):
 
     @property
     def supports_date_numbering(self) -> bool:
-        return True
+        return False
 
     @property
     @abstractmethod

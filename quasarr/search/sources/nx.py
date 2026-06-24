@@ -155,9 +155,6 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
-        episode_year: int = None,
-        episode_month: int = None,
-        episode_day: int = None,
     ) -> list[SearchRelease]:
         """
         Search using internal API.

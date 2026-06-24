@@ -1066,20 +1066,6 @@ def is_valid_release(
     - episode: desired episode number (or None)
     """
     try:
-        if (
-            episode_year is None
-            and episode_month is None
-            and episode_day is None
-            and season is not None
-            and episode is not None
-            and "/" in str(episode)
-        ):
-            episode_date_raw = str(episode).split("/")
-            if len(episode_date_raw) == 2:
-                episode_year = season
-                episode_month = episode_date_raw[0]
-                episode_day = episode_date_raw[1]
-
         is_movie_search = search_category // 1000 * 1000 == SEARCH_CAT_MOVIES
         is_tv_search = search_category // 1000 * 1000 == SEARCH_CAT_SHOWS
         is_docs_search = search_category // 1000 * 1000 == SEARCH_CAT_BOOKS

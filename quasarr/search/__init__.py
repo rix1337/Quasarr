@@ -157,6 +157,10 @@ def get_search_results(
                 }
 
                 if episode_year:
+                    if not source.supports_date_numbering:
+                        source_logger.trace("Search with date unsupported")
+                        continue
+
                     kwargs.update(
                         {
                             "episode_year": episode_year,
