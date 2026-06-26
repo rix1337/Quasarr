@@ -762,31 +762,56 @@ def _date_release_from_thread(
     if not (episode_year and episode_month and episode_day):
         return {}
 
-    response = _fetch_thread_page(shared_state, thread_url)
-    if response is None:
+    first_page = _fetch_thread_page(shared_state, thread_url)
+    if first_page is None:
         return {}
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    for post in soup.select("article.message--post"):
-        title = _date_release_title_from_post(post)
-        if not title:
+    last_page = _extract_last_thread_page(first_page.text)
+    start_page = max(1, last_page - 4)
+    page_numbers = [1, *range(start_page, last_page + 1)]
+    page_numbers = list(dict.fromkeys(page_numbers))
+
+    for page_num in page_numbers:
+        page_url = (
+            thread_url
+            if page_num == 1
+            else _thread_page_url(
+                thread_url,
+                page_num,
+            )
+        )
+        response = (
+            first_page
+            if page_num == 1
+            else _fetch_thread_page(
+                shared_state,
+                page_url,
+            )
+        )
+        if response is None:
             continue
-        if _date_release_title_matches_search(
-            title,
-            search_string,
-            episode_year,
-            episode_month,
-            episode_day,
-        ):
-            arr_title = _date_release_title_for_arr(title, search_string)
-            source = thread_url
-            if _post_contains_supported_download(post):
-                source = _post_url(thread_url, post)
-            return {
-                "title": arr_title,
-                "mb": _date_release_size_mb_from_post(post),
-                "source": source,
-            }
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        for post in soup.select("article.message--post"):
+            title = _date_release_title_from_post(post)
+            if not title:
+                continue
+            if _date_release_title_matches_search(
+                title,
+                search_string,
+                episode_year,
+                episode_month,
+                episode_day,
+            ):
+                arr_title = _date_release_title_for_arr(title, search_string)
+                source = thread_url
+                if _post_contains_supported_download(post):
+                    source = _post_url(page_url, post)
+                return {
+                    "title": arr_title,
+                    "mb": _date_release_size_mb_from_post(post),
+                    "source": source,
+                }
 
     return {}
 

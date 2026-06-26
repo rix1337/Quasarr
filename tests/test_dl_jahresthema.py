@@ -127,6 +127,58 @@ class DlJahresthemaSearchTests(unittest.TestCase):
             release["source"],
         )
 
+    def test_date_release_from_thread_scans_recent_thread_pages(self):
+        first_page_html = """
+        <html>
+          <a class="pageNav-page" href="/threads/sample-show-2026.1/page-2">2</a>
+          <article class="message--post" id="post-1">
+            <div class="bbWrapper">
+              <p>Title: Sample.Show.2026.06.12.1080p.WEB.h264-GRP</p>
+              <p>https://ddownload.com/old-example</p>
+            </div>
+          </article>
+        </html>
+        """
+        second_page_html = """
+        <article class="message--post" id="post-2">
+          <div class="bbWrapper">
+            <p>Title: Sample.Show.2026.06.19.1080p.WEB.h264-GRP</p>
+            <p>https://ddownload.com/example</p>
+          </div>
+        </article>
+        """
+        fetched_thread_urls = []
+
+        def fake_fetch(_shared_state, page_url):
+            fetched_thread_urls.append(page_url)
+            if page_url.endswith("/thread.1/"):
+                return FakeResponse(first_page_html, page_url)
+            if page_url.endswith("/thread.1/page-2"):
+                return FakeResponse(second_page_html, page_url)
+            raise AssertionError(f"unexpected fetch: {page_url}")
+
+        with patch("quasarr.search.sources.dl._fetch_thread_page", fake_fetch):
+            release = _date_release_from_thread(
+                FakeSharedState(),
+                "https://www.source.invalid/thread.1/",
+                "Sample Show",
+                2026,
+                6,
+                19,
+            )
+
+        self.assertEqual(
+            [
+                "https://www.source.invalid/thread.1/",
+                "https://www.source.invalid/thread.1/page-2",
+            ],
+            fetched_thread_urls,
+        )
+        self.assertEqual(
+            "https://www.source.invalid/thread.1/page-2#post-2",
+            release["source"],
+        )
+
     def test_matches_compact_ct_style_spelling(self):
         current_year = datetime.now().year
 
