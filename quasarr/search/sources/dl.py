@@ -264,7 +264,11 @@ class Source(AbstractSearchSource):
                     title_normalized = _normalize_title_for_arr(title)
                     is_date_thread_candidate = (
                         episode_year
-                        and _should_check_thread_for_date_release(title_normalized)
+                        and _should_check_thread_for_date_release(
+                            title_normalized,
+                            search_string,
+                            episode_year,
+                        )
                     )
 
                     # Filter: Skip if no resolution or codec info (unless Magazarr/Lidarr)
@@ -599,14 +603,19 @@ def _date_search_strings(search_string, episode_year, episode_month, episode_day
     return search_strings
 
 
-def _should_check_thread_for_date_release(title):
+def _should_check_thread_for_date_release(title, search_string=None, episode_year=None):
     normalized = replace_umlauts(unescape(str(title or ""))).lower()
     normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
     tokens = set(normalized.split())
 
-    if not {"wwe", "heel"}.issubset(tokens):
+    if episode_year and str(episode_year) not in tokens:
         return False
-    if "raw" not in tokens and "smackdown" not in tokens:
+
+    search_tokens = _title_match_tokens(search_string or "")
+    if not search_tokens:
+        return bool(re.search(r"\b(?:19|20)\d{2}\b", normalized))
+
+    if not search_tokens.issubset(tokens):
         return False
 
     return bool(re.search(r"\b(?:19|20)\d{2}\b", normalized))
@@ -640,7 +649,7 @@ def _magazine_title_matches(search_string, title):
 
 def _magazine_match_tokens(text):
     text = replace_umlauts(unescape(str(text or ""))).lower()
-    text = re.sub(r"\bc\s*['`´’]?\s*t\b", "ct", text)
+    text = re.sub(r"\bc\s*['`\u00b4\u2019]?\s*t\b", "ct", text)
     text = re.sub(r"[^a-z0-9]+", " ", text)
 
     ignored = {
@@ -798,10 +807,9 @@ def _date_release_title_from_post(post):
 
     text_flat = " ".join(lines)
     match = re.search(
-        r"(?i)\b(WWE[.\s]+(?:(?:Monday[.\s]+Night[.\s]+)?RAW|"
-        r"(?:Friday[.\s]+Night[.\s]+)?SmackDown)"
+        r"(?i)\b([A-Z0-9][A-Z0-9.\s'&-]{1,120}?"
         r"[.\s]+(?:19|20)\d{2}[.\s]+\d{2}[.\s]+\d{2}"
-        r".{0,120}?HEEL)\b",
+        r".{0,120}?)\b",
         text_flat,
     )
     if match:
@@ -814,7 +822,7 @@ def _date_release_size_mb_from_post(post):
     content = _own_message_content(post)
     text = content.get_text("\n", strip=True)
     match = re.search(
-        r"(?i)\b(?:size|größe|groesse|grosse)\s*:\s*"
+        r"(?i)\b(?:size|gr\u00f6\u00dfe|groesse|grosse)\s*:\s*"
         r"(\d+(?:[.,]\d+)?)\s*([kmgt]i?b|[kmgt]b)\b",
         text,
     )
@@ -1092,7 +1100,7 @@ def _looks_like_issue_title(title, search_string):
         return False
 
     if re.search(
-        r"\b(?:download|mirror|passwort|password|size|groesse|grosse|größe|mb|gb)\b",
+        r"\b(?:download|mirror|passwort|password|size|groesse|grosse|gr\u00f6\u00dfe|mb|gb)\b",
         replace_umlauts(title_lower),
     ):
         return False

@@ -12,10 +12,12 @@ from quasarr.search.sources.dl import (
     Source as SearchSource,
 )
 from quasarr.search.sources.dl import (
+    _date_release_from_thread,
     _expand_jahresthema_thread_releases,
     _is_current_year_jahresthema_thread,
     _post_contains_supported_download,
     _release_from_jahresthema_post,
+    _should_check_thread_for_date_release,
 )
 
 
@@ -45,6 +47,86 @@ class FakeSharedState:
 
 
 class DlJahresthemaSearchTests(unittest.TestCase):
+    def test_date_thread_candidate_uses_search_tokens_without_release_group_lock(self):
+        self.assertTrue(
+            _should_check_thread_for_date_release(
+                "Sample Show 2026 Collection",
+                "Sample Show",
+                2026,
+            )
+        )
+
+    def test_date_thread_candidate_rejects_unrelated_series(self):
+        self.assertFalse(
+            _should_check_thread_for_date_release(
+                "Other Show 2026 Collection",
+                "Sample Show",
+                2026,
+            )
+        )
+
+    def test_date_release_from_thread_uses_post_url_only_for_downloadable_post(self):
+        html = """
+        <article class="message--post" id="post-1">
+          <div class="bbWrapper">
+            <p>Title: Sample.Show.2026.06.19.1080p.WEB.h264-GRP</p>
+            <p>Metadata only.</p>
+          </div>
+        </article>
+        <article class="message--post" id="post-2">
+          <div class="bbWrapper">
+            <p>Title: Sample.Show.2026.06.19.1080p.WEB.h264-GRP</p>
+            <p>https://ddownload.com/example</p>
+          </div>
+        </article>
+        """
+
+        with patch(
+            "quasarr.search.sources.dl._fetch_thread_page",
+            return_value=FakeResponse(html, "https://www.source.invalid/thread.1/"),
+        ):
+            release = _date_release_from_thread(
+                FakeSharedState(),
+                "https://www.source.invalid/thread.1/",
+                "Sample Show",
+                2026,
+                6,
+                19,
+            )
+
+        self.assertEqual(
+            "https://www.source.invalid/thread.1/",
+            release["source"],
+        )
+
+    def test_date_release_from_thread_pins_downloadable_post(self):
+        html = """
+        <article class="message--post" id="post-2">
+          <div class="bbWrapper">
+            <p>Title: Sample.Show.2026.06.19.1080p.WEB.h264-GRP</p>
+            <p>https://ddownload.com/example</p>
+          </div>
+        </article>
+        """
+
+        with patch(
+            "quasarr.search.sources.dl._fetch_thread_page",
+            return_value=FakeResponse(html, "https://www.source.invalid/thread.1/"),
+        ):
+            release = _date_release_from_thread(
+                FakeSharedState(),
+                "https://www.source.invalid/thread.1/",
+                "Sample Show",
+                2026,
+                6,
+                19,
+            )
+
+        self.assertEqual(
+            "https://www.source.invalid/thread.1/#post-2",
+            release["source"],
+        )
+
     def test_matches_compact_ct_style_spelling(self):
         current_year = datetime.now().year
 

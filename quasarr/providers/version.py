@@ -5,7 +5,7 @@
 import re
 import sys
 
-__version__ = "4.6.1"
+__version__ = "4.6.2"
 
 
 def get_version():
@@ -127,7 +127,7 @@ def create_version_file():
         + str(int(suffix))
         + "'),",
         "        StringStruct(u'InternalName', u'Quasarr'),",
-        "        StringStruct(u'LegalCopyright', u'Copyright © RiX'),",
+        "        StringStruct(u'LegalCopyright', u'Copyright \\u00a9 RiX'),",
         "        StringStruct(u'OriginalFilename', u'Quasarr.exe'),",
         "        StringStruct(u'ProductName', u'Quasarr'),",
         "        StringStruct(u'ProductVersion', u'"
