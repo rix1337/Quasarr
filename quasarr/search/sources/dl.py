@@ -4,7 +4,7 @@
 
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from html import unescape
 from urllib.parse import urlsplit, urlunsplit
 
@@ -32,6 +32,10 @@ from quasarr.providers.sessions.dl import (
     retrieve_and_validate_session,
 )
 from quasarr.providers.utils import (
+    canonicalize_date_numbered_title,
+    date_numbering_release_matches,
+    date_numbering_search_strings,
+    date_numbering_title_matches,
     generate_download_link,
     get_base_search_category_id,
     is_imdb_id,
@@ -191,9 +195,7 @@ class Source(AbstractSearchSource):
         search_category,
         season,
         episode,
-        episode_year,
-        episode_month,
-        episode_day,
+        episode_date,
     ):
         """
         Search a single page. This method is called sequentially for each page.
@@ -263,11 +265,11 @@ class Source(AbstractSearchSource):
                     title = unescape(title)
                     title_normalized = _normalize_title_for_arr(title)
                     is_date_thread_candidate = (
-                        episode_year
+                        episode_date
                         and _should_check_thread_for_date_release(
                             title_normalized,
                             search_string,
-                            episode_year,
+                            episode_date,
                         )
                     )
 
@@ -298,9 +300,7 @@ class Source(AbstractSearchSource):
                         search_string,
                         season,
                         episode,
-                        episode_year,
-                        episode_month,
-                        episode_day,
+                        episode_date,
                     )
                     if not is_release_valid:
                         if is_date_thread_candidate:
@@ -308,17 +308,16 @@ class Source(AbstractSearchSource):
                                 shared_state,
                                 thread_url,
                                 search_string,
-                                episode_year,
-                                episode_month,
-                                episode_day,
+                                episode_date,
                             )
                         if not date_release:
                             continue
                         title_normalized = date_release["title"]
-                    elif episode_year:
-                        title_normalized = _date_release_title_for_arr(
+                    elif episode_date:
+                        title_normalized = canonicalize_date_numbered_title(
                             title_normalized,
                             search_string,
+                            episode_date,
                         )
 
                     # Extract date and convert to RFC 2822 format
@@ -390,9 +389,7 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
-        episode_year: int = None,
-        episode_month: int = None,
-        episode_day: int = None,
+        episode_date=None,
     ) -> list[SearchRelease]:
         """
         Search with sequential pagination to find best quality releases.
@@ -408,24 +405,20 @@ class Source(AbstractSearchSource):
                 info(f"no title for IMDb {imdb_id}")
                 return releases
             search_string = title
-            if episode_year:
-                search_string = _date_search_alias(search_string)
             if not season:
                 if year := get_year(imdb_id):
                     search_string += f" {year}"
 
         search_string = unescape(search_string)
         search_strings = (
-            _date_search_strings(
+            date_numbering_search_strings(
                 search_string,
-                episode_year,
-                episode_month,
-                episode_day,
+                episode_date,
             )
-            if episode_year
+            if episode_date
             else [search_string]
         )
-        max_search_duration = 15 if episode_year else 7
+        max_search_duration = 15 if episode_date else 7
 
         trace(
             f"Starting sequential paginated search for '{search_string}' "
@@ -461,9 +454,7 @@ class Source(AbstractSearchSource):
                         search_category,
                         season,
                         episode,
-                        episode_year,
-                        episode_month,
-                        episode_day,
+                        episode_date,
                     )
 
                     page_release_titles = tuple(
@@ -548,74 +539,18 @@ def _normalize_title_for_arr(title):
     return title
 
 
-def _date_search_alias(search_string):
-    normalized = replace_umlauts(unescape(str(search_string or ""))).lower()
-    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
-    normalized = re.sub(r"\s+", " ", normalized).strip()
-
-    aliases = {
-        "wwe monday night raw": "WWE RAW",
-        "wwe friday night smackdown": "WWE SmackDown",
-    }
-    alias = aliases.get(normalized, search_string)
-    return alias
-
-
-def _date_search_strings(search_string, episode_year, episode_month, episode_day):
-    try:
-        episode_date = datetime(
-            int(episode_year),
-            int(episode_month),
-            int(episode_day),
-        )
-    except (TypeError, ValueError):
-        return [search_string]
-
-    candidates = [
-        episode_date,
-        episode_date - timedelta(days=1),
-        episode_date + timedelta(days=1),
-    ]
-    search_strings = [search_string]
-    search_variants = [search_string]
-    if re.search(r"(?i)\bsmackdown\b", search_string):
-        smackdown_variant = re.sub(
-            r"(?i)\bsmackdown\b",
-            "Smackdown",
-            search_string,
-            count=1,
-        )
-        if smackdown_variant not in search_variants:
-            search_variants.append(smackdown_variant)
-
-    for candidate in candidates:
-        date_variants = (
-            f"{candidate:%Y %m %d}",
-            f"{candidate:%Y-%m-%d}",
-            f"{candidate:%Y.%m.%d}",
-        )
-        for search_variant in search_variants:
-            for date_variant in date_variants:
-                value = f"{search_variant} {date_variant}"
-                if value not in search_strings:
-                    search_strings.append(value)
-
-    return search_strings
-
-
-def _should_check_thread_for_date_release(title, search_string=None, episode_year=None):
+def _should_check_thread_for_date_release(title, search_string=None, episode_date=None):
     normalized = replace_umlauts(unescape(str(title or ""))).lower()
     normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
     tokens = set(normalized.split())
 
-    if episode_year and str(episode_year) not in tokens:
+    if episode_date and str(episode_date.year) not in tokens:
         return False
 
-    search_tokens = _title_match_tokens(search_string or "")
-    if not search_tokens:
+    if not search_string:
         return bool(re.search(r"\b(?:19|20)\d{2}\b", normalized))
 
-    if not search_tokens.issubset(tokens):
+    if not date_numbering_title_matches(title, search_string):
         return False
 
     return bool(re.search(r"\b(?:19|20)\d{2}\b", normalized))
@@ -755,11 +690,9 @@ def _date_release_from_thread(
     shared_state,
     thread_url,
     search_string,
-    episode_year,
-    episode_month,
-    episode_day,
+    episode_date,
 ):
-    if not (episode_year and episode_month and episode_day):
+    if episode_date is None:
         return {}
 
     first_page = _fetch_thread_page(shared_state, thread_url)
@@ -796,14 +729,10 @@ def _date_release_from_thread(
             title = _date_release_title_from_post(post)
             if not title:
                 continue
-            if _date_release_title_matches_search(
-                title,
-                search_string,
-                episode_year,
-                episode_month,
-                episode_day,
-            ):
-                arr_title = _date_release_title_for_arr(title, search_string)
+            if date_numbering_release_matches(title, search_string, episode_date):
+                arr_title = canonicalize_date_numbered_title(
+                    title, search_string, episode_date
+                )
                 source = thread_url
                 if _post_contains_supported_download(post):
                     source = _post_url(page_url, post)
@@ -865,80 +794,6 @@ def _date_release_size_mb_from_post(post):
     if unit.startswith("t"):
         return round(size * 1024 * 1024)
     return 0
-
-
-def _date_release_title_for_arr(title, search_string):
-    normalized_search = replace_umlauts(unescape(str(search_string or ""))).lower()
-    normalized_search = re.sub(r"[^a-z0-9]+", " ", normalized_search)
-    normalized_search = re.sub(r"\b\d+\b", " ", normalized_search)
-    normalized_search = re.sub(r"\s+", " ", normalized_search).strip()
-
-    canonical_prefixes = {
-        "wwe raw": "WWE.Monday.Night.RAW",
-        "wwe smackdown": "WWE.Friday.Night.SmackDown",
-    }
-    canonical_prefix = canonical_prefixes.get(normalized_search)
-    if not canonical_prefix:
-        return title
-
-    compact_prefix = canonical_prefix.replace(".", r"[\s.]+")
-    raw_prefix = re.sub(
-        r"^(wwe)[\s.]+(?:monday[\s.]+night[\s.]+)?raw",
-        "wwe raw",
-        normalized_search,
-    )
-    raw_prefix = re.escape(raw_prefix).replace(r"\ ", r"[\s.]+")
-    if re.match(rf"(?i)^{raw_prefix}[\s.]+", title):
-        return re.sub(rf"(?i)^{raw_prefix}", canonical_prefix, title, count=1)
-    if re.match(rf"(?i)^{compact_prefix}[\s.]+", title):
-        return re.sub(rf"(?i)^{compact_prefix}", canonical_prefix, title, count=1)
-
-    return title
-
-
-def _date_release_title_matches_search(
-    title,
-    search_string,
-    episode_year,
-    episode_month,
-    episode_day,
-):
-    date_pattern = re.compile(
-        rf"(?<!\d){int(episode_year):04d}[\s.-]+"
-        rf"{int(episode_month):02d}[\s.-]+"
-        rf"{int(episode_day):02d}(?!\d)"
-    )
-    if not date_pattern.search(title):
-        return False
-
-    normalized_title = _title_match_tokens(title)
-    search_tokens = _title_match_tokens(search_string)
-    if not search_tokens:
-        return False
-
-    return search_tokens.issubset(normalized_title)
-
-
-def _title_match_tokens(text):
-    normalized = replace_umlauts(unescape(str(text or ""))).lower()
-    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
-    ignored = {
-        "a",
-        "an",
-        "and",
-        "der",
-        "die",
-        "das",
-        "monday",
-        "night",
-        "the",
-    }
-    tokens = {
-        token
-        for token in normalized.split()
-        if token not in ignored and not re.fullmatch(r"\d+", token)
-    }
-    return tokens
 
 
 def _extract_last_thread_page(html):

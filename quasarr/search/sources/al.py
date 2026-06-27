@@ -45,6 +45,7 @@ class Source(AbstractSearchSource):
     requires_flaresolverr = True
     supports_imdb = True
     supports_phrase = False
+    supports_date_numbering = False
     supports_absolute_numbering = True
     supported_categories = [SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS, SEARCH_CAT_SHOWS_ANIME]
     requires_login = True

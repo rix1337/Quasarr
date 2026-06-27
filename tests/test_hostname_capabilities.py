@@ -1,5 +1,7 @@
+import inspect
 import unittest
 
+from quasarr.constants import SEARCH_CAT_SHOWS
 from quasarr.providers.html_images import FLAG_SVGS, LANGUAGE_FLAG_EMOJI
 from quasarr.search.sources import get_sources
 from quasarr.search.sources.helpers import get_source_metadata
@@ -29,6 +31,48 @@ class SourceLanguageContractTests(unittest.TestCase):
             with self.subTest(language=language):
                 self.assertIn(language, LANGUAGE_FLAG_EMOJI)
                 self.assertIn(language, FLAG_SVGS)
+
+    def test_date_numbering_sources_accept_shared_date_context(self):
+        for key, source in get_sources().items():
+            if (
+                SEARCH_CAT_SHOWS not in source.supported_categories
+                or not source.supports_date_numbering
+            ):
+                continue
+            with self.subTest(source=key):
+                self.assertIn(
+                    "episode_date",
+                    inspect.signature(source.search).parameters,
+                )
+
+    def test_date_numbering_enabled_for_all_compatible_tv_sources(self):
+        expected = {
+            "by",
+            "dd",
+            "dj",
+            "dl",
+            "dt",
+            "dw",
+            "fx",
+            "he",
+            "hs",
+            "mb",
+            "nk",
+            "nx",
+            "rm",
+            "sf",
+            "sj",
+            "sl",
+            "wd",
+            "wx",
+        }
+        actual = {
+            key
+            for key, source in get_sources().items()
+            if SEARCH_CAT_SHOWS in source.supported_categories
+            and source.supports_date_numbering
+        }
+        self.assertEqual(expected, actual)
 
 
 class SourceMetadataTests(unittest.TestCase):

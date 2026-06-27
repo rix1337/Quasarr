@@ -103,6 +103,7 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
+        episode_date=None,
     ) -> list[SearchRelease]:
         by = shared_state.values["config"]("Hostnames").get(self.initials)
         password = by
@@ -140,6 +141,7 @@ class Source(AbstractSearchSource):
                 search_string=search_string,
                 season=season,
                 episode=episode,
+                episode_date=episode_date,
             )
         except Exception as e:
             error(f"Error loading search: {e}")
@@ -164,6 +166,7 @@ class Source(AbstractSearchSource):
         search_string=None,
         season=None,
         episode=None,
+        episode_date=None,
     ):
         releases = []
 
@@ -281,7 +284,12 @@ class Source(AbstractSearchSource):
                             continue
 
                     if not is_valid_release(
-                        title, search_category, search_string, season, episode
+                        title,
+                        search_category,
+                        search_string,
+                        season,
+                        episode,
+                        episode_date,
                     ):
                         continue
                     if XXX_REGEX.search(title) and "xxx" not in search_string.lower():

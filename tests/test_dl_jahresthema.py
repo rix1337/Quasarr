@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from unittest.mock import patch
 
 from bs4 import BeautifulSoup
@@ -52,7 +52,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
             _should_check_thread_for_date_release(
                 "Sample Show 2026 Collection",
                 "Sample Show",
-                2026,
+                date(2026, 6, 19),
             )
         )
 
@@ -61,7 +61,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
             _should_check_thread_for_date_release(
                 "Other Show 2026 Collection",
                 "Sample Show",
-                2026,
+                date(2026, 6, 19),
             )
         )
 
@@ -89,9 +89,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
                 FakeSharedState(),
                 "https://www.source.invalid/thread.1/",
                 "Sample Show",
-                2026,
-                6,
-                19,
+                date(2026, 6, 19),
             )
 
         self.assertEqual(
@@ -117,9 +115,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
                 FakeSharedState(),
                 "https://www.source.invalid/thread.1/",
                 "Sample Show",
-                2026,
-                6,
-                19,
+                date(2026, 6, 19),
             )
 
         self.assertEqual(
@@ -162,9 +158,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
                 FakeSharedState(),
                 "https://www.source.invalid/thread.1/",
                 "Sample Show",
-                2026,
-                6,
-                19,
+                date(2026, 6, 19),
             )
 
         self.assertEqual(
@@ -178,6 +172,46 @@ class DlJahresthemaSearchTests(unittest.TestCase):
             "https://www.source.invalid/thread.1/page-2#post-2",
             release["source"],
         )
+
+    def test_date_release_from_thread_finds_wwe_scheduled_series_generically(self):
+        episode_date = date(2031, 2, 3)
+        cases = (
+            (
+                "WWE Monday Night RAW",
+                "WWE.RAW.2031.02.03.1080p.WEB.h264-GRP",
+                "WWE.Monday.Night.RAW.2031.02.03.1080p.WEB.h264-GRP",
+            ),
+            (
+                "WWE Friday Night SmackDown",
+                "WWE.SmackDown.2031.02.03.1080p.WEB.h264-GRP",
+                "WWE.Friday.Night.SmackDown.2031.02.03.1080p.WEB.h264-GRP",
+            ),
+        )
+
+        for search_string, posted_title, expected_title in cases:
+            with self.subTest(search_string=search_string):
+                html = f"""
+                <article class="message--post" id="post-2">
+                  <div class="bbWrapper">
+                    <p>Title: {posted_title}</p>
+                    <p>https://ddownload.com/example</p>
+                  </div>
+                </article>
+                """
+                with patch(
+                    "quasarr.search.sources.dl._fetch_thread_page",
+                    return_value=FakeResponse(
+                        html, "https://www.source.invalid/thread.1/"
+                    ),
+                ):
+                    release = _date_release_from_thread(
+                        FakeSharedState(),
+                        "https://www.source.invalid/thread.1/",
+                        search_string,
+                        episode_date,
+                    )
+
+                self.assertEqual(expected_title, release["title"])
 
     def test_matches_compact_ct_style_spelling(self):
         current_year = datetime.now().year

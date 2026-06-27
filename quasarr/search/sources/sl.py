@@ -177,6 +177,7 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
+        episode_date=None,
     ) -> list[SearchRelease]:
         releases = []
 
@@ -271,7 +272,12 @@ class Source(AbstractSearchSource):
                             title = a.get_text(strip=True)
 
                             if not is_valid_release(
-                                title, search_category, search_string, season, episode
+                                title,
+                                search_category,
+                                search_string,
+                                season,
+                                episode,
+                                episode_date,
                             ):
                                 continue
 

@@ -168,6 +168,7 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
+        episode_date=None,
     ) -> list[SearchRelease]:
         """
         Search using internal API.
@@ -301,7 +302,12 @@ class Source(AbstractSearchSource):
                         title = title.replace(" ", ".")
 
                         if is_valid_release(
-                            title, search_category, search_string, season, episode
+                            title,
+                            search_category,
+                            search_string,
+                            season,
+                            episode,
+                            episode_date,
                         ):
                             # Skip if we've already seen this exact title
                             if title in seen_titles:
@@ -364,6 +370,7 @@ class Source(AbstractSearchSource):
                                     search_string,
                                     season,
                                     episode,
+                                    episode_date,
                                 ):
                                     continue
 

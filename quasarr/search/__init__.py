@@ -44,6 +44,7 @@ def get_search_results(
         get_search_behavior_category,
         get_search_cache_owner_category,
         get_search_capability_category,
+        parse_episode_date,
         release_matches_search_category,
     )
 
@@ -55,15 +56,7 @@ def get_search_results(
     if imdb_id:
         get_imdb_metadata(imdb_id)
 
-    episode_year = None
-    episode_month = None
-    episode_day = None
-    if episode and "/" in str(episode):
-        episode_date_raw = str(episode).split("/")
-        if len(episode_date_raw) == 2:
-            episode_year = season
-            episode_month = episode_date_raw[0]
-            episode_day = episode_date_raw[1]
+    episode_date = parse_episode_date(season, episode)
 
     # Determine search category if not provided
     if not search_category:
@@ -116,10 +109,8 @@ def get_search_results(
             stype += f" <g>S{season}</g>"
         if episode:
             stype += f"{'' if season else ' '}<e>E{episode}</e>"
-        if episode_year:
-            stype += (
-                f" <g>{episode_year}</g>-<e>{episode_month}</e>-<y>{episode_day}</y>"
-            )
+        if episode_date:
+            stype += f" <g>{episode_date:%Y}</g>-<e>{episode_date:%m}</e>-<y>{episode_date:%d}</y>"
 
         if base_search_category in [SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS]:
             args = (shared_state, start_time, behavior_search_category)
@@ -156,18 +147,12 @@ def get_search_results(
                     "episode": episode,
                 }
 
-                if episode_year:
+                if episode_date:
                     if not source.supports_date_numbering:
                         source_logger.trace("Search with date unsupported")
                         continue
 
-                    kwargs.update(
-                        {
-                            "episode_year": episode_year,
-                            "episode_month": episode_month,
-                            "episode_day": episode_day,
-                        }
-                    )
+                    kwargs["episode_date"] = episode_date
 
                 search_executor.add(
                     source,

@@ -32,7 +32,7 @@ class AbstractSearchSource(ABC):
 
     @property
     def supports_date_numbering(self) -> bool:
-        return False
+        return True
 
     @property
     @abstractmethod
@@ -75,9 +75,7 @@ class AbstractSearchSource(ABC):
         search_string: str = "",
         season: int = None,
         episode: int = None,
-        episode_year: int = None,
-        episode_month: int = None,
-        episode_day: int = None,
+        episode_date=None,
     ) -> list[SearchRelease]:
         pass
 

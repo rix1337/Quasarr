@@ -149,6 +149,7 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
+        episode_date=None,
     ) -> list[SearchRelease]:
         """Search HS for releases by IMDb ID"""
         releases = []
@@ -183,6 +184,7 @@ class Source(AbstractSearchSource):
                 search_string,
                 season,
                 episode,
+                episode_date,
             )
 
         except Exception as e:
@@ -207,6 +209,7 @@ class Source(AbstractSearchSource):
         search_string,
         season,
         episode,
+        episode_date,
     ):
         """Parse search results page and extract releases with filecrypt links.
 
@@ -290,7 +293,12 @@ class Source(AbstractSearchSource):
                 for title in unique_episodes:
                     # Validate release against search criteria
                     if not is_valid_release(
-                        title, base_search_category, search_string, season, episode
+                        title,
+                        base_search_category,
+                        search_string,
+                        season,
+                        episode,
+                        episode_date,
                     ):
                         continue
 
@@ -328,7 +336,12 @@ class Source(AbstractSearchSource):
                 # Also add the main title (season pack) with full size - if not duplicate
                 if main_title.lower() not in seen:
                     if is_valid_release(
-                        main_title, base_search_category, search_string, season, episode
+                        main_title,
+                        base_search_category,
+                        search_string,
+                        season,
+                        episode,
+                        episode_date,
                     ):
                         link = generate_download_link(
                             shared_state,

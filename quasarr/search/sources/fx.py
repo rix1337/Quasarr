@@ -159,6 +159,7 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
+        episode_date=None,
     ) -> list[SearchRelease]:
         releases = []
         fx = shared_state.values["config"]("Hostnames").get(self.initials)
@@ -228,7 +229,12 @@ class Source(AbstractSearchSource):
                             title = sanitize_title(title.text)
 
                             if not is_valid_release(
-                                title, search_category, search_string, season, episode
+                                title,
+                                search_category,
+                                search_string,
+                                season,
+                                episode,
+                                episode_date,
                             ):
                                 continue
 

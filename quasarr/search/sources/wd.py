@@ -132,6 +132,7 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
+        episode_date=None,
     ) -> list[SearchRelease]:
         releases = []
         wd = shared_state.values["config"]("Hostnames").get(self.initials)
@@ -196,6 +197,7 @@ class Source(AbstractSearchSource):
                 search_string=search_string,
                 season=season,
                 episode=episode,
+                episode_date=episode_date,
                 imdb_id=imdb_id,
             )
         except Exception as e:
@@ -220,6 +222,7 @@ class Source(AbstractSearchSource):
         search_string=None,
         season=None,
         episode=None,
+        episode_date=None,
         imdb_id=None,
     ):
         """
@@ -261,7 +264,12 @@ class Source(AbstractSearchSource):
                 # search context contains non-video releases (ebooks, games, etc.)
                 if is_search:
                     if not is_valid_release(
-                        title, search_category, search_string, season, episode
+                        title,
+                        search_category,
+                        search_string,
+                        season,
+                        episode,
+                        episode_date,
                     ):
                         continue
 

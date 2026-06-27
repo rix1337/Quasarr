@@ -51,6 +51,7 @@ class Source(AbstractSearchSource):
     language = "fr"
     supports_imdb = True
     supports_phrase = False
+    supports_date_numbering = False
     supported_categories = [SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS]
     # The movie feed reads Radarr and the show feed reads Sonarr (ID search
     # needs neither). Setup prompts remain source-wide, but feed() degrades

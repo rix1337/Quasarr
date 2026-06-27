@@ -155,6 +155,7 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
+        episode_date=None,
     ) -> list[SearchRelease]:
         """
         Search using internal API.
@@ -212,7 +213,12 @@ class Source(AbstractSearchSource):
                     title = item["name"]
                     if title:
                         if not is_valid_release(
-                            title, search_category, search_string, season, episode
+                            title,
+                            search_category,
+                            search_string,
+                            season,
+                            episode,
+                            episode_date,
                         ):
                             continue
 

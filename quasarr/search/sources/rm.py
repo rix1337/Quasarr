@@ -98,6 +98,7 @@ class Source(AbstractSearchSource):
         search_string: str = "",
         season: int = None,
         episode: int = None,
+        episode_date=None,
     ) -> list[SearchRelease]:
         releases = []
         match_search_string = search_string
@@ -141,6 +142,7 @@ class Source(AbstractSearchSource):
                 imdb_id=imdb_id,
                 season=season,
                 episode=episode,
+                episode_date=episode_date,
             )
         except Exception as e:
             warn(f"Error loading search: {e}")
@@ -296,8 +298,19 @@ def _matches_requested_release(
     search_string,
     season=None,
     episode=None,
+    episode_date=None,
 ):
     base_search_category = get_base_search_category_id(search_category)
+    if episode_date is not None:
+        return is_valid_release(
+            title,
+            search_category,
+            search_string,
+            season,
+            episode,
+            episode_date,
+        )
+
     if base_search_category != SEARCH_CAT_SHOWS:
         return is_valid_release(title, search_category, search_string, season, episode)
 
@@ -345,6 +358,7 @@ def _build_search_results(
     imdb_id,
     season=None,
     episode=None,
+    episode_date=None,
     is_feed=False,
 ):
     base_url = _get_base_url(shared_state)
@@ -370,6 +384,7 @@ def _build_search_results(
                 search_string,
                 season,
                 episode,
+                episode_date,
             ):
                 continue
 
