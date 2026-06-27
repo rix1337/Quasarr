@@ -427,7 +427,7 @@ def hostname_form_html(shared_state, message, show_skip_management=False):
 <div class="url-import-section">
     <h3>📥 Import from URL</h3>
     <div class="url-import-row">
-        <input type="url" id="hostnamesUrl" placeholder="https://quasarr-host.name/ini?token=123..." value="{stored_url}">
+        <input type="url" id="hostnamesUrl" placeholder="https://quasarr-hostnames.pages.dev/ini?token=123..." value="{stored_url}">
         <button type="button" class="btn-secondary" id="importBtn" onclick="importHostnames()">Import</button>
     </div>
     <div id="importStatus" class="import-status"></div>

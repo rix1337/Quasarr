@@ -34,7 +34,7 @@ installed in your browser.
 > ⚠️ Quasarr requires at least one valid hostname to start. It does not provide or endorse any specific sources, but
 > community-maintained lists are available:
 
-🔗 **[https://quasarr-host.name](https://quasarr-host.name)** — community guide for finding hostnames
+🔗 **[https://quasarr-hostnames.pages.dev](https://quasarr-hostnames.pages.dev)** — community guide for finding hostnames
 
 📋 Alternatively, browse community suggestions via [pastebin search](https://pastebin.com/search?q=hostnames+quasarr) (
 login required).
