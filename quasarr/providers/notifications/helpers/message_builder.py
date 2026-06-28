@@ -90,8 +90,11 @@ def build_notification_message(
     if notification_type == NotificationType.UNPROTECTED:
         description = "No CAPTCHA required. Links were added directly!"
     elif notification_type == NotificationType.SOLVED:
-        description = "CAPTCHA solved by SponsorsHelper!"
-        entries.extend(_build_solved_entries(details))
+        if isinstance(details, dict) and details.get("method") == "manual":
+            description = "CAPTCHA solved manually!"
+        else:
+            description = "CAPTCHA solved by SponsorsHelper!"
+            entries.extend(_build_solved_entries(details))
     elif notification_type == NotificationType.FAILED:
         description = "Package marked as failed."
     elif notification_type == NotificationType.DISABLED:

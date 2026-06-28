@@ -12,7 +12,7 @@ from quasarr.downloads import fail, submit_final_download_urls
 from quasarr.providers import shared_state
 from quasarr.providers.auth import require_api_key
 from quasarr.providers.log import info, warn
-from quasarr.providers.notifications import send_notification
+from quasarr.providers.notifications import update_release_notification
 from quasarr.providers.notifications.helpers.notification_types import NotificationType
 from quasarr.providers.statistics import StatsHelper
 from quasarr.storage.categories import (
@@ -132,6 +132,17 @@ def select_helper_package(protected_packages, supported_url_patterns):
 
 
 def setup_sponsors_helper_routes(app):
+    def get_protected_release(package_id):
+        try:
+            raw_data = shared_state.get_db("protected").retrieve(package_id)
+            data = json.loads(raw_data) if raw_data else None
+        except Exception as e:
+            info(
+                f'Error reading protected package "{package_id}" for notification: {e}'
+            )
+            return None
+        return data if isinstance(data, dict) else None
+
     def get_supported_urls_from_request():
         payload = request.json if request.method == "POST" else None
         if isinstance(payload, dict) and "supported_urls" in payload:
@@ -157,6 +168,9 @@ def setup_sponsors_helper_routes(app):
         return default_reason
 
     def mark_helper_package_failed(package_id, title, reason):
+        protected_release = get_protected_release(package_id)
+        if protected_release and protected_release.get("title"):
+            title = protected_release["title"]
         fail(title, package_id, shared_state, reason=reason)
         try:
             shared_state.get_db("protected").delete(package_id)
@@ -164,10 +178,10 @@ def setup_sponsors_helper_routes(app):
             info(
                 f'Error deleting protected package "{package_id}" after helper failure: {e}'
             )
-        send_notification(
+        update_release_notification(
             shared_state,
-            title=title,
-            case=NotificationType.FAILED,
+            protected_release or {"title": title},
+            NotificationType.FAILED,
             details={"reason": reason},
         )
         return {
@@ -287,18 +301,13 @@ def setup_sponsors_helper_routes(app):
                     password,
                     package_id,
                     remove_protected=True,
+                    notification_details=notification,
                 )
                 if submit_result["success"]:
                     final_links = submit_result["links"]
                     StatsHelper(shared_state).increment_package_with_links(final_links)
                     StatsHelper(shared_state).increment_captcha_decryptions_automatic()
 
-                    send_notification(
-                        shared_state,
-                        title=title,
-                        case=NotificationType.SOLVED,
-                        details=notification,
-                    )
                     log_msg = f"Download successfully started for <y>{title}</y>"
                     providers = notification.get("solvers")
                     used_providers = []
@@ -320,12 +329,6 @@ def setup_sponsors_helper_routes(app):
                     return f"Downloaded {len(final_links)} download links for {title}"
                 elif submit_result.get("persisted_failure"):
                     StatsHelper(shared_state).increment_failed_decryptions_automatic()
-                    send_notification(
-                        shared_state,
-                        title=title,
-                        case=NotificationType.FAILED,
-                        details={"reason": submit_result["reason"]},
-                    )
                     return {
                         "success": False,
                         "failed": True,
@@ -368,20 +371,21 @@ def setup_sponsors_helper_routes(app):
             title = package_data.get("title")
 
             package_data["disabled"] = True
-
             shared_state.get_db("protected").update_store(
                 package_id, json.dumps(package_data)
             )
-
             info(f"Disabled package {title}")
 
             StatsHelper(shared_state).increment_captcha_decryptions_automatic()
 
-            send_notification(
+            update_release_notification(
                 shared_state,
-                title=title,
-                case=NotificationType.DISABLED,
+                package_data,
+                NotificationType.DISABLED,
                 details={"reason": reason} if reason else None,
+            )
+            shared_state.get_db("protected").update_store(
+                package_id, json.dumps(package_data)
             )
 
             return f"Package <y>{title}</y> disabled"
@@ -429,6 +433,7 @@ def setup_sponsors_helper_routes(app):
 
             # 2. If we have an ID, try to get canonical title from DB (if not provided or to verify)
             if package_id:
+                protected_release = get_protected_release(package_id)
                 try:
                     db_entry = shared_state.get_db("protected").retrieve(package_id)
                     if db_entry:
@@ -470,10 +475,10 @@ def setup_sponsors_helper_routes(app):
                     pass
 
                 if failed:
-                    send_notification(
+                    update_release_notification(
                         shared_state,
-                        title=title,
-                        case=NotificationType.FAILED,
+                        protected_release or {"title": title},
+                        NotificationType.FAILED,
                         details={"reason": reason},
                     )
                     return f'Package <y>{title}</y> with ID <y>{package_id}</y> marked as failed!"'

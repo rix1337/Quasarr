@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import json
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -97,17 +98,24 @@ class SubmitFinalDownloadUrlsTests(unittest.TestCase):
         mock_download_package,
     ):
         protected_db = MagicMock()
+        protected_db.retrieve.return_value = json.dumps(
+            {
+                "title": "Example.Release",
+                "notifications": {"discord": {"message_id": "123"}},
+            }
+        )
         shared_state = MagicMock()
         shared_state.get_db.return_value = protected_db
 
-        result = submit_final_download_urls(
-            shared_state,
-            ["https://rapidgator.net/file/abc"],
-            "Example.Release",
-            "",
-            "Quasarr_tv_deadbeefdeadbeefdeadbeefdeadbeef",
-            remove_protected=True,
-        )
+        with patch("quasarr.downloads.update_release_notification") as mock_update:
+            result = submit_final_download_urls(
+                shared_state,
+                ["https://rapidgator.net/file/abc"],
+                "Example.Release",
+                "",
+                "Quasarr_tv_deadbeefdeadbeefdeadbeefdeadbeef",
+                remove_protected=True,
+            )
 
         self.assertFalse(result["success"])
         self.assertTrue(result["persisted_failure"])
@@ -116,6 +124,8 @@ class SubmitFinalDownloadUrlsTests(unittest.TestCase):
         )
         mock_fail.assert_called_once()
         mock_download_package.assert_not_called()
+        self.assertEqual("failed", mock_update.call_args.args[2].value)
+        self.assertIn("reason", mock_update.call_args.kwargs["details"])
 
     @patch("quasarr.downloads.download_package", return_value=True)
     @patch(
@@ -129,23 +139,36 @@ class SubmitFinalDownloadUrlsTests(unittest.TestCase):
         mock_download_package,
     ):
         protected_db = MagicMock()
+        protected_db.retrieve.return_value = json.dumps(
+            {
+                "title": "Example.Release",
+                "notifications": {"discord": {"message_id": "123"}},
+            }
+        )
         shared_state = MagicMock()
         shared_state.get_db.return_value = protected_db
 
-        result = submit_final_download_urls(
-            shared_state,
-            ["https://mirror.ddownload.com/file/def"],
-            "Example.Release",
-            "",
-            "Quasarr_tv_deadbeefdeadbeefdeadbeefdeadbeef",
-            remove_protected=True,
-        )
+        with patch("quasarr.downloads.update_release_notification") as mock_update:
+            result = submit_final_download_urls(
+                shared_state,
+                ["https://mirror.ddownload.com/file/def"],
+                "Example.Release",
+                "",
+                "Quasarr_tv_deadbeefdeadbeefdeadbeefdeadbeef",
+                remove_protected=True,
+                notification_details={"method": "manual"},
+            )
 
         self.assertTrue(result["success"])
         protected_db.delete.assert_called_once_with(
             "Quasarr_tv_deadbeefdeadbeefdeadbeefdeadbeef"
         )
         mock_download_package.assert_called_once()
+        self.assertEqual("solved", mock_update.call_args.args[2].value)
+        self.assertEqual(
+            {"method": "manual"},
+            mock_update.call_args.kwargs["details"],
+        )
 
 
 if __name__ == "__main__":

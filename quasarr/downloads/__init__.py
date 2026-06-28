@@ -16,7 +16,11 @@ from quasarr.downloads.packages import get_packages
 from quasarr.downloads.sources import get_sources as get_download_sources
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.log import info, warn
-from quasarr.providers.notifications import send_notification
+from quasarr.providers.notifications import (
+    send_notification,
+    send_tracked_notification,
+    update_release_notification,
+)
 from quasarr.providers.notifications.helpers.notification_types import NotificationType
 from quasarr.providers.statistics import StatsHelper
 from quasarr.providers.utils import (
@@ -138,6 +142,16 @@ def _persist_failed_package(
     return {"success": False, "persisted_failure": True, "reason": reason}
 
 
+def _get_protected_release(shared_state, package_id):
+    try:
+        raw_data = shared_state.get_db("protected").retrieve(package_id)
+        data = json.loads(raw_data) if raw_data else None
+    except Exception as e:
+        info(f'Error reading protected package "{package_id}" for notification: {e}')
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def _delete_protected_package(shared_state, package_id):
     try:
         shared_state.get_db("protected").delete(package_id)
@@ -151,11 +165,22 @@ def _format_mirror_token_list(tokens):
 
 
 def submit_final_download_urls(
-    shared_state, urls, title, password, package_id, remove_protected=False
+    shared_state,
+    urls,
+    title,
+    password,
+    package_id,
+    remove_protected=False,
+    notification_details=None,
 ):
     """
     Final mirror whitelist check before sending direct HTTP links to JDownloader.
     """
+    protected_release = None
+    if remove_protected:
+        protected_release = _get_protected_release(shared_state, package_id) or {
+            "title": title
+        }
     category = get_download_category_from_package_id(package_id)
     mirrors = get_download_category_mirrors(category, lowercase=True)
     filtered = filter_final_download_urls(urls, mirrors)
@@ -176,18 +201,33 @@ def submit_final_download_urls(
             f"Allowed mirrors: {_format_mirror_token_list(filtered['allowed_tokens'])}. "
             f"Received mirrors: {_format_mirror_token_list({item['token'] for item in dropped})}."
         )
-        return _persist_failed_package(
+        result = _persist_failed_package(
             shared_state,
             title,
             package_id,
             reason,
             remove_protected=remove_protected,
         )
+        if protected_release:
+            update_release_notification(
+                shared_state,
+                protected_release,
+                NotificationType.FAILED,
+                details={"reason": reason},
+            )
+        return result
 
     info(f"Sending {len(final_urls)} direct download links for {title}")
     if download_package(final_urls, title, password, package_id, shared_state):
         if remove_protected:
             _delete_protected_package(shared_state, package_id)
+            if protected_release:
+                update_release_notification(
+                    shared_state,
+                    protected_release,
+                    NotificationType.SOLVED,
+                    details=notification_details,
+                )
         return {"success": True, "links": final_urls}
     return {
         "success": False,
@@ -228,7 +268,15 @@ def handle_auto_decrypt_links(shared_state, links, title, password, package_id):
 
 
 def store_protected_links(
-    shared_state, links, title, password, package_id, size_mb=None, original_url=None
+    shared_state,
+    links,
+    title,
+    password,
+    package_id,
+    size_mb=None,
+    original_url=None,
+    imdb_id=None,
+    notifications=None,
 ):
     """Store protected links for CAPTCHA UI."""
     blob_data = {
@@ -239,6 +287,10 @@ def store_protected_links(
     }
     if original_url:
         blob_data["original_url"] = original_url
+    if imdb_id:
+        blob_data["imdb_id"] = imdb_id
+    if notifications:
+        blob_data["notifications"] = notifications
 
     shared_state.values["database"]("protected").update_store(
         package_id, json.dumps(blob_data)
@@ -354,7 +406,7 @@ def process_links(
     # PRIORITY 3: Protected (filecrypt, tolink, keeplinks, junkies)
     if classified["protected"]:
         info(f"Found <g>{len(classified['protected'])}</g> protected links for {title}")
-        send_notification(
+        notification_references = send_tracked_notification(
             shared_state,
             title=title,
             case=NotificationType.CAPTCHA,
@@ -369,6 +421,8 @@ def process_links(
             package_id,
             size_mb=size_mb,
             original_url=source_url,
+            imdb_id=imdb_id,
+            notifications=notification_references,
         )
         return {"success": True, "title": title}
 

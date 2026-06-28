@@ -522,6 +522,14 @@ class ProtectedRedirectDownloadTests(unittest.TestCase):
         patchers,
     ):
         shared_state = _build_shared_state(hostnames)
+        notification_references = {
+            "discord": {
+                "message_id": "message-1",
+                "webhook_fingerprint": "fingerprint",
+                "case": "captcha",
+                "silent": True,
+            }
+        }
 
         with ExitStack() as stack:
             stack.enter_context(patch("quasarr.downloads.mark_hostname_issue"))
@@ -532,7 +540,12 @@ class ProtectedRedirectDownloadTests(unittest.TestCase):
             mock_handle_direct = stack.enter_context(
                 patch("quasarr.downloads.handle_direct_links")
             )
-            stack.enter_context(patch("quasarr.downloads.send_notification"))
+            stack.enter_context(
+                patch(
+                    "quasarr.downloads.send_tracked_notification",
+                    return_value=notification_references,
+                )
+            )
             mock_store_protected = stack.enter_context(
                 patch(
                     "quasarr.downloads.store_protected_links",
@@ -579,6 +592,10 @@ class ProtectedRedirectDownloadTests(unittest.TestCase):
         self.assertNotIn("failed", result)
         mock_handle_direct.assert_not_called()
         mock_store_protected.assert_called_once()
+        self.assertEqual(
+            notification_references,
+            mock_store_protected.call_args.kwargs["notifications"],
+        )
         return mock_store_protected.call_args.args[1]
 
     def test_download_stores_by_protected_url(self):

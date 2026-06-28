@@ -1256,6 +1256,7 @@ def setup_captcha_routes(app):
                 password,
                 package_id,
                 remove_protected=True,
+                notification_details={"method": "manual"},
             )
 
             if submit_result["success"]:
@@ -1649,6 +1650,7 @@ def setup_captcha_routes(app):
                 password,
                 package_id,
                 remove_protected=True,
+                notification_details={"method": "manual"},
             )
             if not submit_result["success"]:
                 raise RuntimeError(
@@ -2272,6 +2274,7 @@ def setup_captcha_routes(app):
                     password,
                     package_id,
                     remove_protected=True,
+                    notification_details={"method": "manual"},
                 )
                 if submit_result["success"]:
                     final_links = submit_result["links"]
@@ -2394,6 +2397,7 @@ def setup_captcha_routes(app):
                         password,
                         package_id,
                         remove_protected=True,
+                        notification_details={"method": "manual"},
                     )
                     if submit_result["success"]:
                         final_links = submit_result["links"]
