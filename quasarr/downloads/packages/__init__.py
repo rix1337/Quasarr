@@ -14,6 +14,7 @@ from quasarr.constants import (
     NOT_DOWNLOADABLE_MARKERS,
     PACKAGE_ID_PATTERN,
 )
+from quasarr.downloads.episode_links import trim_to_requested_episodes
 from quasarr.providers.jd_cache import JDPackageCache
 from quasarr.providers.log import debug, info, trace
 from quasarr.storage.categories import get_download_category_from_package_id
@@ -766,10 +767,21 @@ def get_packages(shared_state, _cache=None, auto_start=True):
             if is_quasarr_package(comment):
                 package_uuid = package.get("uuid")
                 if package_uuid:
-                    package_link_ids = [
-                        link.get("uuid")
+                    package_links = [
+                        link
                         for link in linkgrabber_links
-                        if link.get("packageUUID") == package_uuid and link.get("uuid")
+                        if link.get("packageUUID") == package_uuid
+                    ]
+                    # A single-episode grab can still carry a whole season's
+                    # links. File names are known now, so drop the other
+                    # episodes before the package starts; when links were
+                    # removed, start on the next pass so JD's state settles.
+                    if trim_to_requested_episodes(
+                        shared_state, package.get("name"), package_links
+                    ):
+                        break
+                    package_link_ids = [
+                        link.get("uuid") for link in package_links if link.get("uuid")
                     ]
                     if package_link_ids:
                         debug(

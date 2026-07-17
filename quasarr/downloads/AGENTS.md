@@ -7,6 +7,7 @@ Receives a grab request from the SABnzbd-emulating API, picks the matching sourc
 ## Ownership
 
 - `__init__.py` — orchestrator: source selection, link classification, package IDs, the `submit_final_download_urls()` funnel, `fail()` bookkeeping
+- `episode_links.py` — trims a single-episode package down to the requested episode inside the linkgrabber
 - `mirror_filters.py` — canonical mirror-token normalization and the final pre-JDownloader whitelist filter
 - `packages/` — SABnzbd-shaped queue/history aggregation, archive/extraction tracking, auto-start, deletion
 - `sources/` and `linkcrypters/` — see Child DOX Index
@@ -22,6 +23,7 @@ Receives a grab request from the SABnzbd-emulating API, picks the matching sourc
 - Protected-package JSON owns the tracked notification references for that release; no separate notification table exists. `submit_final_download_urls(..., remove_protected=True)` captures this context before deletion, edits the original notification on solved/failed outcomes, and accepts `notification_details` so manual and SponsorsHelper solutions render accurately.
 - `fail()` deliberately returns `{"success": True, "failed": True}` so the *arr client records the grab and can blocklist it.
 - `packages/` auto-start moves exactly ONE Quasarr package per call from linkgrabber to the download list; archive packages are only "finished" when extraction completed; `nzo_id` is the Quasarr package ID read from the JD `comment` field (JD uuid fallback for foreign packages).
+- Single-episode trimming (`episode_links.py`) runs inside that auto-start, right before a package is moved: crypter containers are season-wide, so a single-episode grab can arrive carrying the whole season (paths that read a container as a whole — notably the userscript flow — return every episode, unlike `get_filecrypt_links`, which narrows it via the season/episode parameters it derives from the title). Link URLs carry no file names, so the linkgrabber is the earliest point the mismatch is visible. The JD package name is authoritative (`download_package` sets `packageName` to the release title and passes `overwritePackagizerRules`); when it names a single episode, links whose file name belongs to another episode of that season are removed via `linkgrabber.remove_links(ids, [])` (package_ids MUST stay empty) and the start is deferred to the next pass. Safety invariant: a season-pack name, any unmappable link (no/ambiguous marker, season mismatch, missing uuid), or a plan that would keep or remove everything leaves the package untouched — downloading too much is wasteful, downloading too little breaks the import.
 - Sources call `mark_hostname_issue(initials, "download", msg)` on errors; the orchestrator clears the issue when a source returns usable links.
 
 ### Mirror-Selection Policy
