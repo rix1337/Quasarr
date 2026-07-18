@@ -614,7 +614,13 @@ class FfSfCloudflareTests(unittest.TestCase):
                 redirect_urls.append((url, allow_redirects))
                 return FakeResponse(url, text=challenge, status_code=403)
 
-        def solved_get(shared_state, url, timeout=None, session_id=None):
+        def solved_get(
+            shared_state,
+            url,
+            timeout=None,
+            session_id=None,
+            protect_filecrypt_redirects=False,
+        ):
             if url == release_url:
                 body = release_html
                 final_url = url
@@ -668,6 +674,13 @@ class FfSfCloudflareTests(unittest.TestCase):
             ["shared-download-session"] * 3,
             [call.kwargs["session_id"] for call in flaresolverr_get.call_args_list],
         )
+        self.assertEqual(
+            [False, False, True],
+            [
+                call.kwargs.get("protect_filecrypt_redirects", False)
+                for call in flaresolverr_get.call_args_list
+            ],
+        )
         destroy_session.assert_called_once_with(ANY, "shared-download-session")
 
     def test_sf_download_reuses_page_session_for_protected_redirect(self):
@@ -697,7 +710,13 @@ class FfSfCloudflareTests(unittest.TestCase):
                 redirect_urls.append((url, allow_redirects))
                 return FakeResponse(url, text=challenge, status_code=403)
 
-        def solved_get(shared_state, url, timeout=None, session_id=None):
+        def solved_get(
+            shared_state,
+            url,
+            timeout=None,
+            session_id=None,
+            protect_filecrypt_redirects=False,
+        ):
             if url == release_url:
                 body = release_html
                 final_url = url
@@ -750,6 +769,13 @@ class FfSfCloudflareTests(unittest.TestCase):
         self.assertEqual(
             ["shared-download-session"] * 3,
             [call.kwargs["session_id"] for call in flaresolverr_get.call_args_list],
+        )
+        self.assertEqual(
+            [False, False, True],
+            [
+                call.kwargs.get("protect_filecrypt_redirects", False)
+                for call in flaresolverr_get.call_args_list
+            ],
         )
         destroy_session.assert_called_once_with(ANY, "shared-download-session")
 

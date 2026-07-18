@@ -9,6 +9,7 @@ from quasarr.downloads.sources.by import Source as BySource
 from quasarr.downloads.sources.nk import Source as NkSource
 from quasarr.downloads.sources.sf import Source as SfSource
 from quasarr.downloads.sources.wd import Source as WdSource
+from quasarr.downloads.sources.wd import _resolve_wd_redirect
 
 
 class FakeResponse:
@@ -43,6 +44,34 @@ def _build_shared_state(hostnames):
 
 
 class ProtectedRedirectSourceTests(unittest.TestCase):
+    def test_wd_browser_redirect_enables_filecrypt_protection(self):
+        shared_state = _build_shared_state({"wd": "host-wd.invalid"})
+        response = FakeResponse(
+            url="https://protected.invalid/container/wd-browser",
+            status_code=200,
+        )
+
+        with (
+            patch(
+                "quasarr.downloads.sources.wd.is_flaresolverr_available",
+                return_value=True,
+            ),
+            patch(
+                "quasarr.downloads.sources.wd.flaresolverr_get",
+                return_value=response,
+            ) as flaresolverr_get,
+        ):
+            resolved = _resolve_wd_redirect(
+                shared_state,
+                "https://host-wd.invalid/redirect/browser",
+                session_id="wd-session",
+            )
+
+        self.assertEqual(response.url, resolved)
+        self.assertTrue(
+            flaresolverr_get.call_args.kwargs["protect_filecrypt_redirects"]
+        )
+
     def test_by_yields_protected_url_without_requesting_it(self):
         release_url = "https://host-by.invalid/release-1.html"
         iframe_url = "https://host-by.invalid/frame-1.html"

@@ -15,6 +15,8 @@ from Cryptodome.Cipher import AES
 
 from quasarr.constants import DOWNLOAD_REQUEST_TIMEOUT_SECONDS
 from quasarr.providers.cloudflare import (
+    _DOCUMENT_START_JS_RESULT,
+    _FILECRYPT_DOCUMENT_START_JS,
     ensure_session_cf_bypassed,
     is_cloudflare_challenge,
 )
@@ -23,6 +25,9 @@ from quasarr.providers.log import debug, info
 _FILECRYPT_TLDS = ("cc", "to", "co")
 _FLARESOLVERR_NEXT_URL = "https://github.com/rix1337/flaresolverr-next"
 _FILECRYPT_CIRCLE_CAPTCHA_URL = "https://filecrypt.cc/captcha/circle.php"
+# Includes the 12-second initial page settle plus flaresolverr-next's 100-second
+# trusted-click await budget for an in-page proof-of-work worker.
+_FILECRYPT_POW_REQUEST_TIMEOUT_SECONDS = 120
 
 
 def has_filecrypt_cutcaptcha(html):
@@ -142,17 +147,19 @@ def _flaresolverr_execute_js_get(shared_state, session, url, execute_js, wait=12
         payload = {
             "cmd": "request.get",
             "url": candidate_url,
-            "maxTimeout": DOWNLOAD_REQUEST_TIMEOUT_SECONDS * 1000,
+            "maxTimeout": _FILECRYPT_POW_REQUEST_TIMEOUT_SECONDS * 1000,
             "waitInSeconds": wait,
             "cookies": _cookies_for_target(session, candidate_url),
             "executeJs": execute_js,
+            "documentStartJs": _FILECRYPT_DOCUMENT_START_JS,
+            "trustedClick": True,
         }
 
         response = requests.post(
             flaresolverr_url,
             json=payload,
             headers={"Content-Type": "application/json"},
-            timeout=DOWNLOAD_REQUEST_TIMEOUT_SECONDS + 10,
+            timeout=_FILECRYPT_POW_REQUEST_TIMEOUT_SECONDS + 10,
         )
         response.raise_for_status()
         result = response.json()
@@ -165,6 +172,11 @@ def _flaresolverr_execute_js_get(shared_state, session, url, execute_js, wait=12
             raise RuntimeError(f"flaresolverr-next failed: {message}")
 
         solution = result["solution"]
+        if solution.get("documentStartJsResult") != _DOCUMENT_START_JS_RESULT:
+            raise RuntimeError(
+                "Filecrypt proof-of-work requires flaresolverr-next documentStartJs "
+                f"support. Update flaresolverr-next: {_FLARESOLVERR_NEXT_URL}"
+            )
 
         for cookie in solution.get("cookies", []):
             session.cookies.set(
@@ -201,12 +213,24 @@ def _solve_filecrypt_pow_if_present(shared_state, session, output, headers):
     if (!box) {
         return 'missing';
     }
-    box.dispatchEvent(new MouseEvent('click', {
-        bubbles: false,
-        cancelable: true,
-        view: window
-    }));
-    return 'clicked';
+    const rectangle = box.getBoundingClientRect();
+    window.__FRS_AWAIT = new Promise(resolve => {
+        const observer = new MutationObserver(() => {
+            if (!document.querySelector('#pow-captcha')) {
+                observer.disconnect();
+                resolve('solved');
+            }
+        });
+        observer.observe(document.documentElement, {childList: true, subtree: true});
+        window.setTimeout(() => {
+            observer.disconnect();
+            resolve('clicked');
+        }, 90000);
+    });
+    return JSON.stringify({trustedClick: {
+        x: rectangle.left + rectangle.width / 2,
+        y: rectangle.top + rectangle.height / 2,
+    }});
     """
 
     for _ in range(3):
@@ -231,7 +255,7 @@ def _solve_filecrypt_pow_if_present(shared_state, session, output, headers):
                 "Filecrypt proof-of-work browser click failed: " + execute_result
             )
 
-        if execute_result != "clicked":
+        if execute_result not in ("clicked", "solved"):
             info(f"Filecrypt proof-of-work click was not possible: {execute_result}")
             continue
 

@@ -64,6 +64,7 @@ class FilecryptPowTests(unittest.TestCase):
                 "url": "https://target.invalid/after",
                 "response": "<html></html>",
                 "executeJsResult": "clicked",
+                "documentStartJsResult": "installed",
                 "userAgent": "new-agent",
                 "cookies": [
                     {
@@ -95,6 +96,12 @@ class FilecryptPowTests(unittest.TestCase):
         self.assertEqual("request.get", request_payload["cmd"])
         self.assertEqual("return 'clicked';", request_payload["executeJs"])
         self.assertEqual("sessionid", request_payload["cookies"][0]["name"])
+        self.assertEqual(
+            filecrypt._FILECRYPT_DOCUMENT_START_JS,
+            request_payload["documentStartJs"],
+        )
+        self.assertNotIn("window.open = function", request_payload["documentStartJs"])
+        self.assertTrue(request_payload["trustedClick"])
 
     def test_solve_pow_returns_refreshed_page_after_click(self):
         shared_state = SharedState()
@@ -117,7 +124,7 @@ class FilecryptPowTests(unittest.TestCase):
                 "html": "",
                 "execute_js_result": "clicked",
             },
-        ):
+        ) as execute_js_get:
             result = filecrypt._solve_filecrypt_pow_if_present(
                 shared_state,
                 session,
@@ -126,6 +133,7 @@ class FilecryptPowTests(unittest.TestCase):
             )
 
         self.assertIs(refreshed, result)
+        self.assertIn("}, 90000);", execute_js_get.call_args.args[3])
 
     def test_no_token_returns_captcha_required_after_pow_reveals_cutcaptcha(self):
         shared_state = SharedState()

@@ -169,6 +169,7 @@ def _resolve_ff_redirect(url, user_agent, host, cf_session):
                     timeout=timeout,
                     headers=headers,
                 ),
+                protect_filecrypt_redirects=True,
             )
         except Exception as e:
             warn(f"Error fetching redirected URL for {url}: {e}")

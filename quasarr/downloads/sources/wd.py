@@ -201,6 +201,7 @@ def _resolve_wd_redirect(shared_state, url, session_id=None):
                 url,
                 timeout=DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
                 session_id=session_id,
+                protect_filecrypt_redirects=True,
             )
             if r.url.endswith("/404.html"):
                 return None

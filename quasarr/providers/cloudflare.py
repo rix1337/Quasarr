@@ -15,12 +15,47 @@ from quasarr.constants import (
     DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
     SESSION_REQUEST_TIMEOUT_SECONDS,
 )
+from quasarr.providers import obfuscated
 from quasarr.providers.log import debug
 from quasarr.providers.utils import is_flaresolverr_available
 
 _CLOUDFLARE_GATE_TTL_SECONDS = 24 * 60 * 60
 _cloudflare_gate_expires_at = {}
 _cloudflare_gate_lock = threading.Lock()
+
+# This runs through FlareSolverr's document-start CDP hook. Its private source
+# stays aligned with FileCrypt Quasarr Helper and is shipped only obfuscated.
+_FILECRYPT_DOCUMENT_START_JS = obfuscated.filecrypt_document_start_custom_js()
+_DOCUMENT_START_JS_RESULT = "installed"
+
+
+def _add_filecrypt_document_start_blocker(payload):
+    """Protect FileCrypt pages reached by any FlareSolverr navigation."""
+    payload["documentStartJs"] = _FILECRYPT_DOCUMENT_START_JS
+    return payload
+
+
+def _require_document_start_blocker(solution):
+    """Fail closed when FlareSolverr did not install the pre-navigation blocker."""
+    if solution.get("documentStartJsResult") != _DOCUMENT_START_JS_RESULT:
+        raise RuntimeError(
+            "FlareSolverr must support documentStartJs for protected browser "
+            "navigation. Update to the current flaresolverr-next image."
+        )
+
+
+def _is_filecrypt_url(url):
+    hostname = (urllib.parse.urlparse(url).hostname or "").casefold()
+    return any(
+        hostname == domain or hostname.endswith(f".{domain}")
+        for domain in ("filecrypt.cc", "filecrypt.co", "filecrypt.to")
+    )
+
+
+def _protect_filecrypt_navigation(payload, required):
+    if required or _is_filecrypt_url(payload["url"]):
+        return _add_filecrypt_document_start_blocker(payload), True
+    return payload, False
 
 
 def _cloudflare_gate_key(url):
@@ -99,7 +134,14 @@ class LazyFlareSolverrSession:
         self.shared_state = shared_state
         self.session_id = None
 
-    def get(self, url, headers, timeout, request_get=requests.get):
+    def get(
+        self,
+        url,
+        headers,
+        timeout,
+        request_get=requests.get,
+        protect_filecrypt_redirects=False,
+    ):
         if not _is_cloudflare_gated(url):
             response = request_get(url, headers=headers, timeout=timeout)
             if response.status_code != 403 and not is_cloudflare_challenge(
@@ -132,12 +174,13 @@ class LazyFlareSolverrSession:
         # caller's HTTP budget for the initial request, but never give an
         # actual FlareSolverr solve less than the existing session budget.
         solver_timeout = max(timeout, SESSION_REQUEST_TIMEOUT_SECONDS)
-        response = flaresolverr_get(
-            self.shared_state,
-            url,
-            timeout=solver_timeout,
-            session_id=self.session_id,
-        )
+        solver_kwargs = {
+            "timeout": solver_timeout,
+            "session_id": self.session_id,
+        }
+        if protect_filecrypt_redirects:
+            solver_kwargs["protect_filecrypt_redirects"] = True
+        response = flaresolverr_get(self.shared_state, url, **solver_kwargs)
         if (
             response is None
             or response.status_code == 403
@@ -179,11 +222,14 @@ def update_session_via_flaresolverr(
         info("Cannot proceed without FlareSolverr. Please configure it in the web UI!")
         return False
 
-    fs_payload = {
-        "cmd": "request.get",
-        "url": target_url,
-        "maxTimeout": timeout * 1000,
-    }
+    fs_payload, require_blocker = _protect_filecrypt_navigation(
+        {
+            "cmd": "request.get",
+            "url": target_url,
+            "maxTimeout": timeout * 1000,
+        },
+        required=False,
+    )
 
     # Send the JSON request to FlareSolverr
     fs_headers = {"Content-Type": "application/json"}
@@ -212,6 +258,8 @@ def update_session_via_flaresolverr(
         )
 
     solution = fs_json["solution"]
+    if require_blocker:
+        _require_document_start_blocker(solution)
 
     # Replace our requests.Session cookies with whatever FlareSolverr solved
     sess.cookies.clear()
@@ -322,6 +370,7 @@ def flaresolverr_get(
     url,
     timeout=None,
     session_id=None,
+    protect_filecrypt_redirects=False,
 ):
     """
     Core function for performing a GET request via FlareSolverr only.
@@ -342,7 +391,10 @@ def flaresolverr_get(
     if not flaresolverr_url:
         raise RuntimeError("FlareSolverr URL not configured in shared_state.")
 
-    payload = {"cmd": "request.get", "url": url, "maxTimeout": timeout * 1000}
+    payload, require_blocker = _protect_filecrypt_navigation(
+        {"cmd": "request.get", "url": url, "maxTimeout": timeout * 1000},
+        required=protect_filecrypt_redirects,
+    )
     if session_id:
         payload["session"] = session_id
 
@@ -363,6 +415,8 @@ def flaresolverr_get(
         raise RuntimeError(f"FlareSolverr returned error: {data.get('message')}")
 
     solution = data.get("solution", {})
+    if require_blocker:
+        _require_document_start_blocker(solution)
     html = solution.get("response", "")
     status_code = solution.get("status", 200)
     url = solution.get("url", url)
@@ -387,6 +441,7 @@ def flaresolverr_post(
     headers=None,
     timeout=None,
     session_id=None,
+    protect_filecrypt_redirects=False,
 ):
     """
     Core function for performing a POST request via FlareSolverr only.
@@ -408,12 +463,15 @@ def flaresolverr_post(
     else:
         post_data = data or ""
 
-    payload = {
-        "cmd": "request.post",
-        "url": url,
-        "postData": post_data,
-        "maxTimeout": timeout * 1000,
-    }
+    payload, require_blocker = _protect_filecrypt_navigation(
+        {
+            "cmd": "request.post",
+            "url": url,
+            "postData": post_data,
+            "maxTimeout": timeout * 1000,
+        },
+        required=protect_filecrypt_redirects,
+    )
     if session_id:
         payload["session"] = session_id
 
@@ -437,6 +495,8 @@ def flaresolverr_post(
         raise RuntimeError(f"FlareSolverr returned error: {data.get('message')}")
 
     solution = data.get("solution", {})
+    if require_blocker:
+        _require_document_start_blocker(solution)
     html = solution.get("response", "")
     status_code = solution.get("status", 200)
     url = solution.get("url", url)

@@ -6,8 +6,12 @@ from threading import Barrier
 from unittest.mock import MagicMock, patch
 
 from quasarr.providers.cloudflare import (
+    _FILECRYPT_DOCUMENT_START_JS,
     LazyFlareSolverrSession,
     _clear_cloudflare_gate_cache,
+    _is_filecrypt_url,
+    flaresolverr_get,
+    flaresolverr_post,
 )
 
 
@@ -21,7 +25,10 @@ class FakeResponse:
 
 def _build_shared_state():
     shared_state = MagicMock()
-    shared_state.values = {"user_agent": "UnitTestAgent/1.0"}
+    shared_state.values = {
+        "config": lambda section: {"url": "http://solver.invalid/v1"},
+        "user_agent": "UnitTestAgent/1.0",
+    }
     return shared_state
 
 
@@ -31,6 +38,11 @@ class CloudflareGateCacheTests(unittest.TestCase):
 
     def tearDown(self):
         _clear_cloudflare_gate_cache()
+
+    def test_filecrypt_url_detection_includes_supported_subdomains(self):
+        self.assertTrue(_is_filecrypt_url("https://www.filecrypt.cc/container"))
+        self.assertTrue(_is_filecrypt_url("https://filecrypt.co/container"))
+        self.assertFalse(_is_filecrypt_url("https://not-filecrypt.invalid/container"))
 
     def test_cached_host_skips_plain_until_ttl_expires(self):
         url = "https://cache-source.invalid/page"
@@ -226,6 +238,92 @@ class CloudflareGateCacheTests(unittest.TestCase):
                 session.close()
 
         self.assertEqual(30, flaresolverr_get.call_args.kwargs["timeout"])
+
+    def test_flaresolverr_navigation_installs_filecrypt_blocker_at_document_start(self):
+        shared_state = _build_shared_state()
+        response = MagicMock()
+        response.json.return_value = {
+            "status": "ok",
+            "solution": {
+                "response": "",
+                "headers": [],
+                "documentStartJsResult": "installed",
+            },
+        }
+
+        with (
+            patch(
+                "quasarr.providers.cloudflare.is_flaresolverr_available",
+                return_value=True,
+            ),
+            patch(
+                "quasarr.providers.cloudflare.requests.post", return_value=response
+            ) as post,
+        ):
+            flaresolverr_get(
+                shared_state,
+                "https://source.invalid/redirect",
+                protect_filecrypt_redirects=True,
+            )
+            flaresolverr_post(
+                shared_state,
+                "https://source.invalid/form",
+                data={"value": "test"},
+                protect_filecrypt_redirects=True,
+            )
+
+        for call in post.call_args_list:
+            blocker = call.kwargs["json"]["documentStartJs"]
+            self.assertEqual(_FILECRYPT_DOCUMENT_START_JS, blocker)
+            self.assertNotIn("window.open = function", blocker)
+            self.assertNotIn("EventTarget.prototype.addEventListener", blocker)
+
+    def test_flaresolverr_navigation_rejects_solver_without_document_start_support(
+        self,
+    ):
+        shared_state = _build_shared_state()
+        response = MagicMock()
+        response.json.return_value = {
+            "status": "ok",
+            "solution": {"response": "", "headers": []},
+        }
+
+        with (
+            patch(
+                "quasarr.providers.cloudflare.is_flaresolverr_available",
+                return_value=True,
+            ),
+            patch("quasarr.providers.cloudflare.requests.post", return_value=response),
+            self.assertRaisesRegex(RuntimeError, "documentStartJs"),
+        ):
+            flaresolverr_get(
+                shared_state,
+                "https://source.invalid/redirect",
+                protect_filecrypt_redirects=True,
+            )
+
+    def test_regular_flaresolverr_navigation_does_not_require_document_start_support(
+        self,
+    ):
+        shared_state = _build_shared_state()
+        response = MagicMock()
+        response.json.return_value = {
+            "status": "ok",
+            "solution": {"response": "", "headers": []},
+        }
+
+        with (
+            patch(
+                "quasarr.providers.cloudflare.is_flaresolverr_available",
+                return_value=True,
+            ),
+            patch(
+                "quasarr.providers.cloudflare.requests.post", return_value=response
+            ) as post,
+        ):
+            flaresolverr_get(shared_state, "https://source.invalid/page")
+
+        self.assertNotIn("documentStartJs", post.call_args.kwargs["json"])
 
     def test_concurrent_detection_logs_once_and_leaves_host_gated(self):
         url = "https://threaded-source.invalid/page"
