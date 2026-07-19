@@ -278,6 +278,85 @@ class FfSourceTests(unittest.TestCase):
         create_session.assert_not_called()
         flaresolverr_get.assert_not_called()
 
+    def test_download_re_resolves_when_ad_hijacks_the_redirect(self):
+        # First resolution is hijacked to an aliexpress affiliate page; the retry
+        # reaches the real hoster and that is what gets returned (Quasarr#419).
+        host = "host-ff.invalid"
+        external_url = f"https://{host}/external/abc123"
+        ad_url = "https://www.aliexpress.com/p/popular-landing/aliexpress.html?x=1"
+        direct_url = "https://rapidgator.net/file/example"
+        locations = [ad_url, direct_url]
+
+        class FakeSession:
+            def get(self, url, allow_redirects=False, timeout=None, headers=None):
+                if url == external_url:
+                    return FakeResponse(
+                        url, status_code=302, headers={"Location": locations.pop(0)}
+                    )
+                raise AssertionError(f"Unexpected URL requested: {url}")
+
+        with (
+            patch(
+                "quasarr.downloads.sources.ff.requests.Session",
+                return_value=FakeSession(),
+            ),
+            patch("quasarr.providers.cloudflare.is_flaresolverr_available"),
+            patch("quasarr.providers.cloudflare.flaresolverr_create_session"),
+            patch("quasarr.providers.cloudflare.flaresolverr_get"),
+            patch(
+                "quasarr.downloads.sources.ff.detect_crypter_type", return_value=None
+            ),
+        ):
+            result = FfDownloadSource().get_download_links(
+                _build_shared_state({"ff": host}),
+                external_url,
+                [],
+                "Example.Movie.2026.1080p.WEB-GROUP",
+                None,
+            )
+
+        self.assertEqual(
+            {"links": [[direct_url, "rapidgator"]], "imdb_id": None},
+            result,
+        )
+
+    def test_download_never_returns_ad_domain_when_hijack_persists(self):
+        # Every attempt is hijacked to the ad host: no link is returned (the ad URL
+        # must never reach the mirror whitelist / JDownloader).
+        host = "host-ff.invalid"
+        external_url = f"https://{host}/external/abc123"
+        ad_url = "https://www.aliexpress.com/p/popular-landing/aliexpress.html"
+
+        class FakeSession:
+            def get(self, url, allow_redirects=False, timeout=None, headers=None):
+                if url == external_url:
+                    return FakeResponse(
+                        url, status_code=302, headers={"Location": ad_url}
+                    )
+                raise AssertionError(f"Unexpected URL requested: {url}")
+
+        with (
+            patch(
+                "quasarr.downloads.sources.ff.requests.Session",
+                return_value=FakeSession(),
+            ),
+            patch("quasarr.providers.cloudflare.is_flaresolverr_available"),
+            patch("quasarr.providers.cloudflare.flaresolverr_create_session"),
+            patch("quasarr.providers.cloudflare.flaresolverr_get"),
+            patch(
+                "quasarr.downloads.sources.ff.detect_crypter_type", return_value=None
+            ),
+        ):
+            result = FfDownloadSource().get_download_links(
+                _build_shared_state({"ff": host}),
+                external_url,
+                [],
+                "Example.Movie.2026.1080p.WEB-GROUP",
+                None,
+            )
+
+        self.assertEqual({"links": [], "imdb_id": None}, result)
+
 
 class FfSfCloudflareTests(unittest.TestCase):
     source_cases = (

@@ -143,7 +143,51 @@ def _select_release_link(base_url, entry, mirrors):
     return links[0]
 
 
+# Shopping/affiliate hosts that filmfans' hostile ad redirects to instead of the
+# real file hoster (Quasarr#419: the /external redirect yields an aliexpress landing
+# page, which then reaches the mirror whitelist / JDownloader as the "download").
+# Kept narrow so a genuine hoster or crypter redirect is never dropped; matched on a
+# domain-label boundary so it cannot false-positive on a hoster that merely contains
+# the text.
+_AD_REDIRECT_HOST_MARKERS = ("aliexpress.", "temu.", "banggood.")
+
+# Re-resolutions when the /external redirect is hijacked to an ad host. The ad is
+# intermittent, so a couple of fresh attempts usually reach the real hoster; a
+# deterministic hijack simply fails cleanly instead of yielding the ad link.
+_FF_RESOLVE_ATTEMPTS = 3
+
+
+def _is_ad_redirect_host(url):
+    """True when ``url`` points at a known ad/affiliate host, not a file hoster."""
+    host = (urlparse(url).netloc or "").lower()
+    if not host:
+        return False
+    return any(marker in host + "." for marker in _AD_REDIRECT_HOST_MARKERS)
+
+
 def _resolve_ff_redirect(url, user_agent, host, cf_session):
+    for attempt in range(1, _FF_RESOLVE_ATTEMPTS + 1):
+        outcome, resolved = _resolve_ff_redirect_once(url, user_agent, host, cf_session)
+        if outcome == "ok":
+            return resolved
+        if outcome != "hijacked":
+            return None
+        warn(
+            "FF link resolved to a hostile-ad domain instead of a file hoster; "
+            f"re-resolving ({attempt}/{_FF_RESOLVE_ATTEMPTS}): <d>{url}</d>"
+        )
+    warn(f"FF link kept resolving to a hostile-ad domain; giving up: <d>{url}</d>")
+    return None
+
+
+def _resolve_ff_redirect_once(url, user_agent, host, cf_session):
+    """Follow the /external redirect chain once.
+
+    Returns ``(outcome, resolved_url)``:
+      * ``("ok", url)``        a crypter or real hoster link to hand on
+      * ``("hijacked", None)`` a hostile ad steered us to an affiliate host (retryable)
+      * ``("fail", None)``     404 / error / IP-ban / loop (not retryable)
+    """
     current_url = url
     visited = set()
     session = requests.Session()
@@ -152,11 +196,11 @@ def _resolve_ff_redirect(url, user_agent, host, cf_session):
     for _hop in range(8):
         if current_url in visited:
             debug(f"FF redirect loop detected for {current_url}")
-            return None
+            return "fail", None
         visited.add(current_url)
 
         if detect_crypter_type(current_url) is not None:
-            return current_url
+            return "ok", current_url
 
         try:
             r = cf_session.get(
@@ -177,7 +221,7 @@ def _resolve_ff_redirect(url, user_agent, host, cf_session):
                 "download",
                 str(e) if "e" in dir() else "Download error",
             )
-            return None
+            return "fail", None
 
         location = (r.headers.get("Location") or "").strip()
         if location:
@@ -185,18 +229,21 @@ def _resolve_ff_redirect(url, user_agent, host, cf_session):
             debug(f"Redirected from <d>{current_url}</d> to <d>{next_url}</d>")
             if "/404.html" in next_url:
                 warn(f"Link redirected to 404 page: <d>{next_url}</d>")
-                return None
+                return "fail", None
+            if _is_ad_redirect_host(next_url):
+                debug(f"FF redirect steered to ad host: <d>{next_url}</d>")
+                return "hijacked", None
             if detect_crypter_type(next_url) is not None:
-                return next_url
+                return "ok", next_url
             if urlparse(next_url).netloc != source_netloc:
-                return next_url
+                return "ok", next_url
             current_url = next_url
             continue
 
         final_url = (r.url or current_url).strip()
         if "/404.html" in final_url:
             warn(f"Link redirected to 404 page: <d>{final_url}</d>")
-            return None
+            return "fail", None
         if r.status_code >= 400:
             warn(
                 f"Error fetching redirected URL for {url}: HTTP {r.status_code} at {final_url}"
@@ -206,18 +253,21 @@ def _resolve_ff_redirect(url, user_agent, host, cf_session):
                 "download",
                 f"HTTP {r.status_code} while resolving redirect",
             )
-            return None
+            return "fail", None
+        if _is_ad_redirect_host(final_url):
+            debug(f"FF link landed on ad host: <d>{final_url}</d>")
+            return "hijacked", None
         if detect_crypter_type(final_url) is not None:
-            return final_url
+            return "ok", final_url
         if urlparse(final_url).netloc != source_netloc:
-            return final_url
+            return "ok", final_url
         warn(
             f"Blocked attempt to resolve {url}. Your IP may be banned. Try again later."
         )
-        return None
+        return "fail", None
 
     debug(f"FF redirect hop limit exceeded for {url}")
-    return None
+    return "fail", None
 
 
 def _mirror_from_url(url):
