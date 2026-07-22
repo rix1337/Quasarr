@@ -15,7 +15,7 @@ dependencies = [
     "pycryptodomex>=3.23.0",
     "python-dotenv>=1.2.1",
     "requests>=2.32.5",
-    "setuptools==82.0.0",
+    "setuptools==83.0.0",
     "wcwidth>=0.6.0",
 ]
 authors = [
