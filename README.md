@@ -192,6 +192,8 @@ docker run -d \
 | `USER` / `PASS`    | Optional, but recommended! Username / Password to protect the web UI.                                      |
 | `AUTH`             | Authentication mode. Supported values: `form` or `basic`.                                                  |
 | `TZ`               | Optional. Timezone. Incorrect values may cause HTTPS/SSL issues.                                           |
+| `DOWNLOAD_FOLDER`  | Optional. Base folder JDownloader downloads into — relative to its default download directory, or absolute. Defaults to `Quasarr`. Set it empty to omit the base folder entirely. |
+| `CATEGORY_SUBFOLDERS` | Optional (`true`/`false`, default `false`). Group downloads into per-category subfolders (`movies`/`tv`/`music`/...) below the base folder, e.g. `Quasarr/movies/<release>`. |
 
 # Manual setup
 

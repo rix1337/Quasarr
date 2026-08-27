@@ -4,6 +4,7 @@
 
 import html
 import json
+import os
 import re
 import socket
 import sys
@@ -1519,6 +1520,8 @@ def get_recently_searched(shared_state, context, timeout_seconds):
 def download_package(links, title, password, package_id, shared_state):
     links = [sanitize_url(link) for link in links]
 
+    destination_folder = _quasarr_destination_folder(package_id)
+
     def submit(device):
         return device.linkgrabber.add_links(
             params=[
@@ -1529,7 +1532,7 @@ def download_package(links, title, password, package_id, shared_state):
                     "extractPassword": password,
                     "priority": "DEFAULT",
                     "downloadPassword": password,
-                    "destinationFolder": "Quasarr/<jd:packagename>",
+                    "destinationFolder": destination_folder,
                     "comment": package_id,
                     "overwritePackagizerRules": True,
                 }
@@ -1542,6 +1545,41 @@ def download_package(links, title, password, package_id, shared_state):
         default=False,
     )
     return downloaded
+
+
+def _quasarr_destination_folder(package_id):
+    """Return the JDownloader destinationFolder for a Quasarr package.
+
+    Two independent, opt-in environment variables shape the path; with neither
+    set the result is the historical ``Quasarr/<jd:packagename>`` (unchanged):
+
+      * ``DOWNLOAD_FOLDER`` -- base folder Quasarr downloads into. Relative to
+        JDownloader's default download directory, or an absolute path. Defaults
+        to ``Quasarr``. Set it empty to drop the ``Quasarr`` level entirely.
+      * ``CATEGORY_SUBFOLDERS`` (true/false) -- insert the package's download
+        category (movies/tv/music/...) as a subfolder, grouping downloads by type.
+
+    The category is read from the package id (never from disk); unknown or
+    non-Quasarr packages fall back to the base-only path.
+    """
+    package_var = "<jd:packagename>"
+
+    raw_base = os.environ.get("DOWNLOAD_FOLDER")
+    base = "Quasarr" if raw_base is None else raw_base.strip().rstrip("/")
+
+    parts = []
+    if base:
+        parts.append(base)
+
+    if os.environ.get("CATEGORY_SUBFOLDERS", "").strip().lower() in ("1", "true", "yes", "on"):
+        # Local import avoids a module-level storage <-> providers import cycle.
+        from quasarr.storage.categories import get_download_category_from_package_id
+        category = get_download_category_from_package_id(package_id)
+        if category and category != "not_quasarr":
+            parts.append(category)
+
+    parts.append(package_var)
+    return "/".join(parts)
 
 
 def sanitize_url(url: str) -> str:
