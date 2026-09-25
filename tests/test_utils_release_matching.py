@@ -10,6 +10,7 @@ from quasarr.providers.utils import (
     is_valid_release,
     normalize_optional_int,
     parse_episode_date,
+    sanitize_string,
 )
 
 
@@ -175,6 +176,19 @@ class ReleaseMatchingUtilsTests(unittest.TestCase):
                 episode_date,
             ),
         )
+
+    def test_sanitize_string_maps_multiplication_sign_to_x(self):
+        # Sources style titles as "Foo × Bar" while Arr/IMDb titles use a plain
+        # "x"; stripping the sign would drop the token and break matching.
+        self.assertEqual(sanitize_string("Foo \u00d7 Bar"), "foo x bar")
+        self.assertIn(
+            sanitize_string("Foo x Bar"), sanitize_string("Foo \u00d7 Bar: S3")
+        )
+
+    def test_sanitize_string_keeps_plain_x_and_strips_other_symbols(self):
+        # Legacy path: a plain "x" is untouched and other symbols are still removed.
+        self.assertEqual(sanitize_string("Foo x Bar"), "foo x bar")
+        self.assertEqual(sanitize_string("Foo * Bar!"), "foo bar")
 
 
 if __name__ == "__main__":
