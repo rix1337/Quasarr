@@ -91,10 +91,6 @@ class Source(AbstractDownloadSource):
                 return {}
 
             episode_in_title = _extract_episode(title)
-            if episode_in_title:
-                selection = episode_in_title - 1  # Convert to zero-based index
-            else:
-                selection = "cnl"
 
             title, release_id = _check_release(
                 shared_state, details_html, release_id, title, episode_in_title
@@ -102,6 +98,13 @@ class Source(AbstractDownloadSource):
             if release_id == 0:
                 info(f"No valid release ID found for {title} - Download failed!")
                 return {}
+
+            if episode_in_title:
+                selection = _resolve_episode_selection(
+                    details_html, release_id, episode_in_title
+                )
+            else:
+                selection = "cnl"
 
             anime_identifier = url.rstrip("/").split("/")[-1]
 
@@ -864,6 +867,44 @@ def _check_release(shared_state, details_html, release_id, title, episode_in_tit
             )
 
     return title, release_id
+
+
+def _resolve_episode_selection(details_html, release_id, episode: int) -> int:
+    """
+    Map a requested episode number to the zero-based row index (data-loop) of a release.
+
+    Rows are labeled like "Episode 003" or "Episode 001-002" (merged double episodes),
+    so the row position does not always equal episode - 1. Falls back to that position
+    when no row label covers the requested episode.
+    """
+    fallback = episode - 1
+    soup = BeautifulSoup(details_html, "html.parser")
+    tab = soup.find("div", class_="tab-pane", id=f"download_{release_id}")
+    episodes_div = tab.find("div", class_="episodes") if tab else None
+    if not episodes_div:
+        return fallback
+
+    for row in episodes_div.find_all("a", attrs={"data-loop": re.compile(r"^\d+$")}):
+        # Label directly follows the row number, e.g. "003 Episode 001-002: Title".
+        # Anchored so episode titles like "Chikara - Episode 1" are not mistaken for it.
+        match = re.match(
+            r"\d+\s+Episode\s+(\d+)(?:\s*-\s*(\d+))?(?=\s*:|\s*$)",
+            row.get_text(" ", strip=True),
+        )
+        if not match:
+            continue
+        first = int(match.group(1))
+        last = int(match.group(2)) if match.group(2) else first
+        if first <= episode <= last:
+            selection = int(row["data-loop"])
+            if selection != fallback:
+                info(
+                    f"Episode {episode} is row {selection + 1} of release {release_id} "
+                    f'("{match.group(0)}"), not row {episode}'
+                )
+            return selection
+
+    return fallback
 
 
 def _extract_episode(title: str) -> int | None:
