@@ -18,7 +18,7 @@ from quasarr.constants import (
 from quasarr.providers import shared_state
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title, get_year
-from quasarr.providers.log import debug, info, trace, warn
+from quasarr.providers.log import debug, info, warn
 from quasarr.providers.utils import (
     convert_to_mb,
     generate_download_link,
@@ -44,7 +44,7 @@ class Source(AbstractSearchSource):
         SEARCH_CAT_SHOWS,
         SEARCH_CAT_MUSIC,
     ]
-    requires_login = True
+    requires_login = False
 
     def feed(
         self, shared_state: shared_state, start_time: float, search_category: str
@@ -60,20 +60,20 @@ class Source(AbstractSearchSource):
         elif base_search_category == SEARCH_CAT_MOVIES:
             stype = "movie"
         elif base_search_category == SEARCH_CAT_SHOWS:
-            stype = "episode"
+            stype = "series"
         elif base_search_category == SEARCH_CAT_MUSIC:
             stype = "audio"
         else:
             warn(f"Unknown search category: {search_category}")
             return releases
 
-        url = f"https://{nx}/api/frontend/releases/category/{stype}/tag/all/1/51?sort=date"
+        url = f"https://{nx}/api/releases/by-date?page=1&limit=50&type={stype}"
         headers = {
             "User-Agent": shared_state.values["user_agent"],
         }
 
         try:
-            r = requests.get(url, headers, timeout=FEED_REQUEST_TIMEOUT_SECONDS)
+            r = requests.get(url, headers=headers, timeout=FEED_REQUEST_TIMEOUT_SECONDS)
             r.raise_for_status()
             feed = r.json()
         except Exception as e:
@@ -83,20 +83,24 @@ class Source(AbstractSearchSource):
             )
             return releases
 
-        items = feed["result"]["list"]
+        items = feed.get("items", [])
         for item in items:
             try:
-                title = item["name"]
+                title = item.get("name")
 
                 if title:
                     try:
                         if base_search_category == SEARCH_CAT_BOOKS:
-                            # magazarr can only detect specific date formats / issue numbering for magazines
                             title = normalize_magazine_title(title)
 
                         source = f"https://{nx}/release/{item['slug']}"
-                        imdb_id = item.get("_media", {}).get("imdbid", None)
-                        mb = convert_to_mb(item)
+                        imdb_id = None
+                        mb = convert_to_mb(
+                            {
+                                "size": str(item["size"]).replace(",", "."),
+                                "sizeunit": item.get("sizeUnit", "MB"),
+                            }
+                        )
 
                         link = generate_download_link(
                             shared_state,
@@ -116,7 +120,7 @@ class Source(AbstractSearchSource):
                         continue
 
                     try:
-                        published = item["publishat"]
+                        published = item.get("publishAt", "")
                     except:
                         continue
 
@@ -172,7 +176,7 @@ class Source(AbstractSearchSource):
         elif base_search_category == SEARCH_CAT_MOVIES:
             valid_type = "movie"
         elif base_search_category == SEARCH_CAT_SHOWS:
-            valid_type = "episode"
+            valid_type = "series"
         elif base_search_category == SEARCH_CAT_MUSIC:
             valid_type = "audio"
         else:
@@ -192,13 +196,15 @@ class Source(AbstractSearchSource):
                 if year := get_year(imdb_id):
                     search_string += f" {year}"
 
-        url = f"https://{nx}/api/frontend/search/{search_string}"
+        url = f"https://{nx}/api/search?q={search_string}&page=1"
         headers = {
             "User-Agent": shared_state.values["user_agent"],
         }
 
         try:
-            r = requests.get(url, headers, timeout=SEARCH_REQUEST_TIMEOUT_SECONDS)
+            r = requests.get(
+                url, headers=headers, timeout=SEARCH_REQUEST_TIMEOUT_SECONDS
+            )
             r.raise_for_status()
             feed = r.json()
         except Exception as e:
@@ -208,11 +214,14 @@ class Source(AbstractSearchSource):
             )
             return releases
 
-        items = feed["result"]["releases"]
+        items = feed.get("releases", [])
         for item in items:
             try:
-                if item["type"] == valid_type:
-                    title = item["name"]
+                if (
+                    item.get("type") == valid_type
+                    or item.get("mediaType") == valid_type
+                ):
+                    title = item.get("name")
                     if title:
                         if not is_valid_release(
                             title, search_category, search_string, season, episode
@@ -220,26 +229,18 @@ class Source(AbstractSearchSource):
                             continue
 
                         if base_search_category == SEARCH_CAT_BOOKS:
-                            # magazarr can only detect specific date formats / issue numbering for magazines
                             title = normalize_magazine_title(title)
 
                         try:
                             source = f"https://{nx}/release/{item['slug']}"
-                            release_imdb_id = item.get("_media", {}).get("imdbid", None)
-                            if (
-                                imdb_id
-                                and release_imdb_id
-                                and release_imdb_id != imdb_id
-                            ):
-                                trace(
-                                    f"Skipping result '{title}' due to IMDb ID mismatch."
-                                )
-                                continue
+                            release_imdb_id = imdb_id
 
-                            if release_imdb_id is None:
-                                release_imdb_id = imdb_id
-
-                            mb = convert_to_mb(item)
+                            mb = convert_to_mb(
+                                {
+                                    "size": str(item["size"]).replace(",", "."),
+                                    "sizeunit": item.get("sizeUnit", "MB"),
+                                }
+                            )
 
                             link = generate_download_link(
                                 shared_state,
@@ -259,7 +260,7 @@ class Source(AbstractSearchSource):
                             continue
 
                         try:
-                            published = item["publishat"]
+                            published = item.get("publishAt", "")
                         except:
                             published = ""
 

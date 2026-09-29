@@ -26,12 +26,12 @@ def create_and_persist_session(shared_state):
     }
 
     json_data = {
-        "username": shared_state.values["config"]("NX").get("user"),
+        "identifier": shared_state.values["config"]("NX").get("user"),
         "password": shared_state.values["config"]("NX").get("password"),
     }
 
     r = nx_session.post(
-        f"https://{nx}/api/user/auth",
+        f"https://{nx}/api/auth/login",
         cookies=cookies,
         headers=headers,
         json=json_data,
@@ -43,19 +43,20 @@ def create_and_persist_session(shared_state):
     if r.status_code == 200:
         try:
             response_data = r.json()
-            if response_data.get("err", {}).get("status") == 403:
+            if response_data.get("statusCode") == 401:
                 info("Invalid NX credentials provided.")
                 mark_hostname_issue(hostname, "session", "Invalid credentials")
                 error = True
-            elif response_data.get("user").get("username") != shared_state.values[
-                "config"
-            ]("NX").get("user"):
-                info("Invalid NX response on login.")
-                mark_hostname_issue(hostname, "session", "Invalid login response")
-                error = True
             else:
-                sessiontoken = response_data.get("user").get("sessiontoken")
-                nx_session.cookies.set("sessiontoken", sessiontoken, domain=nx)
+                sessiontoken = response_data.get("token") or response_data.get(
+                    "user", {}
+                ).get("sessiontoken")
+                if sessiontoken:
+                    nx_session.cookies.set("sessiontoken", sessiontoken, domain=nx)
+                else:
+                    info("No session token in NX login response.")
+                    mark_hostname_issue(hostname, "session", "No session token")
+                    error = True
         except ValueError:
             info("Could not parse NX response on login.")
             mark_hostname_issue(hostname, "session", "Could not parse login response")

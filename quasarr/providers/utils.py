@@ -994,6 +994,9 @@ def sanitize_string(s):
     # Umlauts
     s = replace_umlauts(s)
 
+    # Multiplication sign is used as a stylized "x" in titles
+    s = s.replace("\u00d7", "x")
+
     # Remove special characters
     s = re.sub(r"[^a-zA-Z0-9\s]", "", s)
 
