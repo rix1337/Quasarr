@@ -408,14 +408,18 @@ class Source(AbstractSearchSource):
 
                     if episode:
                         try:
-                            total_episodes = release_info.episode_max
-                            if total_episodes:
-                                if mb > 0:
-                                    mb = int(mb / total_episodes)
+                            if release_info.episode_max and release_info.episode_min:
+                                episode_span = (
+                                    release_info.episode_max
+                                    - release_info.episode_min
+                                    + 1
+                                )
+                                if mb > 0 and episode_span > 0:
+                                    mb = int(mb / episode_span)
                                 # Overwrite values so guessing the title only applies the requested episode
                                 release_info.episode_min = int(episode)
                                 release_info.episode_max = int(episode)
-                            else:  # if no total episode count - assume the requested episode is missing in the release
+                            else:  # if no episode range - the requested episode is missing in the release
                                 continue
                         except ValueError:
                             pass

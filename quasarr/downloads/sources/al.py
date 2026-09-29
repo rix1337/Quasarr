@@ -751,7 +751,41 @@ def _parse_info_from_download_item(
             total_episodes = len(episode_links)
             if total_episodes > 0:
                 ep = int(requested_episode)
-                if ep <= total_episodes:
+
+                # Parse actual episode range from row labels
+                # Labels look like "003 Episode 080-081: Title" or "001 Episode 001: Title"
+                parsed_min = None
+                parsed_max = None
+                for row in episode_links:
+                    match = re.match(
+                        r"\d+\s+Episode\s+(\d+)(?:\s*-\s*(\d+))?(?=\s*:|\s*$)",
+                        row.get_text(" ", strip=True),
+                    )
+                    if match:
+                        first = int(match.group(1))
+                        last = int(match.group(2)) if match.group(2) else first
+                        if parsed_min is None or first < parsed_min:
+                            parsed_min = first
+                        if parsed_max is None or last > parsed_max:
+                            parsed_max = last
+
+                # Use parsed range if available, otherwise fall back to count-based
+                if parsed_min is not None and parsed_max is not None:
+                    # Check if requested episode is within the actual range
+                    if parsed_min <= ep <= parsed_max:
+                        episode_min = parsed_min
+                        episode_max = parsed_max
+                        if release_title:
+                            release_title = re.sub(
+                                r"(?<=\.)S(\d{1,4})(?=\.)",
+                                lambda m: f"S{int(m.group(1)):02d}E{ep:02d}",
+                                release_title,
+                                count=1,
+                                flags=re.IGNORECASE,
+                            )
+                    # else: leave episode_min/max as None → search will skip this release
+                elif ep <= total_episodes:
+                    # Fallback: no parseable labels, use count-based logic
                     episode_min = 1
                     episode_max = total_episodes
                     if release_title:
