@@ -2,6 +2,8 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+import base64
+import json
 import re
 from urllib.parse import urlparse
 
@@ -11,7 +13,6 @@ from quasarr.constants import DOWNLOAD_REQUEST_TIMEOUT_SECONDS
 from quasarr.downloads.sources.helpers.abstract_source import AbstractDownloadSource
 from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info
-from quasarr.providers.sessions.nx import retrieve_and_validate_session
 
 
 class Source(AbstractDownloadSource):
@@ -19,7 +20,8 @@ class Source(AbstractDownloadSource):
 
     def get_download_links(self, shared_state, url, mirrors, title, password):
         """
-        NX source handler - auto-decrypts via site API and returns plain download links.
+        NX source handler - fetches release details via public API,
+        decodes download tokens to get filer.net URLs.
         """
         requested_mirrors = {
             _normalize_mirror_name(mirror) for mirror in (mirrors or []) if mirror
@@ -31,64 +33,71 @@ class Source(AbstractDownloadSource):
         nx = shared_state.values["config"]("Hostnames").get(Source.initials)
 
         if f"{nx}/release/" not in url:
-            info("Link is not a Release link, could not proceed:" + url)
-
-        nx_session = retrieve_and_validate_session(shared_state)
-        if not nx_session:
-            info(f"Could not retrieve valid session for {nx}")
-            mark_hostname_issue(Source.initials, "download", "Session error")
+            info("Link is not a Release link, could not proceed: " + url)
             return {"links": []}
 
-        headers = {"User-Agent": shared_state.values["user_agent"], "Referer": url}
+        slug = url.split("/")[-1]
+        if not slug:
+            info(f"Could not extract release slug from URL: {url}")
+            return {"links": []}
 
-        json_data = {}
-
-        url_segments = url.split("/")
-        payload_url = "/".join(url_segments[:-2]) + "/api/getLinks/" + url_segments[-1]
+        headers = {"User-Agent": shared_state.values["user_agent"]}
 
         try:
-            r = nx_session.post(
-                payload_url,
+            r = requests.get(
+                f"https://{nx}/api/releases/{slug}",
                 headers=headers,
-                json=json_data,
                 timeout=DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
             )
             r.raise_for_status()
-
-            payload = r.json()
+            release_data = r.json()
         except Exception as e:
-            info(f"Could not get download links: {e}")
+            info(f"Could not get release details: {e}")
             mark_hostname_issue(Source.initials, "download", str(e))
             return {"links": []}
 
-        if payload and any(key in payload for key in ("err", "error")):
-            error_msg = payload.get("err") or payload.get("error")
-            info(f"Error decrypting {title!r} URL: {url!r} - {error_msg}")
-            mark_hostname_issue(Source.initials, "download", "Download error")
-            shared_state.values["database"]("sessions").delete("nx")
+        links_data = release_data.get("links", [])
+        if not links_data:
+            info(f"No links found for release {slug}")
             return {"links": []}
 
-        try:
-            decrypted_url = payload["link"][0]["url"]
-            if decrypted_url:
-                if not _is_filer_url(decrypted_url):
-                    info(f"Unexpected non-filer mirror from NX for {title}")
-                    return {"links": []}
+        urls = []
+        for link_entry in links_data:
+            if link_entry.get("isOffline"):
+                continue
 
-                if _is_filer_folder_url(decrypted_url):
-                    urls = _get_filer_folder_links_via_api(shared_state, decrypted_url)
-                else:
-                    urls = [decrypted_url]
+            hoster = link_entry.get("hoster", "")
+            if "filer" not in hoster.lower():
+                info(f"Skipping non-filer hoster: {hoster}")
+                continue
 
-                # Convert to [[url, mirror], ...] format
-                links = [[u, _derive_mirror_from_url(u)] for u in urls]
-                return {"links": links}
-        except:
-            pass
+            download_token = link_entry.get("downloadToken")
+            if not download_token:
+                continue
 
-        info("Something went wrong decrypting " + str(title) + " URL: " + str(url))
-        shared_state.values["database"]("sessions").delete("nx")
-        return {"links": []}
+            filer_hash = _decode_download_token(download_token)
+            if not filer_hash:
+                info(f"Could not decode download token for {title}")
+                continue
+
+            filer_base = _get_filer_base(hoster)
+            filer_url = f"{filer_base}/get/{filer_hash}"
+            urls.append(filer_url)
+
+        if not urls:
+            info(f"No valid filer URLs found for {title}")
+            return {"links": []}
+
+        result_links = []
+        for u in urls:
+            if _is_filer_folder_url(u):
+                folder_urls = _get_filer_folder_links_via_api(shared_state, u)
+                for fu in folder_urls:
+                    result_links.append([fu, _derive_mirror_from_url(fu)])
+            else:
+                result_links.append([u, _derive_mirror_from_url(u)])
+
+        return {"links": result_links}
 
 
 def _derive_mirror_from_url(url):
@@ -103,6 +112,29 @@ def _derive_mirror_from_url(url):
         return hostname
     except:
         return "unknown"
+
+
+def _decode_download_token(token):
+    """Decode a download token to extract the filer hash slug."""
+    try:
+        payload_part = token.split(".")[0]
+        padded = payload_part + "=" * (4 - len(payload_part) % 4)
+        decoded = base64.urlsafe_b64decode(padded)
+        data = json.loads(decoded)
+        return data.get("slug")
+    except Exception:
+        return None
+
+
+def _get_filer_base(hoster):
+    """Derive the filer base URL from the hoster name."""
+    hoster_lower = hoster.lower().strip()
+    if "://" in hoster_lower:
+        parsed = urlparse(hoster_lower)
+        return f"{parsed.scheme}://{parsed.netloc}"
+    if "." in hoster_lower:
+        return f"https://{hoster_lower}"
+    return f"https://{hoster_lower}.net"
 
 
 def _normalize_mirror_name(mirror_name):
