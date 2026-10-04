@@ -15,6 +15,7 @@ from quasarr.api.packages import setup_packages_routes
 from quasarr.api.sponsors_helper import setup_sponsors_helper_routes
 from quasarr.api.statistics import setup_statistics
 from quasarr.constants import (
+    NOTIFICATION_PROVIDERS,
     TIMEOUT_SLOW_MODE_DEFINITIONS,
     TIMEOUT_SLOW_MODE_MULTIPLIER,
 )
@@ -206,14 +207,16 @@ def get_api(shared_state_dict, shared_state_lock):
         notification_settings = shared_state.values.get("notification_settings", {})
         notification_toggles = notification_settings.get("toggles")
         if not isinstance(notification_toggles, dict):
-            notification_toggles = {"discord": {}, "telegram": {}}
+            notification_toggles = {provider: {} for provider in NOTIFICATION_PROVIDERS}
         notification_silent = notification_settings.get("silent")
         if not isinstance(notification_silent, dict):
-            notification_silent = {"discord": {}, "telegram": {}}
+            notification_silent = {provider: {} for provider in NOTIFICATION_PROVIDERS}
 
         discord_webhook = notification_settings.get("discord_webhook") or ""
         telegram_bot_token = notification_settings.get("telegram_bot_token") or ""
         telegram_chat_id = notification_settings.get("telegram_chat_id") or ""
+        pushover_api_token = notification_settings.get("pushover_api_token") or ""
+        pushover_user_key = notification_settings.get("pushover_user_key") or ""
 
         notification_cases_json = json.dumps(
             [case_key for case_key, _ in notification_cases]
@@ -278,6 +281,8 @@ def get_api(shared_state_dict, shared_state_lock):
 
         discord_toggle_rows = render_notification_toggle_rows("discord")
         telegram_toggle_rows = render_notification_toggle_rows("telegram")
+        pushover_toggle_rows = render_notification_toggle_rows("pushover")
+        notification_providers_json = json.dumps(NOTIFICATION_PROVIDERS)
 
         timeout_slow_mode_cells = [
             '<div class="notification-toggle-header">Timeout</div>',
@@ -500,6 +505,27 @@ def get_api(shared_state_dict, shared_state_lock):
                         </div>
                         <div id="notification-telegram-status" class="notification-status"></div>
                         <p>{render_button("Send Telegram Test", "secondary", {"onclick": "sendNotificationTest('telegram')", "type": "button"})}</p>
+                    </div>
+
+                    <div class="notification-provider-card">
+                        <h4><img src="{images.pushover}" type="image/webp" alt="Pushover logo" class="inline-icon"/> Pushover</h4>
+                        <div class="input-group">
+                            <label for="notification-pushover-token">Application API Token</label>
+                            <div class="input-row">
+                                <input type="text" id="notification-pushover-token" placeholder="30-character application token" value="{pushover_api_token}">
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label for="notification-pushover-user-key">User or Group Key</label>
+                            <div class="input-row">
+                                <input type="text" id="notification-pushover-user-key" placeholder="30-character user or group key" value="{pushover_user_key}">
+                            </div>
+                        </div>
+                        <div class="notification-toggle-list">
+                            {pushover_toggle_rows}
+                        </div>
+                        <div id="notification-pushover-status" class="notification-status"></div>
+                        <p>{render_button("Send Pushover Test", "secondary", {"onclick": "sendNotificationTest('pushover')", "type": "button"})}</p>
                     </div>
 
                     <div id="notification-save-status" class="notification-status"></div>
@@ -1147,11 +1173,13 @@ def get_api(shared_state_dict, shared_state_lock):
                     discord_webhook: document.getElementById('notification-discord-webhook').value.trim(),
                     telegram_bot_token: document.getElementById('notification-telegram-token').value.trim(),
                     telegram_chat_id: document.getElementById('notification-telegram-chat-id').value.trim(),
+                    pushover_api_token: document.getElementById('notification-pushover-token').value.trim(),
+                    pushover_user_key: document.getElementById('notification-pushover-user-key').value.trim(),
                     toggles: {{}},
                     silent: {{}}
                 }};
 
-                ['discord', 'telegram'].forEach(function(provider) {{
+                {notification_providers_json}.forEach(function(provider) {{
                     payload.toggles[provider] = {{}};
                     payload.silent[provider] = {{}};
                     notificationCases.forEach(function(notificationCase) {{
@@ -1209,9 +1237,7 @@ def get_api(shared_state_dict, shared_state_lock):
             }}
 
             async function sendNotificationTest(provider) {{
-                var statusId = provider === 'discord'
-                    ? 'notification-discord-status'
-                    : 'notification-telegram-status';
+                var statusId = 'notification-' + provider + '-status';
 
                 setNotificationStatus(statusId, 'Saving settings before test...', true);
 

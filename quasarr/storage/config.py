@@ -104,6 +104,8 @@ class Config(object):
             ("discord_webhook", "secret", ""),
             ("telegram_bot_token", "secret", ""),
             ("telegram_chat_id", "secret", ""),
+            ("pushover_api_token", "secret", ""),
+            ("pushover_user_key", "secret", ""),
         ],
         "AL": [("user", "secret", ""), ("password", "secret", "")],
         "DD": [("user", "secret", ""), ("password", "secret", "")],

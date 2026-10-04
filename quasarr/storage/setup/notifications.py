@@ -65,8 +65,10 @@ def _read_notification_settings():
         "discord_webhook": notification_config.get("discord_webhook") or "",
         "telegram_bot_token": notification_config.get("telegram_bot_token") or "",
         "telegram_chat_id": notification_config.get("telegram_chat_id") or "",
-        "toggles": {"discord": {}, "telegram": {}},
-        "silent": {"discord": {}, "telegram": {}},
+        "pushover_api_token": notification_config.get("pushover_api_token") or "",
+        "pushover_user_key": notification_config.get("pushover_user_key") or "",
+        "toggles": {provider: {} for provider in NOTIFICATION_PROVIDERS},
+        "silent": {provider: {} for provider in NOTIFICATION_PROVIDERS},
     }
 
     for provider in NOTIFICATION_PROVIDERS:
@@ -88,9 +90,12 @@ def _validate_notification_provider_credentials(
     discord_webhook,
     telegram_bot_token,
     telegram_chat_id,
+    pushover_api_token,
+    pushover_user_key,
 ):
     discord_webhook_pattern = r"^https://discord\.com/api/webhooks/\d+/[\w-]+$"
     telegram_token_pattern = r"^\d+:[A-Za-z0-9_-]{35,}$"
+    pushover_credential_pattern = r"^[A-Za-z0-9]{30}$"
 
     if discord_webhook and not re.match(discord_webhook_pattern, discord_webhook):
         return "Invalid Discord Webhook URL"
@@ -100,6 +105,14 @@ def _validate_notification_provider_credentials(
             return "Telegram setup requires both bot token and chat ID"
         if not re.match(telegram_token_pattern, telegram_bot_token):
             return "Invalid Telegram bot token format"
+
+    if pushover_api_token or pushover_user_key:
+        if not pushover_api_token or not pushover_user_key:
+            return "Pushover setup requires both API token and user key"
+        if not re.match(pushover_credential_pattern, pushover_api_token):
+            return "Invalid Pushover API token format"
+        if not re.match(pushover_credential_pattern, pushover_user_key):
+            return "Invalid Pushover user key format"
 
     return None
 
@@ -134,6 +147,8 @@ def save_notification_settings(shared_state):
     discord_webhook = str(data.get("discord_webhook", "")).strip()
     telegram_bot_token = str(data.get("telegram_bot_token", "")).strip()
     telegram_chat_id = str(data.get("telegram_chat_id", "")).strip()
+    pushover_api_token = str(data.get("pushover_api_token", "")).strip()
+    pushover_user_key = str(data.get("pushover_user_key", "")).strip()
     toggles = data.get("toggles") if isinstance(data.get("toggles"), dict) else {}
     silent = data.get("silent") if isinstance(data.get("silent"), dict) else {}
 
@@ -141,6 +156,8 @@ def save_notification_settings(shared_state):
         discord_webhook,
         telegram_bot_token,
         telegram_chat_id,
+        pushover_api_token,
+        pushover_user_key,
     )
     if validation_error:
         return {"success": False, "message": validation_error}
@@ -149,6 +166,8 @@ def save_notification_settings(shared_state):
     notification_config.save("discord_webhook", discord_webhook)
     notification_config.save("telegram_bot_token", telegram_bot_token)
     notification_config.save("telegram_chat_id", telegram_chat_id)
+    notification_config.save("pushover_api_token", pushover_api_token)
+    notification_config.save("pushover_user_key", pushover_user_key)
     notification_settings_db = DataBase(NOTIFICATION_SETTINGS_TABLE)
 
     for provider in NOTIFICATION_PROVIDERS:
@@ -248,6 +267,42 @@ def send_notification_test(shared_state):
         return {
             "success": False,
             "message": "Failed to send Discord test message",
+        }
+
+    if provider == "pushover":
+        if not settings["pushover_api_token"] or not settings["pushover_user_key"]:
+            return {
+                "success": False,
+                "message": "Pushover API token and user key are required",
+            }
+        from quasarr.providers.notifications import pushover
+
+        message = build_notification_message(
+            shared_state,
+            title=title,
+            case=NotificationType.TEST,
+            details={"provider": "Pushover"},
+            image_url=test_image_url,
+        )
+        if message is None:
+            return {
+                "success": False,
+                "message": "Failed to build Pushover test message",
+            }
+
+        try:
+            sent = pushover.send(shared_state, message, silent=False)
+        except Exception as e:
+            info(f"Pushover test notification error: {e}")
+            return {
+                "success": False,
+                "message": f"Failed to send Pushover test message: {e}",
+            }
+        if sent:
+            return {"success": True, "message": "Pushover test message sent"}
+        return {
+            "success": False,
+            "message": "Failed to send Pushover test message",
         }
 
     if not settings["telegram_bot_token"] or not settings["telegram_chat_id"]:

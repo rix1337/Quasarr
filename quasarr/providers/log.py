@@ -80,6 +80,7 @@ _context_replace = {
     "notifications": "🔔",  # /quasarr/providers/notifications.py
     "discord": "💬",  # /quasarr/providers/notifications/discord.py
     "telegram": "📱",  # /quasarr/providers/notifications/telegram.py
+    "pushover": "📲",  # /quasarr/providers/notifications/pushover.py
     "shared_state": "🧠",  # /quasarr/providers/shared_state.py
     "sessions": "🍪",  # /quasarr/providers/sessions/*
     "search": "🔍",  # /quasarr/search/*

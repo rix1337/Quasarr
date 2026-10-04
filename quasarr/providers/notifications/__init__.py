@@ -54,6 +54,12 @@ def _has_telegram(notification_settings):
     )
 
 
+def _has_pushover(notification_settings):
+    return bool(notification_settings.get("pushover_api_token")) and bool(
+        notification_settings.get("pushover_user_key")
+    )
+
+
 def _build_message(
     shared_state,
     title,
@@ -109,7 +115,7 @@ def send_notification(
     :param source: Optional source of the notification, sent as a field in the embed.
     :return: True if at least one provider sent successfully, False otherwise.
     """
-    from quasarr.providers.notifications import discord, telegram
+    from quasarr.providers.notifications import discord, pushover, telegram
 
     notification_type = normalize_notification_type(case)
     if notification_type is None:
@@ -119,8 +125,9 @@ def send_notification(
     notification_settings = _get_notification_settings(shared_state)
     has_discord = _has_discord(notification_settings)
     has_telegram = _has_telegram(notification_settings)
+    has_pushover = _has_pushover(notification_settings)
 
-    if not has_discord and not has_telegram:
+    if not has_discord and not has_telegram and not has_pushover:
         return False
 
     message = _build_message(
@@ -162,6 +169,18 @@ def send_notification(
         except Exception as e:
             info(f"Telegram notification error: {e}")
 
+    if has_pushover and _provider_case_enabled(
+        shared_state, "pushover", notification_type
+    ):
+        pushover_silent = _provider_case_silent(
+            shared_state, "pushover", notification_type
+        )
+        try:
+            if pushover.send(shared_state, message, silent=pushover_silent):
+                any_success = True
+        except Exception as e:
+            info(f"Pushover notification error: {e}")
+
     return any_success
 
 
@@ -169,7 +188,7 @@ def send_tracked_notification(
     shared_state, title, case, imdb_id=None, details=None, source=None
 ):
     """Send a notification and return provider references needed for later edits."""
-    from quasarr.providers.notifications import discord, telegram
+    from quasarr.providers.notifications import discord, pushover, telegram
 
     notification_type = normalize_notification_type(case)
     if notification_type is None:
@@ -183,8 +202,11 @@ def send_tracked_notification(
     telegram_enabled = _has_telegram(notification_settings) and _provider_case_enabled(
         shared_state, "telegram", notification_type
     )
+    pushover_enabled = _has_pushover(notification_settings) and _provider_case_enabled(
+        shared_state, "pushover", notification_type
+    )
 
-    if not discord_enabled and not telegram_enabled:
+    if not discord_enabled and not telegram_enabled and not pushover_enabled:
         return {}
 
     message = _build_message(
@@ -226,12 +248,21 @@ def send_tracked_notification(
         except Exception as e:
             info(f"Telegram notification error: {e}")
 
+    if pushover_enabled:
+        pushover_silent = _provider_case_silent(
+            shared_state, "pushover", notification_type
+        )
+        try:
+            pushover.send(shared_state, message, silent=pushover_silent)
+        except Exception as e:
+            info(f"Pushover notification error: {e}")
+
     return references
 
 
 def update_release_notification(shared_state, release, case, details=None):
     """Update a release and preserve configured silence transitions."""
-    from quasarr.providers.notifications import discord, telegram
+    from quasarr.providers.notifications import discord, pushover, telegram
 
     notification_type = normalize_notification_type(case)
     if notification_type is None or not isinstance(release, dict):
@@ -362,5 +393,28 @@ def update_release_notification(shared_state, release, case, details=None):
                 any_success = True
         except Exception as e:
             info(f"Telegram notification error: {e}")
+
+    if _has_pushover(notification_settings) and _provider_case_enabled(
+        shared_state, "pushover", notification_type
+    ):
+        pushover_message = _build_message(
+            shared_state,
+            title,
+            notification_type,
+            details=details,
+            include_captcha_action=True,
+        )
+        pushover_silent = _provider_case_silent(
+            shared_state, "pushover", notification_type
+        )
+        try:
+            if pushover_message and pushover.send(
+                shared_state,
+                pushover_message,
+                silent=pushover_silent,
+            ):
+                any_success = True
+        except Exception as e:
+            info(f"Pushover notification error: {e}")
 
     return any_success
