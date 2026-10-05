@@ -165,6 +165,12 @@ def render_centered_html(inner_content, footer_content=""):
                 width: 48px;
                 height: 48px;
                 margin-right: 0.5rem;
+                filter: invert(1);
+            }
+            @media (prefers-color-scheme: dark) {
+                .logo {
+                    filter: none;
+                }
             }
             .inline-icon {
                 width: 1.2em;

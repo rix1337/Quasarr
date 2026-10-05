@@ -25,6 +25,7 @@ The shared-services layer consumed by every other subsystem: cross-process state
 
 ## Local Contracts
 
+- `html_images.py` embeds transparent logo and favicon assets derived from root `Quasarr.png`. The white logo is inverted in the page shell's light theme and kept white in dark mode.
 - Each process calls `shared_state.set_state(dict, lock)` before use; read `shared_state.values[key]`, write `shared_state.update(key, value)`. `values["config"]`/`["database"]` hold the classes, not instances.
 - All JDownloader access goes through `shared_state.get_device()` (blocks and retries forever with escalating backoff) or `run_device_request(name, fn, default)` (one reconnect+retry then the default on JD request errors - but its first attempt calls `get_device()` internally, so it too blocks until a device is connected). `TokenExpiredException`/`RequestTimeoutException`/`MYJDException` from `myjd_api` are the canonical JD error set.
 - `generate_download_link` and `parse_payload` must stay in sync: urlsafe-base64 of exactly 6 pipe-separated fields (`title|url|size_mb|password|imdb_id|source_key`). This is the bridge between search results and the `/download/` endpoint.
