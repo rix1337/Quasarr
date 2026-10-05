@@ -20,8 +20,6 @@ from quasarr.providers.notifications.helpers.notification_types import Notificat
 from quasarr.providers.notifications.pushover import (
     MAX_MESSAGE_LENGTH,
     MAX_TITLE_LENGTH,
-    MAX_URL_LENGTH,
-    MAX_URL_TITLE_LENGTH,
     PushoverNotificationFormatter,
     _build_attachment,
     send,
@@ -87,13 +85,15 @@ class PushoverSenderTests(unittest.TestCase):
             ),
         )
 
-    def test_formatter_preserves_plain_text_and_links(self):
+    def test_formatter_uses_headings_and_named_links_without_repeating_title(self):
         rendered = PushoverNotificationFormatter().render_message(self.message)
 
-        self.assertIn("Synthetic title", rendered)
-        self.assertIn("Open details", rendered)
-        self.assertIn("https://notification.invalid/item", rendered)
-        self.assertIn("Kind: test", rendered)
+        self.assertEqual(
+            "Synthetic description\n\n<b>Details</b>\n"
+            '<a href="https://notification.invalid/item">Open details</a>\n\n'
+            "<b>Facts</b>\n<b>Kind:</b> test",
+            rendered,
+        )
 
     def test_missing_credentials_skips_request(self):
         self.shared_state.values["notification_settings"]["pushover_user_key"] = ""
@@ -110,13 +110,15 @@ class PushoverSenderTests(unittest.TestCase):
         self.assertTrue(send(self.shared_state, self.message, silent=True))
 
         payload = post.call_args.kwargs["data"]
-        self.assertEqual(-1, payload["priority"])
+        self.assertEqual(-2, payload["priority"])
         self.assertEqual("synthetic-token", payload["token"])
         self.assertEqual("synthetic-user", payload["user"])
-        self.assertEqual("https://notification.invalid/item", payload["url"])
+        self.assertEqual(1, payload["html"])
+        self.assertEqual("Synthetic title", payload["title"])
+        self.assertNotIn("Synthetic title", payload["message"])
         self.assertLessEqual(len(payload["title"]), MAX_TITLE_LENGTH)
         self.assertLessEqual(len(payload["message"]), MAX_MESSAGE_LENGTH)
-        self.assertLessEqual(len(payload["url"]), MAX_URL_LENGTH)
+        self.assertNotIn("url", payload)
 
     @patch("quasarr.providers.notifications.pushover.requests.get")
     @patch("quasarr.providers.notifications.pushover.requests.post")
@@ -227,14 +229,14 @@ class PushoverSenderTests(unittest.TestCase):
         self.assertTrue(response.closed)
 
     @patch("quasarr.providers.notifications.pushover.requests.post")
-    def test_url_title_uses_pushover_limit(self, post):
+    def test_links_are_inline_without_supplementary_url_fields(self, post):
         response = Mock(status_code=200)
         response.json.return_value = {"status": 1}
         post.return_value = response
         link = NotificationLinkEntry(
             title="Details",
-            text="Open",
-            link_text="L" * (MAX_URL_TITLE_LENGTH + 20),
+            text="Open here to view details",
+            link_text="here",
             url="https://notification.invalid/item",
         )
         message = NotificationMessage(
@@ -242,9 +244,13 @@ class PushoverSenderTests(unittest.TestCase):
         )
 
         self.assertTrue(send(self.shared_state, message))
-        self.assertEqual(
-            MAX_URL_TITLE_LENGTH, len(post.call_args.kwargs["data"]["url_title"])
+        payload = post.call_args.kwargs["data"]
+        self.assertIn(
+            '<a href="https://notification.invalid/item">Open here to view details</a>',
+            payload["message"],
         )
+        self.assertNotIn("url", payload)
+        self.assertNotIn("url_title", payload)
 
     @patch("quasarr.providers.notifications.pushover.requests.post")
     def test_long_fields_are_bounded_and_valid_primary_link_is_preserved(self, post):
@@ -269,25 +275,56 @@ class PushoverSenderTests(unittest.TestCase):
 
         payload = post.call_args.kwargs["data"]
         self.assertEqual(MAX_TITLE_LENGTH, len(payload["title"]))
-        self.assertEqual(MAX_MESSAGE_LENGTH, len(payload["message"]))
-        self.assertEqual("https://notification.invalid/captcha", payload["url"])
-        self.assertIn("Solve CAPTCHA", payload["message"])
+        self.assertLessEqual(len(payload["message"]), MAX_MESSAGE_LENGTH)
+        self.assertNotIn("url", payload)
+        self.assertIn("<b>Solve CAPTCHA</b>", payload["message"])
+        self.assertIn(
+            '<a href="https://notification.invalid/captcha">', payload["message"]
+        )
 
     @patch("quasarr.providers.notifications.pushover.requests.post")
     def test_oversized_link_is_omitted_instead_of_broken(self, post):
         response = Mock(status_code=200)
         response.json.return_value = {"status": 1}
         post.return_value = response
-        oversized_url = "https://notification.invalid/" + "x" * MAX_URL_LENGTH
+        oversized_url = "https://notification.invalid/" + "x" * MAX_MESSAGE_LENGTH
         message = NotificationMessage(
             title="Synthetic title",
             description="Synthetic description",
-            entries=(NotificationLinkEntry("Details", "Open", oversized_url),),
+            entries=(
+                NotificationLinkEntry("Details", "Open", oversized_url),
+                self.message.entries[0],
+            ),
         )
 
         self.assertTrue(send(self.shared_state, message))
-        self.assertNotIn("url", post.call_args.kwargs["data"])
-        self.assertNotIn("url_title", post.call_args.kwargs["data"])
+        payload = post.call_args.kwargs["data"]
+        self.assertNotIn(oversized_url, payload["message"])
+        self.assertEqual(
+            "Synthetic description\n\n<b>Details</b>\n"
+            '<a href="https://notification.invalid/item">Open details</a>',
+            payload["message"],
+        )
+
+    @patch("quasarr.providers.notifications.pushover.requests.post")
+    def test_long_description_preserves_complete_entities_and_action_link(self, post):
+        post.return_value = Mock(
+            status_code=200, **{"json.return_value": {"status": 1}}
+        )
+        message = NotificationMessage(
+            "Synthetic title", "&" * MAX_MESSAGE_LENGTH, (self.message.entries[0],)
+        )
+
+        self.assertTrue(send(self.shared_state, message))
+
+        body = post.call_args.kwargs["data"]["message"]
+        description, action = body.split("\n\n")
+        self.assertEqual("", description.replace("&amp;", ""))
+        self.assertEqual(
+            '<b>Details</b>\n<a href="https://notification.invalid/item">Open details</a>',
+            action,
+        )
+        self.assertLessEqual(len(body), MAX_MESSAGE_LENGTH)
 
     @patch("quasarr.providers.notifications.pushover.requests.post")
     def test_api_failure_and_http_failure_return_false(self, post):
@@ -298,6 +335,55 @@ class PushoverSenderTests(unittest.TestCase):
             post.return_value = response
             self.assertFalse(send(self.shared_state, self.message, silent=False))
         self.assertEqual(0, post.call_args.kwargs["data"]["priority"])
+
+    @patch("quasarr.providers.notifications.pushover.requests.post")
+    def test_priority_matches_manual_fallback_only(self, post):
+        response = Mock(status_code=200)
+        response.json.return_value = {"status": 1}
+        post.return_value = response
+        for notification_type in (*NotificationType, None):
+            for silent in (False, True):
+                with self.subTest(notification_type=notification_type, silent=silent):
+                    self.assertTrue(
+                        send(
+                            self.shared_state,
+                            self.message,
+                            silent=silent,
+                            notification_type=notification_type,
+                        )
+                    )
+                    expected = (
+                        -2
+                        if silent
+                        else (
+                            1 if notification_type == NotificationType.DISABLED else 0
+                        )
+                    )
+                    self.assertEqual(
+                        expected, post.call_args.kwargs["data"]["priority"]
+                    )
+
+    def test_formatter_escapes_dynamic_html(self):
+        message = NotificationMessage(
+            "<title>",
+            "<description>&",
+            (NotificationTextEntry("<heading>", "<value>&"),),
+        )
+        rendered = PushoverNotificationFormatter().render_message(message)
+        self.assertEqual(
+            "&lt;description&gt;&amp;\n\n<b>&lt;heading&gt;</b>\n&lt;value&gt;&amp;",
+            rendered,
+        )
+
+    def test_link_escapes_label_and_url_attribute(self):
+        link = NotificationLinkEntry(
+            "Action", "Open <details>", 'https://notification.invalid/?a="x"&b=1'
+        )
+        self.assertEqual(
+            '<b>Action</b>\n<a href="https://notification.invalid/?a=&quot;x&quot;'
+            '&amp;b=1">Open &lt;details&gt;</a>',
+            PushoverNotificationFormatter().render_link_entry(link),
+        )
 
     @patch("quasarr.providers.notifications.pushover.requests.post")
     def test_malformed_json_result_returns_false(self, post):
@@ -347,8 +433,10 @@ class PushoverLifecycleTests(unittest.TestCase):
             update_release_notification(self.shared_state, release, "disabled")
         )
         payload = post.call_args.kwargs["data"]
-        self.assertEqual("https://quasarr.invalid/captcha", payload["url"])
-        self.assertIn("Solve CAPTCHA", payload["message"])
+        self.assertEqual(1, payload["priority"])
+        self.assertNotIn("url", payload)
+        self.assertIn("<b>Solve CAPTCHA</b>", payload["message"])
+        self.assertIn('<a href="https://quasarr.invalid/captcha">', payload["message"])
 
     @patch("quasarr.providers.notifications.pushover.requests.post")
     def test_solved_outcome_does_not_add_captcha_action(self, post):
@@ -380,6 +468,12 @@ class PushoverLifecycleTests(unittest.TestCase):
 
         self.assertEqual(3, send_mock.call_count)
         self.assertTrue(all(call.kwargs["silent"] for call in send_mock.call_args_list))
+        self.assertTrue(
+            all(
+                call.kwargs["notification_type"] == NotificationType.TEST
+                for call in send_mock.call_args_list
+            )
+        )
 
     @patch("quasarr.providers.notifications.pushover.send", return_value=True)
     def test_disabled_case_skips_provider_for_all_entrypoints(self, send_mock):

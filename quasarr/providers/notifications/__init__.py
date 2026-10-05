@@ -176,7 +176,12 @@ def send_notification(
             shared_state, "pushover", notification_type
         )
         try:
-            if pushover.send(shared_state, message, silent=pushover_silent):
+            if pushover.send(
+                shared_state,
+                message,
+                silent=pushover_silent,
+                notification_type=notification_type,
+            ):
                 any_success = True
         except Exception as e:
             info(f"Pushover notification error: {e}")
@@ -253,7 +258,12 @@ def send_tracked_notification(
             shared_state, "pushover", notification_type
         )
         try:
-            pushover.send(shared_state, message, silent=pushover_silent)
+            pushover.send(
+                shared_state,
+                message,
+                silent=pushover_silent,
+                notification_type=notification_type,
+            )
         except Exception as e:
             info(f"Pushover notification error: {e}")
 
@@ -412,6 +422,7 @@ def update_release_notification(shared_state, release, case, details=None):
                 shared_state,
                 pushover_message,
                 silent=pushover_silent,
+                notification_type=notification_type,
             ):
                 any_success = True
         except Exception as e:
