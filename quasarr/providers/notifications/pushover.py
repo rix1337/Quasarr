@@ -2,6 +2,7 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+from html import escape
 from urllib.parse import urlparse
 
 import requests
@@ -18,12 +19,11 @@ from quasarr.providers.notifications.helpers.notification_message import (
     NotificationTextEntry,
     NotificationValueEntry,
 )
+from quasarr.providers.notifications.helpers.notification_types import NotificationType
 
 PUSHOVER_API_URL = "https://api.pushover.net/1/messages.json"
 MAX_TITLE_LENGTH = 250
 MAX_MESSAGE_LENGTH = 1024
-MAX_URL_LENGTH = 512
-MAX_URL_TITLE_LENGTH = 100
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 
 
@@ -81,35 +81,74 @@ def _build_attachment(shared_state, image_url):
 class PushoverNotificationFormatter(AbstractNotificationFormatter):
     @staticmethod
     def _render_titled_entry(title, value):
-        return f"{title}\n{value}"
+        return f"<b>{escape(str(title))}</b>\n{value}"
 
     def render_text_entry(self, entry: NotificationTextEntry):
-        return self._render_titled_entry(entry.title, entry.text)
+        return self._render_titled_entry(entry.title, escape(str(entry.text)))
 
     def render_link_entry(self, entry: NotificationLinkEntry):
-        return self._render_titled_entry(entry.title, f"{entry.text}\n{entry.url}")
+        link_text = entry.text or entry.link_text or entry.url
+        link = (
+            f'<a href="{escape(str(entry.url), quote=True)}">'
+            f"{escape(str(link_text))}</a>"
+        )
+        return self._render_titled_entry(entry.title, link)
 
     def render_facts_entry(self, entry: NotificationFactsEntry):
-        facts_text = " | ".join(f"{fact.label}: {fact.value}" for fact in entry.facts)
+        facts_text = " | ".join(
+            f"<b>{escape(str(fact.label))}:</b> {escape(str(fact.value))}"
+            for fact in entry.facts
+        )
         return self._render_titled_entry(entry.title, facts_text)
 
     def render_value_entry(self, entry: NotificationValueEntry):
-        return self._render_titled_entry(entry.title, entry.value)
+        return self._render_titled_entry(entry.title, escape(str(entry.value)))
 
     def render_message(self, message: NotificationMessage):
-        parts = [message.title, message.description]
+        parts = [escape(str(message.description))]
         parts.extend(self.render_entries(message.entries))
         return "\n\n".join(str(part) for part in parts if part)
 
 
-def _first_link(message):
+def _escape_truncate(value, limit):
+    result = []
+    length = 0
+    for character in value:
+        escaped_character = escape(character)
+        if length + len(escaped_character) > limit:
+            break
+        result.append(escaped_character)
+        length += len(escaped_character)
+    return "".join(result)
+
+
+def _bounded_message(formatter, message):
+    rendered = formatter.render_message(message)
+    if len(rendered) <= MAX_MESSAGE_LENGTH:
+        return rendered
+
+    entry_parts = []
+    entry_length = 0
     for entry in message.entries:
-        if isinstance(entry, NotificationLinkEntry) and entry.url:
-            return entry
-    return None
+        rendered_entry = formatter.render_entry(entry)
+        separator_length = 2 if entry_parts else 0
+        if entry_length + separator_length + len(rendered_entry) > MAX_MESSAGE_LENGTH:
+            continue
+        entry_parts.append(rendered_entry)
+        entry_length += separator_length + len(rendered_entry)
+
+    description_limit = MAX_MESSAGE_LENGTH - entry_length
+    if entry_parts:
+        description_limit -= 2
+    description = _escape_truncate(str(message.description), description_limit)
+    return (
+        "\n\n".join([description, *entry_parts])
+        if description
+        else "\n\n".join(entry_parts)
+    )
 
 
-def send(shared_state, message, silent=True):
+def send(shared_state, message, silent=True, notification_type=None):
     """Send one Pushover notification. Return True only on API success."""
     api_token, user_key = _get_pushover_credentials(shared_state)
     if not api_token or not user_key:
@@ -124,13 +163,12 @@ def send(shared_state, message, silent=True):
         "token": api_token,
         "user": user_key,
         "title": str(message.title)[:MAX_TITLE_LENGTH],
-        "message": formatter.render_message(message)[:MAX_MESSAGE_LENGTH],
-        "priority": -1 if silent else 0,
+        "message": _bounded_message(formatter, message),
+        "html": 1,
+        "priority": (
+            -2 if silent else 1 if notification_type == NotificationType.DISABLED else 0
+        ),
     }
-    link = _first_link(message)
-    if link and len(str(link.url)) <= MAX_URL_LENGTH:
-        payload["url"] = str(link.url)
-        payload["url_title"] = str(link.link_text or link.text)[:MAX_URL_TITLE_LENGTH]
 
     files = None
     if message.image_url:
