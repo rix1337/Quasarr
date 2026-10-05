@@ -304,34 +304,6 @@ jobs:
           bodyFile: "release_body.md"
           tag: v.${{ needs.version.outputs.version }}
 
-  notify:
-    name: Notify Discord
-    needs: [ version, release, merge-docker-manifest ]
-    if: always() && needs.release.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    steps:
-      - uses: actions/checkout@v6
-      - name: Send Discord Webhook
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          VERSION: ${{ needs.version.outputs.version }}
-          REPO: ${{ github.repository }}
-        run: |
-          TAG="v.$VERSION"
-          RELEASE_BODY=$(gh release view "$TAG" --json body --jq .body)
-          
-          # Truncate to 4000 characters to avoid Discord limits
-          if [ ${#RELEASE_BODY} -gt 4000 ]; then
-            RELEASE_BODY="${RELEASE_BODY:0:4000}..."
-          fi
-
-          if [ -n "$DISCORD_WEBHOOK" ]; then
-            jq -n --arg title "🚀 New Release: $TAG" --arg desc "$RELEASE_BODY" --arg url "https://github.com/$REPO/releases/tag/$TAG" '{content: null, embeds: [{title: $title, description: $desc, url: $url, color: 5763719}]}' > discord_payload.json
-            curl -H "Content-Type: application/json" -d @discord_payload.json "$DISCORD_WEBHOOK"
-          fi
-
   job-summary:
     name: 📈 Build Report
     runs-on: ubuntu-latest

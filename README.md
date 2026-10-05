@@ -6,7 +6,7 @@ Quasarr connects JDownloader with Radarr, Sonarr, Lidarr and Magazarr. It also h
 CAPTCHAs.
 
 [![PyPI version](https://badge.fury.io/py/quasarr.svg)](https://badge.fury.io/py/quasarr)
-[![Discord](https://img.shields.io/discord/1075348594225315891)](https://discord.gg/eM4zA2wWQb)
+[![SimpleX Community](https://img.shields.io/badge/SimpleX-Community-blue)](https://smp14.simplex.im/c#huQ65mF5BdP6HJ7wCfByVkwy6w2zghW3WF-YLK8O5wc)
 [![GitHub Sponsorship](https://img.shields.io/badge/support-me-red.svg)](https://github.com/users/rix1337/sponsorship)
 
 Quasarr pretends to be both `Newznab Indexer` and `SABnzbd client`. Therefore, do not try to use it with real usenet
@@ -272,7 +272,7 @@ Most feature requests can be satisfied by:
     - Start with [AGENTS.md](AGENTS.md) for repository guidelines: development setup,
       local run commands, tests, linting, and commit/PR conventions.
       Development environment setup for pull requests also lives in [CONTRIBUTING.md](CONTRIBUTING.md).
-    - Always reach out on Discord before starting work on a new feature to prevent waste of time.
+    - Always reach out on [SimpleX](https://smp14.simplex.im/c#huQ65mF5BdP6HJ7wCfByVkwy6w2zghW3WF-YLK8O5wc) before starting work on a new feature to prevent waste of time.
     - Please follow the existing code style and project structure.
     - CAPTCHA solving for new link crypters is done via Tampermonkey userscripts. You will need to provide a working
       userscript that integrates with the Quasarr Web UI's CAPTCHA flow.

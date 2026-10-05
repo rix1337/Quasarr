@@ -62,7 +62,7 @@ Match the dominant history pattern: a single-line, imperative, capitalized subje
 
 Add a body only when the subject genuinely cannot carry the change: list only the defining changes in short concrete bullets, and explain why only when it is not obvious from the diff. The PR description, not the commit body, carries the user-visible summary and test plan.
 
-Pull requests must describe the user-visible change, call out any config or hostname impact, and avoid mixing unrelated cleanup with functional work. Include proof of behavior (screenshots, logs, or a brief reproduction) for UI or integration changes. Coordinate on Discord before starting large new features.
+Pull requests must describe the user-visible change, call out any config or hostname impact, and avoid mixing unrelated cleanup with functional work. Include proof of behavior (screenshots, logs, or a brief reproduction) for UI or integration changes. Coordinate on [SimpleX](https://smp14.simplex.im/c#huQ65mF5BdP6HJ7wCfByVkwy6w2zghW3WF-YLK8O5wc) before starting large new features.
 
 After addressing PR review feedback, resolve the corresponding GitHub review parent thread and verify that it reads back as resolved so addressed comments no longer remain visible as unresolved.
 
@@ -178,6 +178,8 @@ Default section order:
 ## User Preferences
 
 When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md
+
+- Community links point to SimpleX; release workflows do not post to Discord. Discord webhook notifications remain a supported integration.
 
 ## Child DOX Index
 
