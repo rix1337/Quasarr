@@ -12,6 +12,7 @@ class DownloadRelease(TypedDict, total=False):
     - `links`: list of [url, mirror] or [url, mirror, state_url]
     - `title` / `password` / `imdb_id`: optional source overrides
     - `protected`: source page requires manual decryption
+    - `terminal` / `error`: final failure persisted without trying another source
     """
 
     links: list[list[str]]
@@ -19,3 +20,5 @@ class DownloadRelease(TypedDict, total=False):
     password: str
     imdb_id: str
     protected: bool
+    terminal: bool
+    error: str

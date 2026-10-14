@@ -2,7 +2,9 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+import html
 import re
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 import requests
 
@@ -90,9 +92,20 @@ class Source(AbstractDownloadSource):
         try:
             session = requests.Session()
 
+            # Quasarr owns the episode parameters; the upstream page receives
+            # only its existing release selector.
+            page_parts = urlsplit(url)
+            page_query = parse_qs(page_parts.query, keep_blank_values=True)
+            page_url = url
+            if "season" in page_query or "episode" in page_query:
+                page_query.pop("season", None)
+                page_query.pop("episode", None)
+                page_url = urlunsplit(
+                    page_parts._replace(query=urlencode(page_query, doseq=True))
+                )
             # First, load the page to establish session cookies
             r = session.get(
-                url,
+                page_url,
                 headers=headers,
                 timeout=DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
             )
@@ -130,10 +143,52 @@ class Source(AbstractDownloadSource):
             releases = data["item"]["releases"]
 
             # Find ALL releases matching the title (these are different mirrors: M1, M2, M3...)
-            matching_releases = [r for r in releases if r.get("fulltitle") == title]
+            query = parse_qs(urlsplit(url).query, keep_blank_values=True)
+            episode_selection = None
+            if "season" in query or "episode" in query:
+                try:
+                    if any(
+                        len(query.get(key, [])) != 1
+                        for key in ("release", "season", "episode")
+                    ):
+                        raise ValueError("Ambiguous episode selection")
+                    selected_season = int(query["season"][0])
+                    selected_episode = int(query["episode"][0])
+                    selected_uid = query["release"][0]
+                    if selected_season < 0 or selected_episode <= 0:
+                        raise ValueError("Invalid episode selection")
+                except (KeyError, IndexError, ValueError):
+                    return {
+                        "links": [],
+                        "error": "Episode not present in link container",
+                        "terminal": True,
+                    }
+                episode_selection = (selected_season, selected_episode)
+                matching_releases = []
+                for release in releases:
+                    original_title = html.unescape(
+                        release.get("fulltitle") or ""
+                    ).replace(" ", ".")
+                    pack_token = rf"(?i)(?<![a-z0-9])S0*{selected_season}(?![a-z0-9])"
+                    candidate = re.sub(
+                        pack_token,
+                        f"S{selected_season:02d}E{selected_episode:02d}",
+                        original_title,
+                        count=1,
+                    )
+                    if str(release.get("uid")) == selected_uid and candidate == title:
+                        matching_releases.append(release)
+            else:
+                matching_releases = [r for r in releases if r.get("fulltitle") == title]
 
             if not matching_releases:
                 info(f"No release found matching title: {title}")
+                if episode_selection:
+                    return {
+                        "links": [],
+                        "error": "Episode not present in link container",
+                        "terminal": True,
+                    }
                 return {"links": []}
 
             debug(f"Found {len(matching_releases)} mirror(s) for: {title}")
@@ -188,6 +243,18 @@ class Source(AbstractDownloadSource):
                             container_url,
                             flags=re.IGNORECASE,
                         )
+                    if episode_selection:
+                        if urlsplit(container_url).hostname != "hide.cx":
+                            continue
+                        parts = urlsplit(container_url)
+                        container_query = parse_qs(parts.query)
+                        container_query.update(
+                            season=[str(episode_selection[0])],
+                            episode=[str(episode_selection[1])],
+                        )
+                        container_url = urlunsplit(
+                            parts._replace(query=urlencode(container_query, doseq=True))
+                        )
                     if re.search(r"hide\.", container_url, re.IGNORECASE):
                         hide_candidates.append([container_url, hoster, state_url])
                     elif re.search(r"filecrypt\.", container_url, re.IGNORECASE):
@@ -213,6 +280,11 @@ class Source(AbstractDownloadSource):
                     best_hide is None or len(online_hide) > best_hide[0]
                 ):
                     best_hide = (len(online_hide), online_hide)
+
+                if episode_selection:
+                    if red_hide is None and hide_candidates:
+                        red_hide = [hide_candidates[0][0], hide_candidates[0][1]]
+                    continue
 
                 # Tier 2 candidate: this mirror's online filecrypt containers.
                 online_fc = (
@@ -263,6 +335,15 @@ class Source(AbstractDownloadSource):
                     f"- handing to JDownloader"
                 )
                 return {"links": best_hide[1]}
+
+            if episode_selection:
+                if red_hide:
+                    return {"links": [red_hide]}
+                return {
+                    "links": [],
+                    "error": "Episode not present in link container",
+                    "terminal": True,
+                }
 
             # Tier 2: green filecrypt containers from the best single mirror.
             if best_fc:

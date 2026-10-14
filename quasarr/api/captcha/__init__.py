@@ -4,18 +4,25 @@
 
 import json
 from base64 import urlsafe_b64decode, urlsafe_b64encode
+from html import escape
 from urllib.parse import quote, unquote
 
 from bottle import HTTPResponse, redirect, request, response
 
 import quasarr.providers.html_images as images
 from quasarr.api.jdownloader import get_jdownloader_disconnected_page
-from quasarr.downloads import submit_final_download_urls
+from quasarr.downloads import fail, submit_final_download_urls
+from quasarr.downloads.linkcrypters.hide import (
+    HideEpisodeError,
+    confirm_hide_episode_selection,
+)
 from quasarr.downloads.packages import delete_package
 from quasarr.providers import obfuscated, shared_state
 from quasarr.providers.auth import public_endpoint
 from quasarr.providers.html_templates import render_button, render_centered_html
 from quasarr.providers.log import debug, error, info, trace
+from quasarr.providers.notifications import update_release_notification
+from quasarr.providers.notifications.helpers.notification_types import NotificationType
 from quasarr.providers.statistics import StatsHelper
 from quasarr.storage.categories import (
     get_download_category_from_package_id,
@@ -44,6 +51,54 @@ def check_package_exists(package_id):
 
 
 def setup_captcha_routes(app):
+    def mark_manual_package_failed(package_id, title, reason):
+        protected_release = None
+        try:
+            raw_data = shared_state.get_db("protected").retrieve(package_id)
+            protected_release = json.loads(raw_data) if raw_data else None
+        except Exception as e:
+            info(
+                f'Error reading protected package "{package_id}" for manual failure: {e}'
+            )
+        if isinstance(protected_release, dict) and protected_release.get("title"):
+            title = protected_release["title"]
+        fail(title, package_id, shared_state, reason=reason)
+        try:
+            shared_state.get_db("protected").delete(package_id)
+        except Exception as e:
+            info(
+                f'Error deleting protected package "{package_id}" after manual failure: {e}'
+            )
+        update_release_notification(
+            shared_state,
+            protected_release or {"title": title},
+            NotificationType.FAILED,
+            details={"reason": reason},
+        )
+        return render_centered_html(f'''<h1><img src="{images.logo}" class="logo"/>Quasarr</h1>
+        <p><b>Package marked as failed.</b></p>
+        <p>{escape(str(reason))}</p>
+        <p>{render_button("Back", "secondary", {"onclick": "location.href='/captcha'"})}</p>''')
+
+    def render_manual_failure(reason):
+        return render_centered_html(f'''<h1><img src="{images.logo}" class="logo"/>Quasarr</h1>
+        <p><b>Error:</b> {escape(str(reason))}</p>
+        <p>{render_button("Back", "secondary", {"onclick": "location.href='/captcha'"})}</p>''')
+
+    def get_hide_episode_confirmation():
+        season_values = request.query.getall("season")
+        episode_values = request.query.getall("episode")
+        if len(season_values) != 1 or len(episode_values) != 1:
+            return {"season": None, "episode": None}
+        season = season_values[0]
+        episode = episode_values[0]
+        try:
+            season = int(season)
+            episode = int(episode)
+        except (TypeError, ValueError):
+            pass
+        return {"season": season, "episode": episode}
+
     def is_he_link(link):
         url = link[0] if isinstance(link, (list, tuple)) else link
         mirror = link[1] if isinstance(link, (list, tuple)) and len(link) > 1 else ""
@@ -924,6 +979,22 @@ def setup_captcha_routes(app):
 
         try:
             package_id = request.query.get("pkg_id")
+            failure_reason = request.query.get("error")
+            if package_id and failure_reason:
+                check_package_exists(package_id)
+                protected_data = json.loads(
+                    shared_state.get_db("protected").retrieve(package_id)
+                )
+                try:
+                    expected_selection = confirm_hide_episode_selection(
+                        protected_data.get("links", []), get_hide_episode_confirmation()
+                    )
+                except HideEpisodeError as e:
+                    return render_manual_failure(str(e))
+                if expected_selection is None:
+                    return render_manual_failure(failure_reason)
+                StatsHelper(shared_state).increment_failed_decryptions_manual()
+                return mark_manual_package_failed(package_id, "Unknown", failure_reason)
             compressed_links = request.query.get("links", "")
 
             if not package_id or not compressed_links:
@@ -996,6 +1067,14 @@ def setup_captcha_routes(app):
             title = data.get("title", "Unknown")
             password = data.get("password", "")
 
+            try:
+                confirm_hide_episode_selection(
+                    data.get("links", []), get_hide_episode_confirmation()
+                )
+            except HideEpisodeError as e:
+                StatsHelper(shared_state).increment_failed_decryptions_manual()
+                return mark_manual_package_failed(package_id, title, str(e))
+
             # Download the package
             submit_result = submit_final_download_urls(
                 shared_state,
@@ -1032,6 +1111,8 @@ def setup_captcha_routes(app):
                     {render_button("Try Again", "secondary", {"onclick": "location.href='/captcha'"})}
                 </p>''')
 
+        except HTTPResponse:
+            raise
         except Exception as e:
             error(f"Quick transfer error: {e}")
             return render_centered_html(f'''<h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
@@ -1097,6 +1178,15 @@ def setup_captcha_routes(app):
                 </p>''')
 
             check_package_exists(package_id)
+
+            protected_data = json.loads(
+                shared_state.get_db("protected").retrieve(package_id)
+            )
+            try:
+                confirm_hide_episode_selection(protected_data.get("links", []), None)
+            except HideEpisodeError as e:
+                StatsHelper(shared_state).increment_failed_decryptions_manual()
+                return mark_manual_package_failed(package_id, title, str(e))
 
             # Process links input
             if links_input:

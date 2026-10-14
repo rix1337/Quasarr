@@ -14,13 +14,14 @@ Receives a grab request from the SABnzbd-emulating API, picks the matching sourc
 ## Local Contracts
 
 - `download()` candidate order: (1) the `source_key` from the search payload (trusted), (2) every registered source whose configured hostname is a substring of the URL, (3) raw-crypter fallback when the URL itself matches a crypter pattern. The first source returning non-empty links wins.
-- Link classification priority is direct > auto > protected (`AUTO_DECRYPT_PATTERNS`/`PROTECTED_PATTERNS` in constants, the magic mirror label `junkies`, or a source result explicitly marked `protected: true`). If any direct links exist, crypted fallbacks are ignored. Failed auto-decrypts are demoted into the protected bucket.
+- Link classification priority is direct > auto > protected (`AUTO_DECRYPT_PATTERNS`/`PROTECTED_PATTERNS` in constants, the magic mirror label `junkies`, or a source result explicitly marked `protected: true`). If any direct links exist, crypted fallbacks are ignored. Nonterminal auto-decrypt failures are demoted into the protected bucket.
 - A terminal grab failure logs its reason at ERROR and its successful failed-package persistence at WARN; failure to persist that state logs at ERROR.
 - `process_links()` honors the filecrypt kill switch right after `classify_links()`: `_drop_filecrypt_if_disabled()` reads the cached `shared_state.values["filecrypt_enabled"]` (default `True`, set by `storage/setup/filecrypt.py`) and, when `False`, strips filecrypt links out of the protected bucket so the package fails cleanly if nothing else remains. `classify_links()` itself stays pure/shared_state-free; only the orchestrator applies the flag.
 - Package IDs are deterministic: `Quasarr_{category}_{32-hex-hash}` validated by `PACKAGE_ID_PATTERN`; `package_id_exists()` checks the protected DB, failed DB, and JDownloader before any download.
 - `submit_final_download_urls()` is the ONLY path that hands direct links to JDownloader (also imported by `api/captcha` and `api/sponsors_helper`). It applies the download-category mirror whitelist; if a whitelist drops everything, the package is persisted as failed.
 - Protected-package JSON owns the tracked notification references for that release; no separate notification table exists. `submit_final_download_urls(..., remove_protected=True)` captures this context before deletion, edits the original notification on solved/failed outcomes, and accepts `notification_details` so manual and SponsorsHelper solutions render accurately.
 - `fail()` deliberately returns `{"success": True, "failed": True}` so the *arr client records the grab and can blocklist it.
+- Terminal source errors and terminal Hide selection failures persist through `fail()` into failed history with their original error. Missing requested episodes remain visible as `Episode not present in link container` so Sonarr can blacklist the release; they never silently disappear or fall back to an unfiltered container.
 - `packages/` auto-start moves exactly ONE Quasarr package per call from linkgrabber to the download list; archive packages are only "finished" when extraction completed; `nzo_id` is the Quasarr package ID read from the JD `comment` field (JD uuid fallback for foreign packages).
 - Sources call `mark_hostname_issue(initials, "download", msg)` on errors; the orchestrator clears the issue when a source returns usable links.
 
@@ -38,6 +39,7 @@ Product-wide policy - do not redesign it; per-source specifics live in the Per-S
 
 - Link entries are lists, not tuples: `[url, mirror]` with an optional third `state_url` element (a missing `state_url` counts as online).
 - Per-source mirror-name normalization is duplicated on purpose (each site labels hosters differently); the canonical global mapping lives in `mirror_filters.py` + `constants.MIRROR_TOKEN_ALIASES`.
+- Episode selection must reach the crypter as an explicit filter (URL parameter or equivalent native selection). Do not implement Quasarr-side filename filtering; archive filenames may be randomized. If the requested native selection is unavailable or unconfirmed, fail the grab rather than downloading the whole container, including through protected fallback.
 
 ## Verification
 

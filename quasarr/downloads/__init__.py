@@ -271,7 +271,13 @@ def handle_auto_decrypt_links(shared_state, links, title, password, package_id):
     result = decrypt_links_if_hide(shared_state, links)
 
     if result.get("status") != "success":
-        return {"success": False, "reason": "Auto-decrypt failed"}
+        failure = {
+            "success": False,
+            "reason": result.get("reason") or "Auto-decrypt failed",
+        }
+        if result.get("terminal"):
+            failure["terminal"] = True
+        return failure
 
     decrypted_urls = result.get("results", [])
     if not decrypted_urls:
@@ -350,6 +356,9 @@ def process_links(
     imdb_id = imdb_id or source_result.get("imdb_id")
     title = normalize_download_title(source_result.get("title") or title)
 
+    if source_result.get("terminal") and source_result.get("error"):
+        return fail(title, package_id, shared_state, reason=source_result["error"])
+
     if not links:
         return fail(
             title,
@@ -425,6 +434,8 @@ def process_links(
             return {"success": True, "title": title}
         if result.get("persisted_failure"):
             return {"success": True, "title": title, "failed": True}
+        if result.get("terminal"):
+            return fail(title, package_id, shared_state, reason=result.get("reason"))
         info(f"Auto-decrypt failed for {title}, falling back to manual CAPTCHA...")
         classified["protected"].extend(classified["auto"])
 
@@ -560,7 +571,9 @@ def download(
                 candidate_result = source.get_download_links(
                     shared_state, url, mirrors, title, password
                 )
-                if candidate_result and candidate_result.get("links"):
+                if candidate_result and (
+                    candidate_result.get("links") or candidate_result.get("terminal")
+                ):
                     clear_hostname_issue(key)
                     source_result = candidate_result
                     label = key.upper()

@@ -179,6 +179,8 @@ Default section order:
 
 When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md
 
+- Releasing the Userscripts or SponsorsHelper companion means pushing the approved changes to `main`; no tag or GitHub Release is required.
+
 ## Child DOX Index
 
 - `quasarr/AGENTS.md` - application package: layout, entrypoint and constants contracts, cross-cutting Python conventions; indexes the five subsystem docs (`api/`, `downloads/`, `search/`, `providers/`, `storage/`)
