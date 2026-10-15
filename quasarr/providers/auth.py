@@ -233,7 +233,10 @@ def _render_login_page(error=None):
                 box-shadow: 0 0.5rem 1.5rem var(--card-shadow);
                 padding: calc(var(--spacing) * 2); text-align: center; width: 100%; max-width: 400px;
             }}
-            .logo {{ height: 64px; width: 64px; vertical-align: middle; margin-right: 0.5rem; }}
+            .logo {{ height: 64px; width: 64px; vertical-align: middle; margin-right: 0.5rem; filter: invert(1); }}
+            @media (prefers-color-scheme: dark) {{
+                .logo {{ filter: none; }}
+            }}
             h1 {{ margin: 0 0 1rem 0; font-size: 1.75rem; }}
             h2 {{ margin: 0 0 1.5rem 0; font-size: 1.25rem; font-weight: 500; }}
             label {{ display: block; text-align: left; margin-bottom: 0.25rem; font-weight: 500; }}
