@@ -64,7 +64,7 @@ Add a body only when the subject genuinely cannot carry the change: list only th
 
 Pull requests must describe the user-visible change, call out any config or hostname impact, and avoid mixing unrelated cleanup with functional work. Include proof of behavior (screenshots, logs, or a brief reproduction) for UI or integration changes. Coordinate on [SimpleX](https://smp14.simplex.im/c#huQ65mF5BdP6HJ7wCfByVkwy6w2zghW3WF-YLK8O5wc) before starting large new features.
 
-After addressing PR review feedback, resolve the corresponding GitHub review parent thread and verify that it reads back as resolved so addressed comments no longer remain visible as unresolved.
+After addressing PR review feedback, resolve the corresponding GitHub review thread and verify that it reads back as resolved. When every thread in a review is resolved, minimize its parent review summary as `RESOLVED` and verify that it reads back as minimized. Delete obsolete build-run comments.
 
 Before requesting automated PR review, inspect changed loops and branches as state transitions, especially where parsing or filtering can erase raw source state or where nested loops share timeout budgets. Verify outer-loop fairness as well as inner-loop stopping behavior; do not truncate fallback-candidate lists without evidence that later candidates are redundant. Trace emitted URLs, selectors, and identifiers into their downstream consumers so missing specificity cannot widen the consumer's scope. Read test assertions as behavior contracts rather than trusting test names. Add paired regression coverage for both the new behavior and the unchanged legacy path.
 
@@ -180,6 +180,7 @@ Default section order:
 When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md
 
 - Community links point to SimpleX; release workflows do not post to Discord. Discord webhook notifications remain a supported integration.
+- Releasing the Userscripts or SponsorsHelper companion means pushing the approved changes to `main`; no tag or GitHub Release is required.
 
 ## Child DOX Index
 
