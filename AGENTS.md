@@ -56,6 +56,14 @@ Develop from a source checkout; `uv tool install quasarr` is for end users only.
 
 CI enforces the same gate via `uv run pre-commit.py --ci` in `PullRequests.yml`; `Release.yml` runs no lint or test step.
 
+GitHub-hosted Linux jobs pin Ubuntu 24.04 (`ubuntu-24.04-arm` for ARM builds), and JavaScript actions use Node 24. Updating setup actions must retain the explicit uv executable version shared by both release workflows and `pyproject.toml`.
+
+Release changelogs use the checked-out commit as their explicit `head-ref` (the PR head for beta builds, not the temporary merge SHA). Pass generated changelog text through an environment variable, never directly into shell source.
+
+CI auto-fix pushes dispatch one read-only follow-up (`auto_fix_followup=true`) to check and build the updated commit. The follow-up uses `--check` and must never upgrade dependencies, push fixes, or dispatch another run. Ordinary PR runs, manual runs, and local hooks retain automatic dependency upgrades. Bot-pushed `pull_request` runs require approval, so they cannot replace this dispatch.
+
+Stable and beta release workflows announce successful releases to SimpleX only after their artifacts and Docker manifests are available. `.github/scripts/notify_simplex.py` posts plain text and full URLs to the generic webhook using `SIMPLEX_WEBHOOK_URL` and `SIMPLEX_WEBHOOK_TOKEN` repository secrets. Send the Quasarr User-Agent; the production edge rejects Python's default agent with HTTP 403. Stable notifications deduplicate by release tag; beta notifications also include the commit because the beta tag moves. Missing secrets produce a warning and skip delivery; configured delivery failures fail the notification job. Never commit endpoint credentials or send test messages to the production channel without user authorization.
+
 ## Commits And Pull Requests
 
 Match the dominant history pattern: a single-line, imperative, capitalized subject with no body - short enough to scan, broad enough to summarize the whole change (do not undersell a multi-file change by naming one small part). No trailing period, no contributor emoji (automated tooling may add one); a trailing `(#123)` reference is fine. Optional prefixes seen in history: `chore:` for maintenance (still describe the main work after the prefix), `chore(deps):` for dependency-only updates, `fix:` (plain `Fix ...` is equally fine - pick one style and keep the subject specific), `refactor:` only for genuine no-behavior-change refactors.
@@ -179,8 +187,10 @@ Default section order:
 
 When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md
 
-- Community links point to SimpleX; release workflows do not post to Discord. Discord webhook notifications remain a supported integration.
+- Community links point to SimpleX. Announce stable releases and beta builds through the generic SimpleX webhook; release workflows do not post to Discord. Discord webhook notifications remain a supported integration.
+- Explain release webhook secret setup in chat; do not append it to `CONTRIBUTING.md`.
 - Releasing the Userscripts or SponsorsHelper companion means pushing the approved changes to `main`; no tag or GitHub Release is required.
+- History rewrites (rebase, cherry-pick, squash) skip the pre-commit hook; re-run `uv run pre-commit.py` and commit its result before pushing, otherwise CI auto-fixes land as chore commits. Local uv must match the version pinned in `.github/workflows/PullRequests.yml` or the lock `revision` ping-pongs between environments.
 
 ## Child DOX Index
 
