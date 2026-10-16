@@ -6,6 +6,8 @@ To test your changes before submitting a pull request:
 
 Ensure you have the development tools (like `ruff`) installed and your environment synced:
 
+Use the uv version specified by `required-version` in `pyproject.toml` (currently `0.11.3`). CI uses the same version to keep lockfile output consistent.
+
 ```bash
 uv sync --group dev
 ```
@@ -57,3 +59,5 @@ uv run pre-commit.py
 ```
 
 Dependencies are upgraded automatically on every run.
+
+After CI pushes auto-fixes, it dispatches a read-only follow-up to validate and build that commit without repeating the dependency upgrade.

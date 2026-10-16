@@ -3,10 +3,12 @@
 # Project by https://github.com/rix1337
 
 import html
+import re
 import time
 import traceback
 import warnings
 from datetime import datetime
+from urllib.parse import urlencode, urlsplit
 
 import requests
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
@@ -18,6 +20,7 @@ from quasarr.constants import (
     SEARCH_CAT_SHOWS_ANIME,
     SEARCH_REQUEST_TIMEOUT_SECONDS,
 )
+from quasarr.downloads.sources.wx import HIDE_CX_MIRROR_USER_IDS
 from quasarr.providers import shared_state
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title, get_year
@@ -250,6 +253,7 @@ class Source(AbstractSearchSource):
 
             # Track seen titles to deduplicate (mirrors have same fulltitle)
             seen_titles = set()
+            seen_synthesized = set()
 
             for item in items:
                 try:
@@ -346,11 +350,24 @@ class Source(AbstractSearchSource):
                     if "releases" in detail_item and isinstance(
                         detail_item["releases"], list
                     ):
-                        trace(
-                            f"Found {len(detail_item['releases'])} releases for {uid}"
-                        )
+                        release_candidates = detail_item["releases"]
+                        if season is not None and episode is not None:
+                            exact_episode = []
+                            synthesized = []
+                            for release in release_candidates:
+                                if isinstance(
+                                    release, dict
+                                ) and _is_exact_episode_title(
+                                    release.get("fulltitle"), season, episode
+                                ):
+                                    exact_episode.append(release)
+                                else:
+                                    synthesized.append(release)
+                            release_candidates = exact_episode + synthesized
 
-                        for release in detail_item["releases"]:
+                        trace(f"Found {len(release_candidates)} releases for {uid}")
+
+                        for release in release_candidates:
                             try:
                                 release_title = release.get("fulltitle")
                                 if not release_title:
@@ -358,6 +375,15 @@ class Source(AbstractSearchSource):
 
                                 release_title = html.unescape(release_title)
                                 release_title = release_title.replace(" ", ".")
+
+                                episode_candidate = False
+                                if season is not None and episode is not None:
+                                    candidate_title = _season_episode_title(
+                                        release, release_title, season, episode
+                                    )
+                                    if candidate_title:
+                                        release_title = candidate_title
+                                        episode_candidate = True
 
                                 if not is_valid_release(
                                     release_title,
@@ -368,18 +394,37 @@ class Source(AbstractSearchSource):
                                 ):
                                     continue
 
-                                # Skip if we've already seen this exact title (deduplication)
-                                if release_title in seen_titles:
+                                # Exact releases keep title deduplication. Synthesized
+                                # episode candidates remain distinct per release UID
+                                # so another pack can be retried if one is incomplete.
+                                if episode_candidate:
+                                    synthesized_key = (
+                                        release_title,
+                                        str(release.get("uid")),
+                                    )
+                                    duplicate = (
+                                        release_title in seen_titles
+                                        or synthesized_key in seen_synthesized
+                                    )
+                                else:
+                                    duplicate = release_title in seen_titles
+                                if duplicate:
                                     trace(
                                         f"Skipping duplicate release: {release_title}"
                                     )
                                     continue
 
-                                seen_titles.add(release_title)
+                                if episode_candidate:
+                                    seen_synthesized.add(synthesized_key)
+                                else:
+                                    seen_titles.add(release_title)
 
                                 release_uid = release.get("uid")
                                 if release_uid:
-                                    release_source = f"https://{host}/detail/{uid}?release={release_uid}"
+                                    query = {"release": release_uid}
+                                    if episode_candidate:
+                                        query.update(season=season, episode=episode)
+                                    release_source = f"https://{host}/detail/{uid}?{urlencode(query)}"
                                 else:
                                     release_source = source
 
@@ -393,6 +438,11 @@ class Source(AbstractSearchSource):
                                         "%a, %d %b %Y %H:%M:%S +0000"
                                     )
                                 release_size = release.get("size", 0)
+                                if episode_candidate:
+                                    count = int(
+                                        release["options"]["episode_count_in_season"]
+                                    )
+                                    release_size = int(float(release_size or 0) / count)
                                 password = f"www.{host}"
 
                                 link = generate_download_link(
@@ -412,7 +462,11 @@ class Source(AbstractSearchSource):
                                             "hostname": self.initials,
                                             "imdb_id": item_imdb_id,
                                             "link": link,
-                                            "size": release_size,
+                                            "size": (
+                                                release_size * 1024 * 1024
+                                                if episode_candidate
+                                                else release_size
+                                            ),
                                             "date": release_published,
                                             "source": release_source,
                                         },
@@ -448,3 +502,50 @@ class Source(AbstractSearchSource):
         if releases:
             clear_hostname_issue(self.initials)
         return releases
+
+
+def _season_episode_title(release, title, season, episode):
+    """Expose a pack candidate; native Hide selection confirms availability at grab."""
+    try:
+        season, episode = int(season), int(episode)
+        count = int((release.get("options") or {}).get("episode_count_in_season", 0))
+    except (TypeError, ValueError):
+        return None
+    if season < 0 or episode <= 0 or episode > count or not release.get("uid"):
+        return None
+    match = re.search(r"(?i)(?<![a-z0-9])S(\d{1,2})(?![a-z0-9])", title)
+    if not match or int(match.group(1)) != season:
+        return None
+    crypted = release.get("crypted_links") or {}
+    hide_available = any(
+        isinstance(url, str)
+        and (
+            urlsplit(url).hostname == "hide.cx"
+            or (
+                release.get("user_id") in HIDE_CX_MIRROR_USER_IDS
+                and urlsplit(url).hostname == "filecrypt.cc"
+            )
+        )
+        for url in crypted.values()
+    )
+    if not hide_available:
+        return None
+    return (
+        title[: match.start()] + f"S{season:02d}E{episode:02d}" + title[match.end() :]
+    )
+
+
+def _is_exact_episode_title(title, season, episode):
+    if not isinstance(title, str):
+        return False
+    try:
+        season, episode = int(season), int(episode)
+    except (TypeError, ValueError):
+        return False
+    return (
+        re.search(
+            rf"(?i)(?<![a-z0-9])S0*{season}E0*{episode}(?![a-z0-9])",
+            title,
+        )
+        is not None
+    )

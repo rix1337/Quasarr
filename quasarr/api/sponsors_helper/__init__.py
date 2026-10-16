@@ -9,6 +9,10 @@ from functools import wraps
 from bottle import HTTPResponse, abort, request
 
 from quasarr.downloads import fail, submit_final_download_urls
+from quasarr.downloads.linkcrypters.hide import (
+    HideEpisodeError,
+    confirm_hide_episode_selection,
+)
 from quasarr.providers import shared_state
 from quasarr.providers.auth import require_api_key
 from quasarr.providers.log import info, warn
@@ -318,6 +322,7 @@ def setup_sponsors_helper_routes(app):
             download_links = data.get("urls")
             password = data.get("password")
             notification = data.get("notification")
+            episode_selection = data.get("episode_selection")
 
             if not isinstance(notification, dict):
                 return abort(400, "Missing or invalid 'notification' object")
@@ -334,6 +339,23 @@ def setup_sponsors_helper_routes(app):
                     title,
                     "SponsorsHelper returned an invalid download payload.",
                 )
+
+            if download_links:
+                protected_release = get_protected_release(package_id)
+                if (
+                    not isinstance(protected_release, dict)
+                    or not isinstance(protected_release.get("links"), list)
+                    or not protected_release["links"]
+                ):
+                    return abort(404, "Protected package not found")
+                try:
+                    confirm_hide_episode_selection(
+                        protected_release["links"],
+                        episode_selection,
+                    )
+                except HideEpisodeError as e:
+                    StatsHelper(shared_state).increment_failed_decryptions_automatic()
+                    return mark_helper_package_failed(package_id, title, str(e))
 
             info(
                 f"Received <green>{len(download_links)}</green> download links for <y>{title}</y>"
@@ -390,6 +412,8 @@ def setup_sponsors_helper_routes(app):
                     "SponsorsHelper returned no final download links.",
                 )
 
+        except HTTPResponse:
+            raise
         except Exception as e:
             info(f"Error decrypting: {e}")
 

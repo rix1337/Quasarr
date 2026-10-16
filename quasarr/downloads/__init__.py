@@ -41,12 +41,12 @@ from quasarr.storage.categories import (
 
 
 def generate_deterministic_package_id(
-    title, source_key, client_type, download_category
+    title, source_key, client_type, download_category, identity=None
 ):
     """
     Generate a deterministic package ID from title, source, and client type.
 
-    The same combination of (title, source_key, client_type) will ALWAYS produce
+    The same title, source, client, category, and optional source identity produce
     the same package_id, allowing clients to reliably blocklist erroneous releases.
 
     Args:
@@ -55,6 +55,7 @@ def generate_deterministic_package_id(
         client_type: Client type without version (e.g., "radarr", "sonarr", "magazarr")
         download_category: Optional download category override
             (e.g., "movies", "tv", "docs")
+        identity: Optional stable source identity; omitted for legacy releases
 
     Returns:
         Deterministic package ID in format: Quasarr_{download_category}_{hash32}
@@ -74,7 +75,10 @@ def generate_deterministic_package_id(
         )
 
     # Create deterministic hash from combination using SHA256
+    normalized_identity = str(identity).strip() if identity else ""
     hash_input = f"{normalized_title}|{normalized_source}|{normalized_client}"
+    if normalized_identity:
+        hash_input += f"|{normalized_identity}"
     hash_bytes = hashlib.sha256(hash_input.encode("utf-8")).hexdigest()
 
     # Use first 32 characters for good collision resistance (128-bit)
@@ -271,7 +275,13 @@ def handle_auto_decrypt_links(shared_state, links, title, password, package_id):
     result = decrypt_links_if_hide(shared_state, links)
 
     if result.get("status") != "success":
-        return {"success": False, "reason": "Auto-decrypt failed"}
+        failure = {
+            "success": False,
+            "reason": result.get("reason") or "Auto-decrypt failed",
+        }
+        if result.get("terminal"):
+            failure["terminal"] = True
+        return failure
 
     decrypted_urls = result.get("results", [])
     if not decrypted_urls:
@@ -350,6 +360,9 @@ def process_links(
     imdb_id = imdb_id or source_result.get("imdb_id")
     title = normalize_download_title(source_result.get("title") or title)
 
+    if source_result.get("terminal") and source_result.get("error"):
+        return fail(title, package_id, shared_state, reason=source_result["error"])
+
     if not links:
         return fail(
             title,
@@ -425,6 +438,8 @@ def process_links(
             return {"success": True, "title": title}
         if result.get("persisted_failure"):
             return {"success": True, "title": title, "failed": True}
+        if result.get("terminal"):
+            return fail(title, package_id, shared_state, reason=result.get("reason"))
         info(f"Auto-decrypt failed for {title}, falling back to manual CAPTCHA...")
         classified["protected"].extend(classified["auto"])
 
@@ -515,6 +530,8 @@ def download(
                     will be derived from URL matching against configured hostnames.
     """
     package_id = None
+    package_identity = None
+    package_identity_source_key = None
     try:
         if imdb_id and imdb_id.lower() == "none":
             imdb_id = None
@@ -555,12 +572,28 @@ def download(
             ):
                 continue
 
+            if package_identity is None:
+                identity_getter = getattr(source, "get_package_identity", None)
+                if identity_getter:
+                    try:
+                        candidate_identity = identity_getter(url)
+                    except Exception:
+                        candidate_identity = None
+                    if (
+                        isinstance(candidate_identity, str)
+                        and candidate_identity.strip()
+                    ):
+                        package_identity = candidate_identity
+                        package_identity_source_key = key
+
             try:
                 # Mirrors are download-category-driven and passed to each source getter.
                 candidate_result = source.get_download_links(
                     shared_state, url, mirrors, title, password
                 )
-                if candidate_result and candidate_result.get("links"):
+                if candidate_result and (
+                    candidate_result.get("links") or candidate_result.get("terminal")
+                ):
                     clear_hostname_issue(key)
                     source_result = candidate_result
                     label = key.upper()
@@ -584,11 +617,17 @@ def download(
 
         # Use provided source_key if available, otherwise use detected one
         # This ensures we use the authoritative source from the search results
-        final_source_key = source_key if source_key else detected_source_key
+        final_source_key = (
+            source_key or detected_source_key or package_identity_source_key
+        )
 
         # Generate DETERMINISTIC package_id
         package_id = generate_deterministic_package_id(
-            title, final_source_key, client_type, download_category
+            title,
+            final_source_key,
+            client_type,
+            download_category,
+            identity=package_identity,
         )
 
         # Skip Download if package_id already exists
@@ -626,10 +665,14 @@ def download(
             except Exception:
                 client_type = "unknown"
 
-            final_source_key = source_key if source_key else "unknown"
+            final_source_key = source_key or package_identity_source_key or "unknown"
 
             package_id = generate_deterministic_package_id(
-                title, final_source_key, client_type, download_category
+                title,
+                final_source_key,
+                client_type,
+                download_category,
+                identity=package_identity,
             )
 
         result = fail(title, package_id, shared_state, reason=f"Unexpected error: {e}")

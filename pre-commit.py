@@ -304,10 +304,10 @@ def main():
         print("❌ ::error::PR checks failed — see the checklist above.")
         sys.exit(1)
 
-    # Run Tasks
-    fixed_format = task_format()
-    # Dependencies are always upgraded on every run (no opt-in flag).
+    # Run Tasks. Upgrade dependencies first so the same run validates and
+    # formats with the versions it just resolved.
     fixed_deps = task_upgrade_deps()
+    fixed_format = task_format()
     task_tests()
 
     fixed_version, new_v = task_version_bump()
@@ -354,8 +354,6 @@ def main():
             print(f"❌ ::error::Failed to push fixes. ({e})")
             sys.exit(1)
 
-        repo = get_env("GITHUB_REPO")
-        workflow_name = get_env("WORKFLOW_NAME")
         pr_num = get_env("PR_NUMBER")
 
         if not pr_num:
@@ -380,8 +378,8 @@ def main():
             if fixed_version:
                 fixes_list += f"- ✅ **Bumped Version** ({new_v})\n"
 
-            body = f"### 🤖 Auto-Fix Applied\nI fixed the following issues so we can merge:\n{fixes_list}\n"
-            body += f"**Note:** Build is now **GREEN** 🟢. Please run `git pull origin {target_ref}` locally.\n"
+            body = f"### 🤖 Auto-Fix Applied\nI fixed the following issues:\n{fixes_list}\n"
+            body += f"Please run `git pull origin {target_ref}` locally.\n"
 
             Path("comment.md").write_text(body, encoding="utf-8")
             run(
@@ -389,24 +387,23 @@ def main():
                 check=False,
             )
 
-            if target_ref == "dev":
-                actions_url = (
-                    f"https://github.com/{repo}/actions?query=branch%3A{target_ref}"
-                )
-                retrigger_body = f"🚀 **Beta Build Triggered!**\n\n[**👉 View the new run**]({actions_url})"
-                Path("retrigger.md").write_text(retrigger_body, encoding="utf-8")
-                run(
-                    ["gh", "pr", "comment", pr_num, "--body-file", "retrigger.md"],
-                    check=False,
-                )
-
-        print(f"⚡ Triggering workflow: {workflow_name}...")
-        ret = run(
-            ["gh", "workflow", "run", workflow_name, "--ref", target_ref], check=False
+        workflow_name = get_env("WORKFLOW_NAME")
+        dispatch = run(
+            [
+                "gh",
+                "workflow",
+                "run",
+                workflow_name,
+                "--ref",
+                target_ref,
+                "--field",
+                "auto_fix_followup=true",
+            ],
+            check=False,
         )
-
-        if ret.returncode != 0:
-            print("⚠️  ::warning::Could not auto-trigger next run.")
+        if dispatch.returncode != 0:
+            print("❌ ::error::Could not dispatch read-only follow-up workflow.")
+            sys.exit(1)
 
         sys.exit(0)
 

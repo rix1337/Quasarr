@@ -23,3 +23,7 @@ class AbstractDownloadSource(ABC):
         password: str,
     ) -> DownloadRelease:
         pass
+
+    def get_package_identity(self, url: str) -> str | None:
+        """Return an optional stable identity for deterministic package IDs."""
+        return None

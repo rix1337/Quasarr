@@ -62,3 +62,9 @@ lint.ignore = ["E"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["quasarr"]
+
+[tool.uv]
+# The lock `revision` is uv-version-specific. Hard-pin the uv version so a
+# mismatched uv fails loudly instead of silently writing a different revision,
+# which surfaces as back-and-forth chore commits between environments.
+required-version = "==0.11.3"

@@ -2,20 +2,34 @@ name: Pull Requests
 
 on:
   workflow_dispatch:
+    inputs:
+      auto_fix_followup:
+        default: false
+        description: Read-only follow-up after bot auto-fix
+        type: boolean
   pull_request:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Key on the branch, not github.ref: pull_request events see refs/pull/N/merge
+  # while workflow_dispatch sees refs/heads/dev, so keying on github.ref put
+  # runs for the same branch in different groups and let them race. Include
+  # the source repository so a fork's dev branch cannot cancel our dev runs.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 env:
   GHCR_ENDPOINT: "ghcr.io/rix1337/quasarr"
   DESCRIPTION: "Quasarr connects JDownloader with Radarr, Sonarr and Magazarr."
+  # Must match Release.yml UV_VERSION and [tool.uv] required-version.
+  # The lock `revision` field is
+  # uv-version-specific; if local uv and CI uv diverge, the lock ping-pongs
+  # between them as endless one-line chore commits.
+  UV_VERSION: "0.11.3"
 
 jobs:
   quality-check:
     name: Check & Auto-Fix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 1
     permissions:
       contents: write
@@ -31,8 +45,9 @@ jobs:
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.3.0
         with:
+          version: ${{ env.UV_VERSION }}
           enable-cache: true
 
       - run: |
@@ -48,12 +63,12 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
           WORKFLOW_NAME: ${{ github.workflow }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          FOLLOWUP: ${{ inputs.auto_fix_followup }}
         run: |
-          # Fork PRs: the bot has no write access to the contributor's branch,
-          # so auto-fix-and-push (--ci) fails with a 403. Run a no-push check
-          # instead. Same-repo PRs (the author's own dev→main) keep --ci.
-          if [ -n "$HEAD_REPO" ] && [ "$HEAD_REPO" != "$GITHUB_REPO" ]; then
-            echo "🔱 Fork PR ($HEAD_REPO) — running checks in no-push mode..."
+          # Fork PRs cannot receive bot pushes. The dispatched auto-fix
+          # follow-up also runs read-only to verify the pushed commit.
+          if [ "$FOLLOWUP" = "true" ] || { [ -n "$HEAD_REPO" ] && [ "$HEAD_REPO" != "$GITHUB_REPO" ]; }; then
+            echo "🔱 Running checks in no-push mode..."
             # --locked stops the outer invocation from refreshing uv.lock before
             # the check runs.
             uv run --locked pre-commit.py --check
@@ -80,7 +95,7 @@ jobs:
 
       - name: Upload PR check report
         if: always() && github.event.pull_request.head.repo.full_name != github.repository
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pr-check-report
           path: |
@@ -91,18 +106,19 @@ jobs:
   version:
     needs: [ quality-check ]
     if: needs.quality-check.outputs.changes_pushed != 'true' && ((github.event_name == 'pull_request' && github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) || ((github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.ref_name == 'dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 1
     outputs:
       version: ${{ steps.version.outputs.version }}
       epoch: ${{ steps.version.outputs.epoch }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
+          version: ${{ env.UV_VERSION }}
           enable-cache: true
       - id: version
         run: |
@@ -115,7 +131,7 @@ jobs:
   build-wheel:
     needs: [ quality-check, version ]
     if: needs.quality-check.outputs.changes_pushed != 'true' && ((github.event_name == 'pull_request' && github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) || ((github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.ref_name == 'dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 3
     outputs:
       attestation-id: ${{ steps.attest.outputs.attestation-id }}
@@ -125,20 +141,21 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
+          version: ${{ env.UV_VERSION }}
           enable-cache: true
       - run: |
           echo "📦 Building Python Wheel..."
           uv build
       - id: attest
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: "dist/*.whl"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheel
           path: ./dist/*
@@ -155,15 +172,16 @@ jobs:
     steps:
       - run: mkdir D:\a\temp -Force
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
+          version: ${{ env.UV_VERSION }}
           enable-cache: true
           cache-suffix: "win-build"
       - name: Cache PyInstaller Analysis
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             build
@@ -184,14 +202,14 @@ jobs:
           uv run python quasarr/providers/version.py --create-version-file
           uv run pyinstaller --collect-submodules quasarr.search.sources --collect-submodules quasarr.downloads.sources --collect-submodules charset_normalizer --onefile -y --version-file "file_version_info.txt" --workpath "build" --distpath "dist" --icon "Quasarr.ico" "Quasarr.py" -n "quasarr-${{ needs.version.outputs.version }}-standalone-win64"
           echo "✅ EXE build finished."
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: exe-amd64
           path: ./dist/*.exe
 
   beta-release:
     needs: [ version, build-wheel, build-exe ]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 1
     permissions: { contents: write }
     steps:
@@ -208,19 +226,22 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -f beta "$TARGET_SHA"
           git push origin refs/tags/beta --force
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wheel
           path: ./wheel
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: exe-amd64
           path: ./exe-amd64
       - id: changelog
-        uses: metcalfc/changelog-generator@v4.6.2
+        uses: metcalfc/changelog-generator@v4.9.0
         with:
           myToken: ${{ secrets.GITHUB_TOKEN }}
+          head-ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Create Release Body
+        env:
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
         run: |
           echo "📝 Generating Release Body..."
           echo "### Docker:" >> release_body.md
@@ -228,7 +249,7 @@ jobs:
           echo "### Python:" >> release_body.md
           echo "\`uv tool install https://github.com/rix1337/Quasarr/releases/download/beta/quasarr-${{ needs.version.outputs.version }}-py3-none-any.whl\`" >> release_body.md
           echo "### Changelog:" >> release_body.md
-          echo "${{ steps.changelog.outputs.changelog }}" >> release_body.md
+          printf '%s\n' "$CHANGELOG" >> release_body.md
           echo "[Attestation](https://github.com/${{ github.repository }}/attestations/${{ needs.build-wheel.outputs.attestation-id }})" >> release_body.md
       - uses: ncipollo/release-action@v1
         with:
@@ -245,22 +266,22 @@ jobs:
   build-docker-amd64:
     needs: [ quality-check, version, build-wheel ]
     if: needs.quality-check.outputs.changes_pushed != 'true' && ((github.event_name == 'pull_request' && github.head_ref == 'dev' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository) || ((github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.ref_name == 'dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wheel
           path: ./docker/dist
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and Push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./docker
           platforms: linux/amd64
@@ -282,18 +303,18 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wheel
           path: ./docker/dist
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and Push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./docker
           platforms: linux/arm64
@@ -310,11 +331,11 @@ jobs:
 
   merge-docker-manifest:
     needs: [ version, build-docker-amd64, build-docker-arm64 ]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 1
     steps:
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -335,11 +356,34 @@ jobs:
             ${{ env.GHCR_ENDPOINT }}:${TAG_AMD64} \
             ${{ env.GHCR_ENDPOINT }}:${TAG_ARM64}
 
+  notify-simplex:
+    name: Notify SimpleX
+    needs: [ quality-check, version, beta-release, merge-docker-manifest ]
+    if: needs.quality-check.outputs.changes_pushed != 'true' && needs.version.result == 'success' && needs.beta-release.result == 'success' && needs.merge-docker-manifest.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    env:
+      SIMPLEX_WEBHOOK_URL: ${{ secrets.SIMPLEX_WEBHOOK_URL }}
+      SIMPLEX_WEBHOOK_TOKEN: ${{ secrets.SIMPLEX_WEBHOOK_TOKEN }}
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: beta
+      RELEASE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Send beta release notification
+        run: python3 .github/scripts/notify_simplex.py
+
   notify:
     name: Notify PR
     needs: [ quality-check, version, beta-release, merge-docker-manifest ]
     if: needs.quality-check.outputs.changes_pushed != 'true' && needs.beta-release.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 1
     permissions:
       pull-requests: write
@@ -364,7 +408,7 @@ jobs:
 
   job-summary:
     name: 📊 Beta Summary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 1
     needs: [ quality-check, version, beta-release ]
     if: always()
