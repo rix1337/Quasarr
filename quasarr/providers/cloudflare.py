@@ -15,12 +15,172 @@ from quasarr.constants import (
     DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
     SESSION_REQUEST_TIMEOUT_SECONDS,
 )
-from quasarr.providers.log import debug
+from quasarr.providers.log import debug, warn
 from quasarr.providers.utils import is_flaresolverr_available
 
 _CLOUDFLARE_GATE_TTL_SECONDS = 24 * 60 * 60
 _cloudflare_gate_expires_at = {}
 _cloudflare_gate_lock = threading.Lock()
+
+_SESSION_CLEANUP_MAX_SECONDS = 600
+_SESSION_CLEANUP_INITIAL_DELAY_SECONDS = 1
+_SESSION_CLEANUP_MAX_DELAY_SECONDS = 30
+_session_cleanup_condition = threading.Condition()
+_session_cleanup_pending = {}
+_session_cleanup_worker_running = False
+
+
+def _schedule_session_cleanup(flaresolverr_url, session_id):
+    """Queue an uncertain session create for bounded asynchronous cleanup."""
+    if not flaresolverr_url or not session_id:
+        return
+
+    global _session_cleanup_worker_running
+    now = time.monotonic()
+    key = (flaresolverr_url, session_id)
+    with _session_cleanup_condition:
+        _session_cleanup_pending.setdefault(
+            key,
+            {
+                "next_attempt": now + _SESSION_CLEANUP_INITIAL_DELAY_SECONDS,
+                "deadline": now + _SESSION_CLEANUP_MAX_SECONDS,
+                "delay": _SESSION_CLEANUP_INITIAL_DELAY_SECONDS,
+                "observed": False,
+                "needs_list": True,
+            },
+        )
+        if not _session_cleanup_worker_running:
+            _session_cleanup_worker_running = True
+            worker = threading.Thread(
+                target=_session_cleanup_worker,
+                name="flaresolverr-session-cleanup",
+                daemon=True,
+            )
+            try:
+                worker.start()
+            except Exception:
+                _session_cleanup_worker_running = False
+                _session_cleanup_pending.pop(key, None)
+                warn(f"Could not start FlareSolverr session cleanup: {session_id}")
+        _session_cleanup_condition.notify()
+
+
+def _session_cleanup_worker():
+    global _session_cleanup_worker_running
+    endpoint_last_served = {}
+    served = 0
+    while True:
+        with _session_cleanup_condition:
+            if not _session_cleanup_pending:
+                _session_cleanup_worker_running = False
+                return
+            now = time.monotonic()
+            ready = [
+                entry
+                for entry in _session_cleanup_pending.items()
+                if entry[1]["next_attempt"] <= now
+            ]
+            if not ready:
+                next_attempt = min(
+                    item["next_attempt"] for item in _session_cleanup_pending.values()
+                )
+                _session_cleanup_condition.wait(next_attempt - now)
+                continue
+            # True round-robin: serve the ready endpoint that waited longest, so
+            # no backlog can postpone a newly configured endpoint's first listing.
+            key, item = min(
+                ready,
+                key=lambda entry: (
+                    endpoint_last_served.get(entry[0][0], 0),
+                    entry[1]["next_attempt"],
+                ),
+            )
+            url, session_id = key
+            served += 1
+            endpoint_last_served[url] = served
+
+        now = time.monotonic()
+        remaining = item["deadline"] - now
+        if remaining <= 0:
+            with _session_cleanup_condition:
+                _session_cleanup_pending.pop(key, None)
+            warn(f"Timed out cleaning up FlareSolverr session: {session_id}")
+            continue
+
+        try:
+            if item["needs_list"]:
+                response = requests.post(
+                    url,
+                    json={"cmd": "sessions.list"},
+                    headers={"Content-Type": "application/json"},
+                    timeout=min(SESSION_REQUEST_TIMEOUT_SECONDS, remaining),
+                )
+                response.raise_for_status()
+                data = response.json()
+                sessions = data.get("sessions")
+                if data.get("status") != "ok" or not isinstance(sessions, list):
+                    raise RuntimeError("FlareSolverr rejected sessions.list")
+                now = time.monotonic()
+                with _session_cleanup_condition:
+                    same_endpoint = [
+                        (pending_key, pending_item)
+                        for pending_key, pending_item in _session_cleanup_pending.items()
+                        if pending_key[0] == url
+                    ]
+                    for pending_key, pending_item in same_endpoint:
+                        pending_session_id = pending_key[1]
+                        if pending_session_id in sessions:
+                            pending_item["observed"] = True
+                            pending_item["needs_list"] = False
+                            pending_item["next_attempt"] = min(
+                                pending_item["next_attempt"], now
+                            )
+                        elif pending_item["observed"]:
+                            _session_cleanup_pending.pop(pending_key, None)
+                        else:
+                            pending_item["delay"] = min(
+                                pending_item["delay"] * 2,
+                                _SESSION_CLEANUP_MAX_DELAY_SECONDS,
+                            )
+                            pending_item["next_attempt"] = min(
+                                now + pending_item["delay"], pending_item["deadline"]
+                            )
+                continue
+
+            remaining = item["deadline"] - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError("FlareSolverr session cleanup deadline reached")
+            with _session_cleanup_condition:
+                item["needs_list"] = True
+                pending_count = len(_session_cleanup_pending)
+            destroy_timeout = min(
+                SESSION_REQUEST_TIMEOUT_SECONDS,
+                remaining / (pending_count + 1),
+            )
+            response = requests.post(
+                url,
+                json={"cmd": "sessions.destroy", "session": session_id},
+                headers={"Content-Type": "application/json"},
+                timeout=destroy_timeout,
+            )
+            response.raise_for_status()
+            if response.json().get("status") != "ok":
+                raise RuntimeError("FlareSolverr rejected sessions.destroy")
+        except Exception:
+            with _session_cleanup_condition:
+                pending = _session_cleanup_pending.get(key)
+                if pending is None:
+                    continue
+                pending["delay"] = min(
+                    pending["delay"] * 2, _SESSION_CLEANUP_MAX_DELAY_SECONDS
+                )
+                pending["next_attempt"] = min(
+                    time.monotonic() + pending["delay"], pending["deadline"]
+                )
+                _session_cleanup_condition.notify()
+        else:
+            with _session_cleanup_condition:
+                _session_cleanup_pending.pop(key, None)
 
 
 def _cloudflare_gate_key(url):
@@ -491,9 +651,8 @@ def flaresolverr_create_session(shared_state, session_id=None):
         return None
 
     flaresolverr_url = shared_state.values["config"]("FlareSolverr").get("url")
-    payload = {"cmd": "sessions.create"}
-    if session_id:
-        payload["session"] = session_id
+    session_id = session_id or str(uuid.uuid4())
+    payload = {"cmd": "sessions.create", "session": session_id}
 
     try:
         resp = requests.post(
@@ -504,10 +663,13 @@ def flaresolverr_create_session(shared_state, session_id=None):
         )
         resp.raise_for_status()
         data = resp.json()
-        if data.get("status") == "ok":
-            return data.get("session")
+        created_session_id = data.get("session")
+        if data.get("status") == "ok" and created_session_id:
+            return created_session_id
     except Exception:
-        pass
+        _schedule_session_cleanup(flaresolverr_url, session_id)
+        return None
+    _schedule_session_cleanup(flaresolverr_url, session_id)
     return None
 
 
