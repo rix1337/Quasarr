@@ -62,7 +62,7 @@ Release changelogs use the checked-out commit as their explicit `head-ref` (the 
 
 CI auto-fix pushes dispatch one read-only follow-up (`auto_fix_followup=true`) to check and build the updated commit. The follow-up uses `--check` and must never upgrade dependencies, push fixes, or dispatch another run. Ordinary PR runs, manual runs, and local hooks retain automatic dependency upgrades. Bot-pushed `pull_request` runs require approval, so they cannot replace this dispatch.
 
-Stable and beta release workflows announce successful releases to SimpleX only after their artifacts and Docker manifests are available. `.github/scripts/notify_simplex.py` posts plain text and full URLs to the generic webhook using `SIMPLEX_WEBHOOK_URL` and `SIMPLEX_WEBHOOK_TOKEN` repository secrets. Send the Quasarr User-Agent; the production edge rejects Python's default agent with HTTP 403. Stable notifications deduplicate by release tag; beta notifications also include the commit because the beta tag moves. Missing secrets produce a warning and skip delivery; configured delivery failures fail the notification job. Never commit endpoint credentials or send test messages to the production channel without user authorization.
+The stable release workflow announces successful releases to SimpleX only after their artifacts and Docker manifests are available; the beta workflow sends no SimpleX notification. `.github/scripts/notify_simplex.py` posts plain text and full URLs to the generic webhook using `SIMPLEX_WEBHOOK_URL` and `SIMPLEX_WEBHOOK_TOKEN` repository secrets. Stable messages retain the release link and upgrade commands, then append `Changelog:` followed by only the associated merged PR body, passed from the release job through an environment variable. Send the Quasarr User-Agent; the production edge rejects Python's default agent with HTTP 403. Stable notifications deduplicate by release tag. Missing secrets produce a warning and skip delivery; configured delivery failures fail the notification job. Never commit endpoint credentials or send test messages to the production channel without user authorization.
 
 ## Commits And Pull Requests
 
@@ -187,7 +187,7 @@ Default section order:
 
 When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md
 
-- Community links point to SimpleX. Announce stable releases and beta builds through the generic SimpleX webhook; release workflows do not post to Discord. Discord webhook notifications remain a supported integration.
+- Community links point to SimpleX. Announce stable releases through the generic SimpleX webhook with only the associated PR text below the existing message; beta builds send no SimpleX notification. Release workflows do not post to Discord. Discord webhook notifications remain a supported integration.
 - Explain release webhook secret setup in chat; do not append it to `CONTRIBUTING.md`.
 - Releasing the Userscripts or SponsorsHelper companion means pushing the approved changes to `main`; no tag or GitHub Release is required.
 - History rewrites (rebase, cherry-pick, squash) skip the pre-commit hook; re-run `uv run pre-commit.py` and commit its result before pushing, otherwise CI auto-fixes land as chore commits. Local uv must match the version pinned in `.github/workflows/PullRequests.yml` or the lock `revision` ping-pongs between environments.

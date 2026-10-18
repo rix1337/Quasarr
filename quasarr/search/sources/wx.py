@@ -437,19 +437,21 @@ class Source(AbstractSearchSource):
                                     release_published = datetime.now().strftime(
                                         "%a, %d %b %Y %H:%M:%S +0000"
                                     )
-                                release_size = release.get("size", 0)
+                                # WX API reports sizes in bytes.
+                                release_size = int(float(release.get("size") or 0))
                                 if episode_candidate:
                                     count = int(
                                         release["options"]["episode_count_in_season"]
                                     )
-                                    release_size = int(float(release_size or 0) / count)
+                                    release_size //= count
+                                release_size_mb = release_size // (1024 * 1024)
                                 password = f"www.{host}"
 
                                 link = generate_download_link(
                                     shared_state,
                                     release_title,
                                     release_source,
-                                    release_size,
+                                    release_size_mb,
                                     password,
                                     item_imdb_id,
                                     self.initials,
@@ -462,11 +464,7 @@ class Source(AbstractSearchSource):
                                             "hostname": self.initials,
                                             "imdb_id": item_imdb_id,
                                             "link": link,
-                                            "size": (
-                                                release_size * 1024 * 1024
-                                                if episode_candidate
-                                                else release_size
-                                            ),
+                                            "size": release_size,
                                             "date": release_published,
                                             "source": release_source,
                                         },
