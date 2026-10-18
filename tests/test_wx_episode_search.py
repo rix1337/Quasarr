@@ -36,9 +36,9 @@ def release(**overrides):
     value = {
         "uid": "PACK-A",
         "fulltitle": PACK_TITLE,
-        "size": 9000,
+        "size": 4550002042,
         "user_id": 4,
-        "options": {"episode_count_in_season": 9},
+        "options": {"episode_count_in_season": 5},
         "crypted_links": {"hoster": "https://filecrypt.cc/Container/PACK.html"},
         "links": {"hoster": ["https://hoster.invalid/all-episodes"]},
     }
@@ -76,8 +76,8 @@ class WxEpisodeSearchTests(unittest.TestCase):
         results = self.search([release()])
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["details"]["title"], EPISODE_TITLE)
-        self.assertEqual(results[0]["details"]["size"], 1000 * 1024 * 1024)
-        self.assertEqual(self.generate_download_link_mock.call_args.args[3], 1000)
+        self.assertEqual(results[0]["details"]["size"], 910000408)
+        self.assertEqual(self.generate_download_link_mock.call_args.args[3], 867)
         self.assertEqual(
             parse_qs(urlsplit(results[0]["details"]["source"]).query),
             {"release": ["PACK-A"], "season": ["2"], "episode": ["3"]},
@@ -111,8 +111,8 @@ class WxEpisodeSearchTests(unittest.TestCase):
     def test_legacy_season_search_retains_pack_title_and_url(self):
         results = self.search([release()], episode=None)
         self.assertEqual(results[0]["details"]["title"], PACK_TITLE)
-        self.assertEqual(results[0]["details"]["size"], 9000)
-        self.assertEqual(self.generate_download_link_mock.call_args.args[3], 9000)
+        self.assertEqual(results[0]["details"]["size"], 4550002042)
+        self.assertEqual(self.generate_download_link_mock.call_args.args[3], 4339)
         self.assertEqual(
             results[0]["details"]["source"],
             "https://wx.invalid/detail/SHOW?release=PACK-A",
@@ -121,10 +121,20 @@ class WxEpisodeSearchTests(unittest.TestCase):
     def test_explicit_episode_release_keeps_legacy_path(self):
         results = self.search([release(fulltitle=EPISODE_TITLE, user_id=8)])
         self.assertEqual(results[0]["details"]["title"], EPISODE_TITLE)
+        self.assertEqual(results[0]["details"]["size"], 4550002042)
+        self.assertEqual(self.generate_download_link_mock.call_args.args[3], 4339)
         self.assertEqual(
             parse_qs(urlsplit(results[0]["details"]["source"]).query),
             {"release": ["PACK-A"]},
         )
+
+    def test_missing_size_keeps_zero_fallback(self):
+        candidate = release()
+        del candidate["size"]
+        results = self.search([candidate])
+
+        self.assertEqual(results[0]["details"]["size"], 0)
+        self.assertEqual(self.generate_download_link_mock.call_args.args[3], 0)
 
     def test_exact_episode_beats_pack_when_pack_was_returned_first(self):
         results = self.search(
