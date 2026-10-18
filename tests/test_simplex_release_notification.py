@@ -89,6 +89,55 @@ class SimplexReleaseNotificationTests(unittest.TestCase):
         self.assertNotIn("ignored-stable-commit", body["text"])
         self.assertLessEqual(len(request.get_header("Idempotency-key")), 256)
 
+    def test_stable_message_appends_multiline_pr_body(self):
+        release_body = "## PR summary\n- Added `$()` handling\n- Keep ; chars"
+        code, _output, run, send = self.run_script(
+            gh_stdout=json.dumps(
+                {
+                    "url": "https://releases.invalid/example",
+                    "body": "release metadata must not be appended",
+                }
+            ),
+            env={"RELEASE_PR_BODY": release_body},
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual(
+            [
+                "gh",
+                "release",
+                "view",
+                "stable",
+                "--repo",
+                "owner/repo",
+                "--json",
+                "url",
+            ],
+            run.call_args.args[0],
+        )
+        _request, body = self.request_body(send)
+        self.assertTrue(body["text"].endswith(f"\n\nChangelog:\n{release_body}"))
+
+    def test_stable_message_omits_missing_pr_body(self):
+        baseline_code, _baseline_output, _baseline_run, baseline_send = (
+            self.run_script()
+        )
+
+        self.assertEqual(0, baseline_code)
+        _baseline_request, baseline_body = self.request_body(baseline_send)
+        metadata = {
+            "url": "https://releases.invalid/example",
+            "body": "release metadata must not be appended",
+        }
+        for env in ({}, {"RELEASE_PR_BODY": ""}):
+            with self.subTest(env=env):
+                code, _output, _run, send = self.run_script(
+                    gh_stdout=json.dumps(metadata), env=env
+                )
+                self.assertEqual(0, code)
+                _request, body = self.request_body(send)
+                self.assertEqual(baseline_body, body)
+
     def test_beta_message_uses_beta_image_download_instruction_and_commit(self):
         code, _output, _run, send = self.run_script(
             env={"RELEASE_TAG": "beta", "RELEASE_COMMIT": "abcdef1234567890"}

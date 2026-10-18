@@ -253,6 +253,8 @@ jobs:
     needs: [ version, build-wheel, build-exe, build-docker-amd64, build-docker-arm64 ]
     permissions:
       contents: write
+    outputs:
+      pr_body: ${{ steps.pr_body.outputs.body }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -282,10 +284,13 @@ jobs:
           myToken: ${{ secrets.GITHUB_TOKEN }}
           head-ref: ${{ github.sha }}
       - name: Get PR Body
+        id: pr_body
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_BODY=$(gh pr list --search "${{ github.sha }}" --state merged --json body --jq '.[0].body // empty')
+          DELIMITER="pr-body-$(openssl rand -hex 16)"
+          printf 'body<<%s\n%s\n%s\n' "$DELIMITER" "$PR_BODY" "$DELIMITER" >> "$GITHUB_OUTPUT"
           if [ -n "$PR_BODY" ]; then
             echo "$PR_BODY" > pr_body.txt
           fi
@@ -329,6 +334,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: v.${{ needs.version.outputs.version }}
       RELEASE_COMMIT: ${{ github.sha }}
+      RELEASE_PR_BODY: ${{ needs.release.outputs.pr_body }}
     steps:
       - uses: actions/checkout@v6
         with:

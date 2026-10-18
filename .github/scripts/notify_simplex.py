@@ -27,7 +27,16 @@ def main():
         fail("beta release commit missing")
     try:
         release = subprocess.run(
-            ["gh", "release", "view", tag, "--repo", repository, "--json", "url"],
+            [
+                "gh",
+                "release",
+                "view",
+                tag,
+                "--repo",
+                repository,
+                "--json",
+                "url",
+            ],
             capture_output=True,
             text=True,
             check=False,
@@ -59,6 +68,8 @@ def main():
     )
     if is_beta:
         message += f"\n\nCommit:\n{commit[:7]}"
+    elif release_body := os.environ.get("RELEASE_PR_BODY", ""):
+        message += f"\n\nChangelog:\n{release_body}"
 
     identity = f"{repository}:{tag}"
     if is_beta:

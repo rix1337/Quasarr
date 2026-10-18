@@ -356,29 +356,6 @@ jobs:
             ${{ env.GHCR_ENDPOINT }}:${TAG_AMD64} \
             ${{ env.GHCR_ENDPOINT }}:${TAG_ARM64}
 
-  notify-simplex:
-    name: Notify SimpleX
-    needs: [ quality-check, version, beta-release, merge-docker-manifest ]
-    if: needs.quality-check.outputs.changes_pushed != 'true' && needs.version.result == 'success' && needs.beta-release.result == 'success' && needs.merge-docker-manifest.result == 'success'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 2
-    permissions:
-      contents: read
-    env:
-      SIMPLEX_WEBHOOK_URL: ${{ secrets.SIMPLEX_WEBHOOK_URL }}
-      SIMPLEX_WEBHOOK_TOKEN: ${{ secrets.SIMPLEX_WEBHOOK_TOKEN }}
-      VERSION: ${{ needs.version.outputs.version }}
-      GH_REPO: ${{ github.repository }}
-      GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: beta
-      RELEASE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Send beta release notification
-        run: python3 .github/scripts/notify_simplex.py
-
   notify:
     name: Notify PR
     needs: [ quality-check, version, beta-release, merge-docker-manifest ]
