@@ -93,7 +93,7 @@ class Source(AbstractDownloadSource):
         source-provided online signal and hands it to JDownloader; it never
         probes a direct hoster link itself (liveness is JDownloader's job).
 
-        Priority (see "Mirror-Selection Policy" in quasarr/downloads/AGENTS.md):
+        Priority (rationale: .trail/learnings/21-mirror-selection-ownership.md):
           1. green hide.cx container   (resolved downstream by hide.py, no CAPTCHA)
           2. green filecrypt container (handed to JDownloader, may need CAPTCHA)
           3. green direct links        (no badge of their own; best effort)
@@ -210,7 +210,7 @@ class Source(AbstractDownloadSource):
 
             debug(f"Found {len(matching_releases)} mirror(s) for: {title}")
 
-            # SELECTION POLICY (see "Mirror-Selection Policy" in quasarr/downloads/AGENTS.md):
+            # Rationale: .trail/learnings/21-mirror-selection-ownership.md.
             # Quasarr picks the link set with the best *source-provided* online
             # signal and hands it to JDownloader. It never probes a direct
             # hoster link itself - liveness is JDownloader's job. WX's status

@@ -60,4 +60,20 @@ uv run pre-commit.py
 
 Dependencies are upgraded automatically on every run.
 
+The same command checks Trail knowledge for private content before staging files.
+Documentation and learning rules live in `.trail/learnings/23-documentation-policy.md`.
+
+Before agent work, install Trail with `npm install -g @trailhq/trail-code`. Run `trail build`
+once when the local map is missing, then use `trail map`, `trail ask`, `trail grep`,
+`trail skeleton`, or `trail callers`. Generated `.trail/cache/` files stay gitignored;
+only curated decisions are shared. Agents must stop and ask for installation
+if Trail is missing.
+
+Commit learnings with the changes they explain; teammates receive them through
+Git and generate their own map from their checkout. No shared map or Trail cloud
+account is required.
+
+Run `uv run python check_trail.py` for the standalone content check, and
+`trail check` before committing.
+
 After CI pushes auto-fixes, it dispatches a read-only follow-up to validate and build that commit without repeating the dependency upgrade.

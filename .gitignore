@@ -31,3 +31,7 @@
 pr_check_report.md
 pr_number.txt
 AGENT_HANDOFF.md
+
+# Trail indexes and machine-local state (knowledge stays versioned)
+/.trail/local/
+/.trail/cache/

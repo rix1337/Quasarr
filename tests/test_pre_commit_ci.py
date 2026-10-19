@@ -100,6 +100,31 @@ class PreCommitCITests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertFalse(any(cmd[:3] == ["gh", "workflow", "run"] for cmd, _ in calls))
 
+    def test_privacy_gate_precedes_commands_that_can_stage_files(self):
+        _, calls = self.run_main(["--ci"], task_deps=True)
+        self.assertEqual(
+            calls[0],
+            ([sys.executable, "-X", "utf8", "check_trail.py"], False),
+        )
+
+    def test_privacy_failure_stops_before_upgrades_or_staging(self):
+        with (
+            mock.patch.object(sys, "argv", [str(MODULE_PATH)]),
+            mock.patch.object(
+                pre_commit,
+                "run",
+                return_value=subprocess.CompletedProcess([], 1),
+            ) as run,
+            mock.patch.object(pre_commit, "task_upgrade_deps") as upgrade,
+            mock.patch.object(pre_commit, "task_format") as formatting,
+        ):
+            with self.assertRaises(SystemExit) as result:
+                pre_commit.main()
+        self.assertEqual(result.exception.code, 1)
+        self.assertEqual(run.call_count, 1)
+        upgrade.assert_not_called()
+        formatting.assert_not_called()
+
     def test_check_run_uses_locked_checks_without_upgrades(self):
         calls = []
 
@@ -173,6 +198,11 @@ class PreCommitCITests(unittest.TestCase):
         with (
             mock.patch.object(sys, "argv", [str(MODULE_PATH)]),
             mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.object(
+                pre_commit,
+                "run",
+                return_value=subprocess.CompletedProcess([], 0),
+            ),
             mock.patch.object(
                 pre_commit,
                 "task_upgrade_deps",
