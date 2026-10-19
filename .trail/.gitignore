@@ -1,0 +1,6 @@
+# Only curated decisions are shared. Generated/user state stays local.
+*
+!.gitignore
+!learnings/
+!learnings/*.md
+cache/

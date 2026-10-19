@@ -215,6 +215,12 @@ def main():
     is_ci = "--ci" in sys.argv
     is_check = "--check" in sys.argv
 
+    # Validate before any task can stage generated files or push fixes.
+    privacy = run([sys.executable, "-X", "utf8", "check_trail.py"], check=False)
+    if privacy.returncode != 0:
+        print("Trail privacy check failed. Remove private content before staging.")
+        sys.exit(1)
+
     # --- CHECK-ONLY MODE (fork-safe) ---
     # Used for pull requests from forks, where the bot cannot push auto-fixes
     # back to the contributor's branch. Verify only — never mutate, commit,
