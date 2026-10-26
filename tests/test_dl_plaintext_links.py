@@ -2,10 +2,90 @@
 
 import unittest
 
-from quasarr.downloads.sources.dl import _extract_links_and_password_from_post
+from bs4 import BeautifulSoup
+
+from quasarr.downloads.sources.dl import (
+    _extract_links_and_password_from_post,
+    _extract_mirror_name_from_link,
+)
 
 
 class DlPlaintextLinksTests(unittest.TestCase):
+    def test_extracts_hoster_from_domain_label_with_download_prefix(self):
+        soup = BeautifulSoup(
+            """
+            <div>
+                <a href="https://filecrypt.invalid/Container/one">Download via Rapidgator.net</a>
+                <a href="https://filecrypt.invalid/Container/two">Download via DDownload.com</a>
+                <a href="https://filecrypt.invalid/Container/three">rapidgator.net</a>
+                <a href="https://filecrypt.invalid/Container/four">ddownload.com</a>
+            </div>
+            """,
+            "html.parser",
+        )
+
+        self.assertEqual(
+            [
+                "rapidgator",
+                "ddownload",
+                "rapidgator",
+                "ddownload",
+            ],
+            [_extract_mirror_name_from_link(link) for link in soup.select("a")],
+        )
+
+    def test_domain_labels_survive_requested_mirror_filter(self):
+        links, _ = _extract_links_and_password_from_post(
+            """
+            <div>
+                <a href="https://filecrypt.invalid/Container/one">Download via Rapidgator.net</a>
+                <a href="https://filecrypt.invalid/Container/two">Download via DDownload.com</a>
+            </div>
+            """,
+            "source.invalid",
+            {"rapidgator", "ddownload"},
+        )
+
+        self.assertEqual(
+            [
+                ["https://filecrypt.invalid/Container/one", "rapidgator", None],
+                ["https://filecrypt.invalid/Container/two", "ddownload", None],
+            ],
+            links,
+        )
+
+        selected_links, _ = _extract_links_and_password_from_post(
+            """
+            <div>
+                <a href="https://filecrypt.invalid/Container/one">Download via Rapidgator.net</a>
+                <a href="https://filecrypt.invalid/Container/two">Download via DDownload.com</a>
+            </div>
+            """,
+            "source.invalid",
+            {"rapidgator"},
+        )
+        self.assertEqual(
+            [["https://filecrypt.invalid/Container/one", "rapidgator", None]],
+            selected_links,
+        )
+
+    def test_url_label_keeps_nearby_hoster_detection(self):
+        soup = BeautifulSoup(
+            """
+            <div>
+                <b>Rapidgator</b>
+                <a href="https://filecrypt.invalid/Container/one">
+                    https://filecrypt.invalid/Container/one
+                </a>
+            </div>
+            """,
+            "html.parser",
+        )
+
+        self.assertEqual(
+            "rapidgator", _extract_mirror_name_from_link(soup.select_one("a"))
+        )
+
     def test_extracts_plaintext_crypter_urls_under_mirror_heading(self):
         post_html = """
             <div class="bbWrapper">

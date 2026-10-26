@@ -5,9 +5,12 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from unittest.mock import MagicMock, patch
 
+import requests
+
 from quasarr.providers.cloudflare import (
     LazyFlareSolverrSession,
     _clear_cloudflare_gate_cache,
+    is_cloudflare_challenge,
 )
 
 
@@ -31,6 +34,111 @@ class CloudflareGateCacheTests(unittest.TestCase):
 
     def tearDown(self):
         _clear_cloudflare_gate_cache()
+
+    def test_passive_markers_are_ignored_only_for_solver_responses(self):
+        passive_markers = (
+            '<script src="/cdn-cgi/challenge-platform/scripts/precursor/main.js"></script>',
+            '<div data-cf-beacon="{}"></div>',
+            "<!-- cloudflare -->",
+        )
+
+        for marker in passive_markers:
+            with self.subTest(marker=marker):
+                self.assertTrue(is_cloudflare_challenge(marker))
+                self.assertFalse(
+                    is_cloudflare_challenge(marker, include_passive_markers=False)
+                )
+
+    def test_solver_response_with_passive_markers_is_accepted(self):
+        url = "https://solved-source.invalid/page"
+        challenged = FakeResponse(url, status_code=403)
+        solved = FakeResponse(
+            url,
+            text=(
+                "<title>Synthetic page</title>"
+                '<script src="/cdn-cgi/challenge-platform/scripts/precursor/main.js"></script>'
+                '<div data-cf-beacon="{}"></div><!-- cloudflare -->'
+            ),
+        )
+        plain_get = MagicMock(return_value=challenged)
+
+        with (
+            patch(
+                "quasarr.providers.cloudflare.is_flaresolverr_available",
+                return_value=True,
+            ),
+            patch(
+                "quasarr.providers.cloudflare.flaresolverr_create_session",
+                return_value="solved-session",
+            ),
+            patch(
+                "quasarr.providers.cloudflare.flaresolverr_get",
+                return_value=solved,
+            ),
+            patch("quasarr.providers.cloudflare.flaresolverr_destroy_session"),
+        ):
+            session = LazyFlareSolverrSession(_build_shared_state())
+            try:
+                response = session.get(
+                    url, {"User-Agent": "UnitTestAgent/1.0"}, 10, plain_get
+                )
+            finally:
+                session.close()
+
+        self.assertIs(solved, response)
+
+    def test_solver_response_rejects_active_challenges_and_bad_status(self):
+        url = "https://rejected-source.invalid/page"
+        active_pages = (
+            "<title>Just a moment...</title>",
+            '<form id="challenge-form"></form>',
+            '<div class="cf-browser-verification"></div>',
+            '<div id="cf-challenge-running"></div>',
+        )
+
+        responses = [
+            (body, FakeResponse(url, text=body, status_code=200))
+            for body in active_pages
+        ]
+        responses.extend(
+            [
+                ("none", None),
+                (
+                    "http-403",
+                    FakeResponse(url, text="<html>plain</html>", status_code=403),
+                ),
+            ]
+        )
+
+        for label, solved in responses:
+            with self.subTest(response=label):
+                plain_get = MagicMock(return_value=FakeResponse(url, status_code=403))
+                with (
+                    patch(
+                        "quasarr.providers.cloudflare.is_flaresolverr_available",
+                        return_value=True,
+                    ),
+                    patch(
+                        "quasarr.providers.cloudflare.flaresolverr_create_session",
+                        return_value="rejected-session",
+                    ),
+                    patch(
+                        "quasarr.providers.cloudflare.flaresolverr_get",
+                        return_value=solved,
+                    ),
+                    patch("quasarr.providers.cloudflare.flaresolverr_destroy_session"),
+                ):
+                    session = LazyFlareSolverrSession(_build_shared_state())
+                    try:
+                        with self.assertRaises(requests.RequestException):
+                            session.get(
+                                url,
+                                {"User-Agent": "UnitTestAgent/1.0"},
+                                10,
+                                plain_get,
+                            )
+                    finally:
+                        session.close()
 
     def test_cached_host_skips_plain_until_ttl_expires(self):
         url = "https://cache-source.invalid/page"

@@ -706,7 +706,10 @@ class FfSfCloudflareTests(unittest.TestCase):
                 body = json.dumps({"html": api_html})
                 final_url = url
             elif url == external_url:
-                body = ""
+                body = (
+                    '<script src="/cdn-cgi/challenge-platform/scripts/precursor/main.js"></script>'
+                    '<div data-cf-beacon="{}"></div><!-- cloudflare -->'
+                )
                 final_url = protected_url
             else:
                 raise AssertionError(f"Unexpected FlareSolverr URL: {url}")

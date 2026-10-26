@@ -224,7 +224,8 @@ def _clear_cloudflare_gate_cache():
         _cloudflare_gate_expires_at.clear()
 
 
-def is_cloudflare_challenge(html: str) -> bool:
+def is_cloudflare_challenge(html: str, *, include_passive_markers: bool = True) -> bool:
+    """Return whether HTML presents a Cloudflare challenge."""
     soup = BeautifulSoup(html, "html.parser")
 
     # Check <title>
@@ -240,13 +241,16 @@ def is_cloudflare_challenge(html: str) -> bool:
     if soup.find("div", {"id": "cf-challenge-running"}):
         return True
 
-    # Check scripts referencing Cloudflare
-    for script in soup.find_all("script", src=True):
-        if "cdn-cgi/challenge-platform" in script["src"]:
-            return True
+    # Solved pages may retain this platform script.
+    if include_passive_markers:
+        for script in soup.find_all("script", src=True):
+            if "cdn-cgi/challenge-platform" in script["src"]:
+                return True
 
-    # Optional: look for Cloudflare comment or beacon
-    if "data-cf-beacon" in html or "<!-- cloudflare -->" in html.lower():
+    # Solved pages may also retain these passive markers.
+    if include_passive_markers and (
+        "data-cf-beacon" in html or "<!-- cloudflare -->" in html.lower()
+    ):
         return True
 
     return False
@@ -317,7 +321,7 @@ class LazyFlareSolverrSession:
         if (
             response is None
             or response.status_code == 403
-            or is_cloudflare_challenge(response.text)
+            or is_cloudflare_challenge(response.text, include_passive_markers=False)
         ):
             raise requests.RequestException(
                 "Could not bypass Cloudflare protection with FlareSolverr"

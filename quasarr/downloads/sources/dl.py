@@ -258,6 +258,14 @@ def _extract_mirror_name_from_link(link_element):
 
     # Skip if link text is a URL
     if link_text and len(link_text) > 2 and not link_text.startswith("http"):
+        # Forum labels may include a generic action and a hoster domain, e.g.
+        # "Download via Rapidgator.net". Normalize each label token so URL
+        # punctuation and aliases use the same canonical names as filters.
+        for token in link_text.split():
+            normalized_token = _normalize_mirror_name(token)
+            if normalized_token in SHARE_HOSTERS_LOWERCASE:
+                return normalized_token
+
         cleaned = re.sub(r"[^\w\s-]", "", link_text).strip().lower()
         if cleaned and cleaned not in common_non_hosters:
             main_part = cleaned.split()[0] if " " in cleaned else cleaned
