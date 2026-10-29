@@ -33,15 +33,7 @@ class Source(AbstractDownloadSource):
             r.raise_for_status()
             soup = BeautifulSoup(r.text, "html.parser")
 
-            article = soup.find("article")
-            if not article:
-                info(f"Could not find article block for {title}")
-                mark_hostname_issue(
-                    Source.initials, "download", "Could not find article block"
-                )
-                return None
-
-            body = article.find("div", class_="full-story-body")
+            body = soup.find("div", class_="full-story-body")
             if not body:
                 info(f"Could not find download section for {title}")
                 mark_hostname_issue(
