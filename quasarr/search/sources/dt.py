@@ -80,7 +80,7 @@ class Source(AbstractSearchSource):
 
             for article in feed.find_all("article"):
                 try:
-                    link_tag = article.select_one("h1.dt-flexible-title a")
+                    link_tag = article.select_one(".dt-flexible-title a")
                     if not link_tag:
                         # ad/promo articles lack a release title link; skip quietly
                         debug(f"Link tag not found in article: {article}")
@@ -238,7 +238,7 @@ class Source(AbstractSearchSource):
             for article in page.find_all("article"):
                 try:
                     # search-result articles use h1.font-weight-bold, while
-                    # the feed listing uses h1.dt-flexible-title
+                    # the feed listing uses .dt-flexible-title
                     link_tag = article.select_one("h1.font-weight-bold a")
                     if not link_tag:
                         debug(f"No title link in search-article: {article}")
@@ -340,24 +340,29 @@ def _extract_size(text):
 
 
 def _parse_published_datetime(article):
-    mon = article.select_one("small.dt-fs-11").text.strip()
-    day = article.find("h4", class_="m-0").text.strip()
-    year = article.find("h6", class_="m-0").text.strip()
-    month_num = datetime.datetime.strptime(mon, "%b").month
-
-    time_icon = article.select_one("i.bi-clock")
-    if time_icon:
-        # its parent <span> contains e.g. "19:12"
-        raw = time_icon.parent.get_text(strip=True)
-        m = re.search(r"(\d{1,2}:\d{2})", raw)
-        if m:
-            hh, mm = map(int, m.group(1).split(":"))
-        else:
-            hh, mm = 0, 0
+    month_tag = article.select_one("small.dt-fs-11")
+    if not month_tag:
+        # feed listings show "29.10.2026 07:47" instead of the calendar block
+        m = re.search(
+            r"\b(\d{2})\.(\d{2})\.(\d{4})\s+(\d{1,2}):(\d{2})\b",
+            article.get_text(" "),
+        )
+        day, month_num, year, hh, mm = map(int, m.groups())
     else:
+        day = int(article.find("h4", class_="m-0").text.strip())
+        year = int(article.find("h6", class_="m-0").text.strip())
+        month_num = datetime.datetime.strptime(month_tag.text.strip(), "%b").month
+
+        time_icon = article.select_one("i.bi-clock")
         hh, mm = 0, 0
+        if time_icon:
+            # its parent <span> contains e.g. "19:12"
+            raw = time_icon.parent.get_text(strip=True)
+            m = re.search(r"(\d{1,2}:\d{2})", raw)
+            if m:
+                hh, mm = map(int, m.group(1).split(":"))
 
     # this timezone is fixed to CET+1 and might be wrong
     cet = timezone(timedelta(hours=1))
-    dt = datetime.datetime(int(year), month_num, int(day), hh, mm, tzinfo=cet)
+    dt = datetime.datetime(year, month_num, day, hh, mm, tzinfo=cet)
     return dt.isoformat()

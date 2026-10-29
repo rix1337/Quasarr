@@ -3,7 +3,10 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from bs4 import BeautifulSoup
+
 from quasarr.downloads.sources import dt
+from quasarr.search.sources.dt import _parse_published_datetime
 
 
 def _response(html):
@@ -59,6 +62,40 @@ class DtDownloadLinksTests(unittest.TestCase):
         self.assertEqual(
             {"links": [["https://ddownload.invalid/file/two", "ddownload"]]},
             result,
+        )
+
+
+class DtPublishedDateTests(unittest.TestCase):
+    def _parse(self, html):
+        article = BeautifulSoup(html, "html.parser").find("article")
+        return _parse_published_datetime(article)
+
+    def test_parses_feed_listing_date(self):
+        self.assertEqual(
+            "2026-10-29T07:47:00+01:00",
+            self._parse(
+                """
+                <article>
+                    <span>Today, 07:47</span>
+                    <span>29.10.2026 07:47</span>
+                </article>
+                """
+            ),
+        )
+
+    def test_parses_search_calendar_block(self):
+        self.assertEqual(
+            "2026-10-24T14:39:00+01:00",
+            self._parse(
+                """
+                <article>
+                    <small class="dt-fs-11">Oct</small>
+                    <h4 class="m-0">24</h4>
+                    <h6 class="m-0">2026</h6>
+                    <span><i class="bi bi-clock"></i>14:39</span>
+                </article>
+                """
+            ),
         )
 
 
