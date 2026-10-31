@@ -8,6 +8,7 @@ from functools import wraps
 
 from bottle import HTTPResponse, abort, request
 
+from quasarr.constants import PROTECTED_PATTERNS
 from quasarr.downloads import fail, submit_final_download_urls
 from quasarr.downloads.linkcrypters.hide import (
     HideEpisodeError,
@@ -198,8 +199,14 @@ def setup_sponsors_helper_routes(app):
             return str(reason)
         return default_reason
 
-    def mark_helper_package_failed(package_id, title, reason):
+    def mark_helper_package_failed(package_id, title, reason, manual_fallback=False):
         protected_release = get_protected_release(package_id)
+        if manual_fallback:
+            manual_result = require_manual_filecrypt_solution(
+                package_id, protected_release, reason
+            )
+            if manual_result:
+                return manual_result
         if protected_release and protected_release.get("title"):
             title = protected_release["title"]
         fail(title, package_id, shared_state, reason=reason)
@@ -218,6 +225,35 @@ def setup_sponsors_helper_routes(app):
         return {
             "success": False,
             "failed": True,
+            "reason": reason,
+        }
+
+    def require_manual_filecrypt_solution(package_id, protected_release, reason):
+        if not protected_release or not any(
+            PROTECTED_PATTERNS["filecrypt"].search(extract_helper_candidate_url(link))
+            for link in protected_release.get("links", [])
+        ):
+            return None
+
+        # Solver exhaustion does not establish that the container is unavailable.
+        # Keep its links for the browser, but stop automatic helper retries.
+        protected_release["disabled"] = True
+        protected_db = shared_state.get_db("protected")
+        protected_db.update_store(package_id, json.dumps(protected_release))
+        info(
+            f"Manual CAPTCHA solution required for <y>{protected_release.get('title', 'Unknown')}</y>: {reason}"
+        )
+        update_release_notification(
+            shared_state,
+            protected_release,
+            NotificationType.DISABLED,
+            details={"reason": reason},
+        )
+        protected_db.update_store(package_id, json.dumps(protected_release))
+        return {
+            "success": False,
+            "failed": False,
+            "manual_required": True,
             "reason": reason,
         }
 
@@ -338,6 +374,7 @@ def setup_sponsors_helper_routes(app):
                     package_id,
                     title,
                     "SponsorsHelper returned an invalid download payload.",
+                    manual_fallback=True,
                 )
 
             if download_links:
@@ -410,6 +447,7 @@ def setup_sponsors_helper_routes(app):
                     package_id,
                     title,
                     "SponsorsHelper returned no final download links.",
+                    manual_fallback=True,
                 )
 
         except HTTPResponse:
@@ -504,6 +542,11 @@ def setup_sponsors_helper_routes(app):
             # 2. If we have an ID, try to get canonical title from DB (if not provided or to verify)
             if package_id:
                 protected_release = get_protected_release(package_id)
+                manual_result = require_manual_filecrypt_solution(
+                    package_id, protected_release, reason
+                )
+                if manual_result:
+                    return manual_result
                 try:
                     db_entry = shared_state.get_db("protected").retrieve(package_id)
                     if db_entry:
