@@ -14,6 +14,262 @@ from quasarr.api.sponsors_helper import (
 
 
 class SponsorsHelperApiTests(unittest.TestCase):
+    @staticmethod
+    def _filecrypt_package():
+        return {
+            "title": "Synthetic.Filecrypt.Release",
+            "links": [["https://filecrypt.invalid/container/synthetic", "filecrypt"]],
+            "password": "synthetic-password",
+            "metadata": {"source": "synthetic"},
+        }
+
+    def test_filecrypt_fail_callback_disables_package_by_id(self):
+        app = Bottle()
+        setup_sponsors_helper_routes(app)
+        route = next(
+            route for route in app.routes if route.rule == "/sponsors_helper/api/fail/"
+        )
+        package_id = "Quasarr_movies_" + "c" * 32
+        package_data = self._filecrypt_package()
+        protected_db = mock.Mock()
+        protected_db.retrieve.return_value = json.dumps(package_data)
+        protected_db.retrieve_all_titles.return_value = [
+            (package_id, json.dumps(package_data))
+        ]
+        payload = {"package_id": package_id, "reason": "Synthetic failure"}
+        stats = mock.Mock()
+
+        with (
+            mock.patch(
+                "quasarr.api.sponsors_helper.shared_state.values",
+                {"helper_active": True, "helper_last_seen": 0},
+            ),
+            mock.patch(
+                "quasarr.api.sponsors_helper.shared_state.get_db",
+                return_value=protected_db,
+            ),
+            mock.patch("quasarr.api.sponsors_helper.request", mock.Mock(json=payload)),
+            mock.patch("quasarr.api.sponsors_helper.StatsHelper", return_value=stats),
+            mock.patch("quasarr.api.sponsors_helper.fail") as fail,
+            mock.patch(
+                "quasarr.api.sponsors_helper.update_release_notification"
+            ) as notification,
+        ):
+            result = route.callback()
+
+        stored_data = json.loads(protected_db.update_store.call_args.args[1])
+        self.assertTrue(stored_data["disabled"])
+        self.assertEqual(package_data["links"], stored_data["links"])
+        self.assertEqual(package_data["password"], stored_data["password"])
+        self.assertEqual(package_data["metadata"], stored_data["metadata"])
+        protected_db.delete.assert_not_called()
+        fail.assert_not_called()
+        stats.increment_failed_decryptions_automatic.assert_called_once_with()
+        stats.increment_captcha_decryptions_automatic.assert_not_called()
+        notification.assert_called_once()
+        self.assertEqual("DISABLED", notification.call_args.args[2].name)
+        self.assertEqual(
+            {
+                "success": False,
+                "failed": False,
+                "manual_required": True,
+                "reason": "Synthetic failure",
+            },
+            result,
+        )
+
+    def test_filecrypt_fail_callback_resolves_package_by_title(self):
+        app = Bottle()
+        setup_sponsors_helper_routes(app)
+        route = next(
+            route for route in app.routes if route.rule == "/sponsors_helper/api/fail/"
+        )
+        package_id = "Quasarr_movies_" + "d" * 32
+        package_data = self._filecrypt_package()
+        protected_db = mock.Mock()
+        protected_db.retrieve_all_titles.return_value = [
+            (package_id, json.dumps(package_data))
+        ]
+        protected_db.retrieve.return_value = json.dumps(package_data)
+        stats = mock.Mock()
+        with (
+            mock.patch(
+                "quasarr.api.sponsors_helper.shared_state.values",
+                {"helper_active": True, "helper_last_seen": 0},
+            ),
+            mock.patch(
+                "quasarr.api.sponsors_helper.shared_state.get_db",
+                return_value=protected_db,
+            ),
+            mock.patch(
+                "quasarr.api.sponsors_helper.request",
+                mock.Mock(
+                    json={"title": package_data["title"], "reason": "Synthetic failure"}
+                ),
+            ),
+            mock.patch("quasarr.api.sponsors_helper.StatsHelper", return_value=stats),
+            mock.patch("quasarr.api.sponsors_helper.fail") as fail,
+            mock.patch(
+                "quasarr.api.sponsors_helper.update_release_notification"
+            ) as notification,
+        ):
+            route.callback()
+
+        self.assertTrue(
+            json.loads(protected_db.update_store.call_args.args[1])["disabled"]
+        )
+        protected_db.delete.assert_not_called()
+        fail.assert_not_called()
+        stats.increment_failed_decryptions_automatic.assert_called_once_with()
+        stats.increment_captcha_decryptions_automatic.assert_not_called()
+        notification.assert_called_once()
+
+    def test_filecrypt_download_without_usable_urls_disables_package(self):
+        app = Bottle()
+        setup_sponsors_helper_routes(app)
+        route = next(
+            route
+            for route in app.routes
+            if route.rule == "/sponsors_helper/api/download/"
+        )
+        package_id = "Quasarr_movies_" + "e" * 32
+        package_data = self._filecrypt_package()
+        for urls in ([], "not-a-url"):
+            with self.subTest(urls=urls):
+                protected_db = mock.Mock()
+                protected_db.retrieve.return_value = json.dumps(package_data)
+                payload = {
+                    "name": package_data["title"],
+                    "package_id": package_id,
+                    "urls": urls,
+                    "password": "",
+                    "notification": {"solvers": []},
+                }
+                stats = mock.Mock()
+                with (
+                    mock.patch(
+                        "quasarr.api.sponsors_helper.shared_state.values",
+                        {"helper_active": True, "helper_last_seen": 0},
+                    ),
+                    mock.patch(
+                        "quasarr.api.sponsors_helper.shared_state.get_db",
+                        return_value=protected_db,
+                    ),
+                    mock.patch(
+                        "quasarr.api.sponsors_helper.request", mock.Mock(json=payload)
+                    ),
+                    mock.patch(
+                        "quasarr.api.sponsors_helper.StatsHelper", return_value=stats
+                    ),
+                    mock.patch("quasarr.api.sponsors_helper.fail") as fail,
+                    mock.patch(
+                        "quasarr.api.sponsors_helper.update_release_notification"
+                    ) as notification,
+                    mock.patch(
+                        "quasarr.api.sponsors_helper.submit_final_download_urls"
+                    ) as submit,
+                ):
+                    result = route.callback()
+
+                reason = (
+                    "SponsorsHelper returned no final download links."
+                    if isinstance(urls, list)
+                    else "SponsorsHelper returned an invalid download payload."
+                )
+                self.assertEqual(
+                    {
+                        "success": False,
+                        "failed": False,
+                        "manual_required": True,
+                        "reason": reason,
+                    },
+                    result,
+                )
+                self.assertTrue(
+                    json.loads(protected_db.update_store.call_args.args[1])["disabled"]
+                )
+                protected_db.delete.assert_not_called()
+                fail.assert_not_called()
+                stats.increment_failed_decryptions_automatic.assert_called_once_with()
+                stats.increment_captcha_decryptions_automatic.assert_not_called()
+                notification.assert_called_once()
+                self.assertEqual("DISABLED", notification.call_args.args[2].name)
+                submit.assert_not_called()
+
+    def test_select_helper_package_skips_disabled_package(self):
+        packages = [
+            (
+                "pkg-disabled",
+                json.dumps(
+                    {
+                        "title": "Synthetic.Disabled",
+                        "disabled": True,
+                        "links": [["https://x.invalid/file", "x"]],
+                    }
+                ),
+            ),
+            (
+                "pkg-ready",
+                json.dumps(
+                    {
+                        "title": "Synthetic.Ready",
+                        "links": [["https://x.invalid/file", "x"]],
+                    }
+                ),
+            ),
+        ]
+        package_id, data, _ = select_helper_package(packages, [])
+        self.assertEqual("pkg-ready", package_id)
+        self.assertEqual("Synthetic.Ready", data["title"])
+
+    def test_nonfilecrypt_fail_callback_keeps_legacy_failure_behavior(self):
+        app = Bottle()
+        setup_sponsors_helper_routes(app)
+        route = next(
+            route for route in app.routes if route.rule == "/sponsors_helper/api/fail/"
+        )
+        package_id = "Quasarr_movies_" + "f" * 32
+        package_data = {
+            "title": "Synthetic.Legacy.Release",
+            "links": [["https://source.invalid/container/synthetic", "source"]],
+            "password": "synthetic-password",
+        }
+        protected_db = mock.Mock()
+        protected_db.retrieve.return_value = json.dumps(package_data)
+        stats = mock.Mock()
+        with (
+            mock.patch(
+                "quasarr.api.sponsors_helper.shared_state.values",
+                {"helper_active": True, "helper_last_seen": 0},
+            ),
+            mock.patch(
+                "quasarr.api.sponsors_helper.shared_state.get_db",
+                return_value=protected_db,
+            ),
+            mock.patch(
+                "quasarr.api.sponsors_helper.request",
+                mock.Mock(
+                    json={"package_id": package_id, "reason": "Synthetic failure"}
+                ),
+            ),
+            mock.patch("quasarr.api.sponsors_helper.StatsHelper", return_value=stats),
+            mock.patch(
+                "quasarr.api.sponsors_helper.fail", return_value={"success": True}
+            ) as fail,
+            mock.patch(
+                "quasarr.api.sponsors_helper.update_release_notification"
+            ) as notification,
+        ):
+            result = route.callback()
+
+        fail.assert_called_once_with(
+            package_data["title"], package_id, mock.ANY, reason="Synthetic failure"
+        )
+        protected_db.delete.assert_called_once_with(package_id)
+        notification.assert_called_once()
+        self.assertEqual("FAILED", notification.call_args.args[2].name)
+        self.assertIn("marked as failed", result)
+
     def test_to_decrypt_route_accepts_only_post(self):
         app = Bottle()
         setup_sponsors_helper_routes(app)
