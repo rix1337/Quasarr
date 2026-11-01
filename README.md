@@ -280,7 +280,7 @@ Most feature requests can be satisfied by:
 
 # SponsorsHelper
 
-<img src="https://imgur.com/iHBqLwT.png" width="64" height="64" />
+<img src="https://raw.githubusercontent.com/rix1337/Quasarr/main/SponsorsHelper.png" data-canonical-src="https://raw.githubusercontent.com/rix1337/Quasarr/main/SponsorsHelper.png" width="64" height="64" />
 
 SponsorsHelper is a Docker image that solves CAPTCHAs and decrypts links for Quasarr.  
 The image is public, but requires a valid [active monthly GitHub sponsor](https://github.com/users/rix1337/sponsorship) check at runtime.
@@ -327,10 +327,12 @@ docker run -d \
   ghcr.io/rix1337/sponsors-helper:latest
 ```
 
-| Parameter              | Description                                                                           |
-|------------------------|---------------------------------------------------------------------------------------|
-| `QUASARR_URL`          | Local URL of Quasarr (e.g., `http://192.168.0.1:8080`)                                |
-| `QUASARR_API_KEY`      | Your Quasarr API key (found in Quasarr web UI under "API Settings")                   |
-| `FLARESOLVERR_URL`     | Local URL of [flaresolverr-next](https://github.com/rix1337/flaresolverr-next)        |
-| `APIKEY_2CAPTCHA`      | [2Captcha](https://2captcha.com/?from=27506687) account API key                       |
-| `TZ`                   | Optional. Timezone for SponsorsHelper (e.g., `Europe/Berlin`)                           |
+| Parameter              | Description                                                                                   |
+|------------------------|-----------------------------------------------------------------------------------------------|
+| `QUASARR_URL`          | Local URL of Quasarr (e.g., `http://192.168.0.1:8080`)                                        |
+| `QUASARR_API_KEY`      | Your Quasarr API key (found in Quasarr web UI under "API Settings")                           |
+| `FLARESOLVERR_URL`     | Local URL of [flaresolverr-next](https://github.com/rix1337/flaresolverr-next)                |
+| `APIKEY_2CAPTCHA`      | [2Captcha](https://2captcha.com/?from=27506687) account API key                               |
+| `DEATHBYCAPTCHA_TOKEN` | Optional. DeathByCaptcha API token, usable instead of or alongside 2Captcha                   |
+| `TZ`                   | Optional. Timezone for SponsorsHelper (e.g., `Europe/Berlin`)                                 |
+
