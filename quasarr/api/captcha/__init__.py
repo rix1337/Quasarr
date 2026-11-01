@@ -741,6 +741,7 @@ def setup_captcha_routes(app):
     def serve_filecrypt_user_js():
         content = obfuscated.filecrypt_user_js()
         response.content_type = "application/javascript"
+        response.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
         return content
 
     @app.get("/captcha/hide.user.js")
@@ -748,6 +749,7 @@ def setup_captcha_routes(app):
     def serve_hide_user_js():
         content = obfuscated.hide_user_js()
         response.content_type = "application/javascript"
+        response.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
         return content
 
     @app.get("/captcha/junkies.user.js")
@@ -758,6 +760,7 @@ def setup_captcha_routes(app):
 
         content = obfuscated.junkies_user_js(sj, dj)
         response.content_type = "application/javascript"
+        response.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
         return content
 
     @app.get("/captcha/he.user.js")
@@ -766,6 +769,7 @@ def setup_captcha_routes(app):
         he = shared_state.values["config"]("Hostnames").get("he")
         content = obfuscated.he_user_js(he)
         response.content_type = "application/javascript"
+        response.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
         return content
 
     @app.get("/captcha/keeplinks.user.js")
@@ -773,6 +777,7 @@ def setup_captcha_routes(app):
     def serve_keeplinks_user_js():
         content = obfuscated.keeplinks_user_js()
         response.content_type = "application/javascript"
+        response.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
         return content
 
     @app.get("/captcha/tolink.user.js")
@@ -780,6 +785,7 @@ def setup_captcha_routes(app):
     def serve_tolink_user_js():
         content = obfuscated.tolink_user_js()
         response.content_type = "application/javascript"
+        response.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
         return content
 
     def render_package_selector(current_package_id, current_title=None):
