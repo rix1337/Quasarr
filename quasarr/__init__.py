@@ -26,6 +26,7 @@ from quasarr.providers.log import (
 )
 from quasarr.providers.notifications import send_notification
 from quasarr.providers.notifications.helpers.notification_types import NotificationType
+from quasarr.providers.statistics import StatsHelper
 from quasarr.providers.utils import (
     Unbuffered,
     check_flaresolverr,
@@ -147,6 +148,7 @@ def run():
         Config.prune_unsupported_keys(shared_state.values["configfile"])
         shared_state.update("config", Config)
         shared_state.update("database", DataBase)
+        StatsHelper(shared_state).prune()
         supported_hostnames = extract_allowed_keys(Config._DEFAULT_CONFIG, "Hostnames")
         shared_state.update("sites", [key.upper() for key in supported_hostnames])
         # Set fallback user agent immediately so it's available while background check runs

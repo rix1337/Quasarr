@@ -7,7 +7,7 @@ Hostname Issues Tracker - Uses lazy imports to avoid circular dependency
 """
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 
 
 def _get_db(table_name):
@@ -28,6 +28,35 @@ def mark_hostname_issue(shorthand, operation, error_message):
     }
 
     db.update_store(shorthand, json.dumps(issue_data))
+
+    # marks the day as affected for the statistics chart; must never break callers
+    try:
+        from quasarr.providers.statistics import prune_daily
+
+        stats_db = _get_db("statistics")
+        prune_daily(stats_db)
+        stats_db.update_store(f"issue:{date.today().isoformat()}:{shorthand}", "1")
+        record_configured_hostnames(refresh=False)
+    except Exception:
+        pass
+
+
+def record_configured_hostnames(refresh=True):
+    """Snapshot today's configured hostname count for the statistics chart.
+
+    refresh=False keeps an existing snapshot so frequent issue marks stay cheap.
+    """
+    from quasarr.search.sources.helpers import get_hostnames
+    from quasarr.storage.config import Config
+
+    stats_db = _get_db("statistics")
+    day_key = f"hosts:{date.today().isoformat()}:n"
+    if not refresh and stats_db.retrieve(day_key) is not None:
+        return
+
+    config = Config("Hostnames")
+    count = sum(1 for name in get_hostnames() if config.get(name))
+    stats_db.update_store(f"hosts:{date.today().isoformat()}:n", str(count))
 
 
 def clear_hostname_issue(shorthand):
