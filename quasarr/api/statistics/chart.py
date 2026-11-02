@@ -94,16 +94,28 @@ _CHART = """
         }
 
         visible.forEach(function (m) {
-            var v = H.series[m[0]], d = "M" + x(0) + " " + y(v[0]);
-            for (var i = 1; i < n; i++) {
-                var mx = (x(i - 1) + x(i)) / 2;
-                d += "C" + mx + " " + y(v[i - 1]) + " " + mx + " " + y(v[i]) + " " + x(i) + " " + y(v[i]);
+            // null = nothing recorded: break the line instead of inventing values
+            var v = H.series[m[0]], lines = [], area = "", d = "", start = -1;
+            for (var i = 0; i <= n; i++) {
+                if (i < n && v[i] !== null) {
+                    if (start < 0) { start = i; d = "M" + x(i) + " " + y(v[i]); }
+                    else {
+                        var mx = (x(i - 1) + x(i)) / 2;
+                        d += "C" + mx + " " + y(v[i - 1]) + " " + mx + " " + y(v[i]) + " " + x(i) + " " + y(v[i]);
+                    }
+                } else if (start >= 0) {
+                    lines.push(d);
+                    area += d + "L" + x(i - 1) + " " + y(0) + "L" + x(start) + " " + y(0) + "Z";
+                    start = -1;
+                }
             }
             var grad = el("linearGradient", {id: "__ID__-hg-" + m[0], x1: 0, y1: 0, x2: 0, y2: 1}, defs);
             el("stop", {offset: "0%", "stop-color": m[2], "stop-opacity": .28}, grad);
             el("stop", {offset: "100%", "stop-color": m[2], "stop-opacity": 0}, grad);
-            el("path", {d: d + "L" + x(n - 1) + " " + y(0) + "L" + x(0) + " " + y(0) + "Z", fill: "url(#__ID__-hg-" + m[0] + ")"});
-            el("path", {d: d, fill: "none", stroke: m[2], "stroke-width": 2, "stroke-linecap": "round"});
+            el("path", {d: area, fill: "url(#__ID__-hg-" + m[0] + ")"});
+            lines.forEach(function (l) {
+                el("path", {d: l, fill: "none", stroke: m[2], "stroke-width": 2, "stroke-linecap": "round"});
+            });
         });
 
         var cursor = el("line", {y1: T, y2: HT - B, stroke: "currentColor", "stroke-opacity": .3, visibility: "hidden"});
@@ -119,9 +131,10 @@ _CHART = """
             cursor.setAttribute("visibility", "visible");
             var html = "<b>" + H.days[i] + "</b>";
             visible.forEach(function (m, k) {
-                dots[k].setAttribute("cx", x(i)); dots[k].setAttribute("cy", y(H.series[m[0]][i]));
-                dots[k].setAttribute("visibility", "visible");
-                html += "<br><span style='color:" + m[2] + "'>\\u25CF</span> " + m[1] + ": " + H.series[m[0]][i];
+                var val = H.series[m[0]][i];
+                dots[k].setAttribute("cx", x(i)); dots[k].setAttribute("cy", val === null ? 0 : y(val));
+                dots[k].setAttribute("visibility", val === null ? "hidden" : "visible");
+                html += "<br><span style='color:" + m[2] + "'>\\u25CF</span> " + m[1] + ": " + (val === null ? "no data" : val);
                 var names = (H.details[m[0]] || [])[i];
                 if (names && names.length) html += " (" + names.join(", ") + ")";
             });

@@ -61,7 +61,7 @@ class StatsHistoryTests(unittest.TestCase):
         self.assertEqual(history["issue_hosts"][-1], ["XX", "YY"])
         self.assertEqual(history["issue_hosts"][0], [])
         self.assertEqual(history["issues"][0], 0)
-        self.assertEqual(history["hosts"], [0] * HISTORY_DAYS)
+        self.assertEqual(history["hosts"], [None] * HISTORY_DAYS)
 
     def test_hostname_count_carries_forward(self):
         helper, rows = self.make_helper()
@@ -70,7 +70,29 @@ class StatsHistoryTests(unittest.TestCase):
         with patch("quasarr.providers.statistics.record_configured_hostnames"):
             history = helper.get_history()
 
-        self.assertEqual(history["hosts"], [7] * HISTORY_DAYS)
+        # unknown before the first snapshot, carried forward after it
+        self.assertEqual(history["hosts"], [None] * 19 + [7] * 11)
+
+    def test_hostname_count_keeps_history_across_changes(self):
+        helper, rows = self.make_helper()
+        for offset, count in ((20, 5), (10, 8)):
+            day = (date.today() - timedelta(days=offset)).isoformat()
+            rows[f"hosts:{day}:n"] = str(count)
+        with patch("quasarr.providers.statistics.record_configured_hostnames"):
+            hosts = helper.get_history()["hosts"]
+
+        self.assertEqual(hosts[9:19], [5] * 10)
+        self.assertEqual(hosts[19:], [8] * 11)
+
+    def test_first_write_of_day_snapshots_hostnames(self):
+        helper, _ = self.make_helper()
+        with patch(
+            "quasarr.providers.statistics.record_configured_hostnames"
+        ) as record:
+            helper.increment_failed_downloads()
+            helper.increment_failed_downloads()
+
+        record.assert_called_once()
 
     def test_old_rows_are_pruned(self):
         helper, rows = self.make_helper()
