@@ -4,7 +4,6 @@ date: 2026-10-19
 author: Quasarr
 touches:
   - AGENTS.md
-  - CLAUDE.md
   - README.md
   - CONTRIBUTING.md
   - check_trail.py
@@ -12,7 +11,7 @@ touches:
 
 ## Decided
 
-Keep one root AGENTS.md for priority rules and the Trail workflow. Do not create child instruction files or restore a documentation hierarchy. Keep CLAUDE.md as the single-line pointer `@AGENTS.md`; never duplicate instructions into it.
+Keep one root AGENTS.md for priority rules and the Trail workflow. Do not create child instruction files or restore a documentation hierarchy. AGENTS.md is the only agent instruction file; do not add pointer or copy files for specific agents.
 
 Record durable architectural choices, their reasons, tested alternatives, and invariants as focused Trail learnings. Do not document code flows, inventories, signatures, transcripts, task diaries, or token-saving estimates. Never invent historical rationale or rejected alternatives. Use `## Decided` for the choice and reason, `## Watch out` for invariants, and `## Tried and ruled out` only when alternatives were actually investigated.
 
@@ -20,7 +19,7 @@ Why: The previous documentation hierarchy consumed context and duplicated inform
 
 ## Watch out
 
-Read related learnings before adding one. Create notes only for useful decisions or corrected architectural assumptions, not ordinary code changes. Once committed, preserve existing learnings; changed decisions get new notes naming what they supersede and why. Verify historical guidance against dates and current code.
+Read related learnings before adding one. Create notes only for useful decisions or corrected architectural assumptions, not ordinary code changes. Keep learnings current: when code, a source's site layout, or a decision changes, update the affected learning in place, correct or delete what is no longer true, and add a new note only for a new decision. Verify historical guidance against dates and current code.
 
 Write curated Markdown directly with generic author `Quasarr` and exact repository-relative `touches` paths. Never commit source hostnames, personal metadata, absolute local paths, credentials, captures, or generated maps. Automatic author, branch, or transcript metadata must not enter shared notes. Never force-add ignored files or commit machine-specific agent settings.
 

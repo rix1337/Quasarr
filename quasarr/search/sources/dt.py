@@ -104,9 +104,11 @@ class Source(AbstractSearchSource):
                     except:
                         imdb_id = None
 
-                    body_text = article.find("div", class_="dt-text-clamp").get_text(
-                        " "
-                    )
+                    clamp_div = article.find("div", class_="dt-text-clamp")
+                    if not clamp_div:
+                        debug(f"No body text in search-article for {title_raw}")
+                        continue
+                    body_text = clamp_div.get_text(" ")
                     size_match = re.search(
                         r"(\d+(?:\.\d+)?\s*(?:GB|MB|KB|TB))", body_text, re.IGNORECASE
                     )
@@ -119,6 +121,10 @@ class Source(AbstractSearchSource):
                     size = mb * 1024 * 1024
 
                     published = _parse_published_datetime(article)
+                    if published is None:
+                        # not a dated release (e.g. promo block); skip quietly
+                        debug(f"Published date not found in article for {title_raw}")
+                        continue
 
                     link = generate_download_link(
                         shared_state,
@@ -183,13 +189,13 @@ class Source(AbstractSearchSource):
         base_search_category = get_base_search_category_id(search_category)
 
         if base_search_category == SEARCH_CAT_BOOKS:
-            cat_id = "100"
+            cat_ids = ["100", "4", "35", "109"]
         elif base_search_category == SEARCH_CAT_MOVIES:
-            cat_id = "9"
+            cat_ids = ["9", "107", "106", "104"]
         elif base_search_category == SEARCH_CAT_SHOWS:
-            cat_id = "64"
+            cat_ids = ["64"]
         elif base_search_category == SEARCH_CAT_MUSIC:
-            cat_id = "66"
+            cat_ids = ["66"]
         else:
             warn(f"Unknown search category: {search_category}")
             return releases
@@ -206,6 +212,7 @@ class Source(AbstractSearchSource):
                 search_string = html.unescape(search_string)
 
             q = quote_plus(search_string)
+            catlist_query = "&".join(f"catlist%5B%5D={cid}" for cid in cat_ids)
 
             url = (
                 f"https://{dt}/index.php?"
@@ -214,7 +221,7 @@ class Source(AbstractSearchSource):
                 f"search_start=0&"
                 f"full_search=1&"
                 f"story={q}&"
-                f"catlist%5B%5D={cat_id}&"
+                f"{catlist_query}&"
                 f"sortby=date&"
                 f"resorder=desc&"
                 f"titleonly=3&"
@@ -266,9 +273,11 @@ class Source(AbstractSearchSource):
                     except:
                         imdb_id = None
 
-                    body_text = article.find("div", class_="dt-text-clamp").get_text(
-                        " "
-                    )
+                    clamp_div = article.find("div", class_="dt-text-clamp")
+                    if not clamp_div:
+                        debug(f"No body text in search-article for {title_raw}")
+                        continue
+                    body_text = clamp_div.get_text(" ")
                     m = re.search(
                         r"(\d+(?:\.\d+)?\s*(?:GB|MB|KB|TB))", body_text, re.IGNORECASE
                     )
@@ -280,6 +289,10 @@ class Source(AbstractSearchSource):
                     size = mb * 1024 * 1024
 
                     published = _parse_published_datetime(article)
+                    if published is None:
+                        # not a dated release (e.g. promo block); skip quietly
+                        debug(f"Published date not found in article for {title_raw}")
+                        continue
 
                     link = generate_download_link(
                         shared_state,
@@ -342,11 +355,13 @@ def _extract_size(text):
 def _parse_published_datetime(article):
     month_tag = article.select_one("small.dt-fs-11")
     if not month_tag:
-        # feed listings show "29.10.2026 07:47" instead of the calendar block
+        # feed listings show "29.10.2026 07:47" (day and month unpadded, e.g. "2.11.2026 12:49") instead of the calendar block
         m = re.search(
-            r"\b(\d{2})\.(\d{2})\.(\d{4})\s+(\d{1,2}):(\d{2})\b",
+            r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2})\b",
             article.get_text(" "),
         )
+        if not m:
+            return None
         day, month_num, year, hh, mm = map(int, m.groups())
     else:
         day = int(article.find("h4", class_="m-0").text.strip())

@@ -54,6 +54,4 @@ Start local configuration from `.env.example`; set `INTERNAL_ADDRESS`, keep Dock
 
 Use a short, imperative, capitalized commit subject that describes the entire change; normally no body, trailing period, or emoji. Squash iterations of one change into one clean commit. PRs describe user-visible behavior, config/hostname impact without naming sources, and relevant verification. Resolve addressed review threads and verify resolution; minimize fully resolved parent reviews as `RESOLVED`. Delete obsolete build-run comments.
 
-Community links point to SimpleX. Stable release announcements use only the associated merged PR text below the existing message; beta builds send none. Discord remains a product notification integration. Never send production test notifications without explicit authorization. Companion Userscripts/SponsorsHelper releases mean pushing approved changes to `main`, with no tag or GitHub Release required.
-
 Execute explicit repo-local skill commands exactly as written. If one fails, inspect and discuss the next step before substituting another invocation, unless that skill defines a fallback.

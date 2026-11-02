@@ -239,7 +239,7 @@ def unhide_links(shared_state, url, session):
             debug(f"Resolved to canonical container ID: {container_id}")
 
         headers = {"User-Agent": shared_state.values["user_agent"]}
-        info(f"Fetching hide.cx container with ID: {container_id}")
+        debug(f"Fetching hide.cx container with ID: {container_id}")
 
         headers = {"User-Agent": shared_state.values["user_agent"]}
 

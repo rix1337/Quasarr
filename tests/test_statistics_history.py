@@ -104,6 +104,24 @@ class StatsHistoryTests(unittest.TestCase):
         self.assertNotIn(f"day:{old}:packages", rows)
         self.assertIn(f"pruned:{date.today().isoformat()}", rows)
 
+    def test_package_error_counts_once_per_package(self):
+        helper, rows = self.make_helper()
+        for _ in range(3):
+            helper.record_failed_package("Quasarr_tv_aaa")
+        helper.record_failed_package("Quasarr_tv_bbb")
+        with patch("quasarr.providers.statistics.record_configured_hostnames"):
+            history = helper.get_history()
+
+        self.assertEqual(history["series"]["failed"][-1], 2)
+
+    def test_package_error_marker_expires_with_the_window(self):
+        helper, rows = self.make_helper()
+        old = (date.today() - timedelta(days=HISTORY_DAYS)).isoformat()
+        rows["failedpkg:Quasarr_tv_old"] = old
+        helper.prune()
+
+        self.assertNotIn("failedpkg:Quasarr_tv_old", rows)
+
     def test_prune_runs_once_per_day(self):
         helper, rows = self.make_helper()
         helper.increment_failed_downloads()
