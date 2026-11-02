@@ -22,7 +22,10 @@ from quasarr.constants import (
     SEARCH_CAT_SHOWS_DOCUMENTARY,
     SEARCH_CATEGORY_DEFINITIONS,
 )
-from quasarr.providers.hostname_issues import get_all_hostname_issues
+from quasarr.providers.hostname_issues import (
+    get_all_hostname_issues,
+    record_configured_hostnames,
+)
 from quasarr.providers.html_images import FLAG_SVGS, LANGUAGE_FLAG_EMOJI
 from quasarr.providers.html_templates import (
     render_button,
@@ -778,6 +781,11 @@ def save_hostnames(shared_state, timeout=5, first_run=True):
 
     hostnames_url = request.forms.get("hostnames_url", "").strip()
     Config("Settings").save("hostnames_url", hostnames_url)
+
+    try:
+        record_configured_hostnames()
+    except Exception:
+        pass
 
     quasarr.providers.web_server.temp_server_success = True
 

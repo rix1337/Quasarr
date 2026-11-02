@@ -51,6 +51,12 @@ def prune_daily(db):
             db.delete(key)
     db.update_store(marker, "1")
 
+    # one snapshot per day even when the hostname config never changes
+    try:
+        record_configured_hostnames()
+    except Exception:
+        pass
+
 
 class StatsHelper:
     """
@@ -107,12 +113,12 @@ class StatsHelper:
             except ValueError:
                 continue
 
-        # hostname count only changes on config edits: carry the last snapshot forward
-        known = [counts.get(("hosts", day, "n")) for day in days]
-        last = next((v for v in known if v is not None), 0)
+        # hostname count only changes on config edits: carry the last snapshot forward,
+        # but leave days before the first snapshot empty rather than guessing
         hosts = []
-        for value in known:
-            last = last if value is None else value
+        last = None
+        for day in days:
+            last = counts.get(("hosts", day, "n"), last)
             hosts.append(last)
 
         issue_hosts = [

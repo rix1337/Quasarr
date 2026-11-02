@@ -14,7 +14,10 @@ import quasarr.providers.web_server
 from quasarr.api import get_api
 from quasarr.constants import FALLBACK_USER_AGENT
 from quasarr.providers import shared_state, version
-from quasarr.providers.hostname_issues import clear_all_hostname_issues
+from quasarr.providers.hostname_issues import (
+    clear_all_hostname_issues,
+    record_configured_hostnames,
+)
 from quasarr.providers.log import (
     crit,
     debug,
@@ -165,6 +168,8 @@ def run():
         if not hostnames:
             hostnames_config(shared_state)
             hostnames = get_clean_hostnames(shared_state)
+
+        record_configured_hostnames()
 
         # Check credentials for login-required hostnames
         skip_login_db = DataBase("skip_login")
