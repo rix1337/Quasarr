@@ -124,10 +124,6 @@ def build_fake_get(responses):
             return FakeResponse(responses.get("search", {"results": []}))
         if "/darkiworld/download/" in url:
             return FakeResponse(responses.get("links", {"success": False}))
-        if "/darkiworld/decode/" in url:
-            return FakeResponse(
-                responses.get("decode", {"embed_url": {"lien": DECODED_URL}})
-            )
         raise AssertionError(f"Unexpected URL: {url}")
 
     fake_get.calls = calls
@@ -208,13 +204,41 @@ class MxSearchTests(unittest.TestCase):
         self.assertEqual(details["imdb_id"], "tt0000001")
         self.assertEqual(details["size"], 4827965566)
         self.assertEqual(releases[0]["type"], "protected")
-        # The decoded hoster URL (not the source link id) is what gets downloaded.
-        self.assertEqual(captured["url"], DECODED_URL)
+        # Turnstile-gated decode is deferred to the download twin so search/feed
+        # never touch /darkiworld/decode/.
+        self.assertEqual(
+            captured["url"],
+            "https://api.source.invalid/api/darkiworld/decode/900001?title_id=222&host=1Fichier",
+        )
         self.assertEqual(captured["key"], "mx")
         # Download endpoint must target the IMDb-matched id (222), not the first.
         download_calls = [c for c in fake_get.calls if "/download/movie/" in c[0]]
         self.assertEqual(len(download_calls), 1)
         self.assertIn("/download/movie/222", download_calls[0][0])
+
+    def test_search_uses_direct_lien_when_present(self):
+        links = {
+            "success": True,
+            "all": [
+                {
+                    "id": 900009,
+                    "lien": DECODED_URL,
+                    "quality": "1080p",
+                    "host_name": "1fichier",
+                    "language": "MULTi",
+                    "size": 1000000000,
+                    "upload_date": "2026-05-16T16:21:06.000000Z",
+                    "source": "hydracker-live",
+                }
+            ],
+        }
+        releases, captured, _ = self._run_search(
+            {"search": MOVIE_RESULTS, "links": links},
+            "Some Movie",
+            search_string="tt0000001",
+        )
+        self.assertEqual(len(releases), 1)
+        self.assertEqual(captured["url"], DECODED_URL)
 
     def test_non_imdb_query_returns_empty(self):
         releases, _, fake_get = self._run_search(
@@ -741,6 +765,113 @@ class MxDownloadTests(unittest.TestCase):
             DownloadSource().get_download_links(ss, "", [], "x", None),
             {"links": []},
         )
+
+    def test_deferred_decode_url_solves_turnstile_and_posts_token(self):
+        ss = make_shared_state()
+        decode_url = "https://api.source.invalid/api/darkiworld/decode/900001?title_id=222&host=1Fichier"
+        fs_response = SimpleNamespace(
+            status_code=200,
+            execute_js_result='{"token": "ts-tok-123", "error": null}',
+        )
+        post_calls = []
+
+        def fake_post(url, params=None, json=None, headers=None, timeout=None):
+            post_calls.append((url, params, json, headers))
+            return FakeResponse(
+                {"success": True, "embed_url": {"lien": DECODED_URL}}, status_code=200
+            )
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(
+                    "quasarr.downloads.sources.mx.is_flaresolverr_available",
+                    return_value=True,
+                )
+            )
+            create = stack.enter_context(
+                patch(
+                    "quasarr.downloads.sources.mx.flaresolverr_create_session",
+                    return_value="sid-1",
+                )
+            )
+            destroy = stack.enter_context(
+                patch("quasarr.downloads.sources.mx.flaresolverr_destroy_session")
+            )
+            fs_get = stack.enter_context(
+                patch(
+                    "quasarr.downloads.sources.mx.flaresolverr_get",
+                    return_value=fs_response,
+                )
+            )
+            stack.enter_context(
+                patch("quasarr.downloads.sources.mx.requests.post", fake_post)
+            )
+            clear = stack.enter_context(
+                patch("quasarr.downloads.sources.mx.clear_hostname_issue")
+            )
+            result = DownloadSource().get_download_links(
+                ss, decode_url, ["1fichier"], "Some.Movie", None
+            )
+
+        self.assertEqual(result, {"links": [[DECODED_URL, "1fichier"]]})
+        create.assert_called_once_with(ss)
+        destroy.assert_called_once_with(ss, "sid-1")
+        self.assertEqual(fs_get.call_args.args[1], "https://source.invalid/")
+        self.assertEqual(len(post_calls), 1)
+        self.assertEqual(
+            post_calls[0][0],
+            "https://api.source.invalid/api/darkiworld/decode/900001",
+        )
+        self.assertEqual(post_calls[0][1], {"title_id": "222"})
+        self.assertEqual(post_calls[0][2], {"turnstileToken": "ts-tok-123"})
+        clear.assert_called_once_with("mx")
+
+    def test_deferred_decode_skips_flaresolverr_when_host_hint_not_in_mirrors(self):
+        ss = make_shared_state()
+        decode_url = "https://api.source.invalid/api/darkiworld/decode/900001?title_id=222&host=1Fichier"
+        with patch(
+            "quasarr.downloads.sources.mx.flaresolverr_create_session"
+        ) as create:
+            result = DownloadSource().get_download_links(
+                ss, decode_url, ["rapidgator"], "Some.Movie", None
+            )
+        self.assertEqual(result, {"links": []})
+        create.assert_not_called()
+
+    def test_deferred_decode_destroys_session_when_flaresolverr_raises(self):
+        ss = make_shared_state()
+        decode_url = "https://api.source.invalid/api/darkiworld/decode/900001?title_id=222&host=1Fichier"
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(
+                    "quasarr.downloads.sources.mx.is_flaresolverr_available",
+                    return_value=True,
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "quasarr.downloads.sources.mx.flaresolverr_create_session",
+                    return_value="sid-err",
+                )
+            )
+            destroy = stack.enter_context(
+                patch("quasarr.downloads.sources.mx.flaresolverr_destroy_session")
+            )
+            stack.enter_context(
+                patch(
+                    "quasarr.downloads.sources.mx.flaresolverr_get",
+                    side_effect=RuntimeError("browser crash"),
+                )
+            )
+            mark = stack.enter_context(
+                patch("quasarr.downloads.sources.mx.mark_hostname_issue")
+            )
+            result = DownloadSource().get_download_links(
+                ss, decode_url, [], "Some.Movie", None
+            )
+        self.assertEqual(result, {"links": []})
+        destroy.assert_called_once_with(ss, "sid-err")
+        mark.assert_called_once()
 
 
 class MxHelperTests(unittest.TestCase):

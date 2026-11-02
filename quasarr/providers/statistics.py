@@ -19,7 +19,7 @@ HISTORY_METRICS = {
 }
 
 
-ROW_KINDS = ("day", "issue", "hosts", "pruned")
+ROW_KINDS = ("day", "issue", "hosts", "pruned", "failedpkg")
 ROW_PREFIXES = tuple(f"{kind}:" for kind in ROW_KINDS)
 
 # lifetime counters from before the per-day history; dropped by the first prune
@@ -45,9 +45,11 @@ def prune_daily(db):
         db.delete(key)
 
     cutoff = (today - timedelta(days=HISTORY_DAYS - 1)).isoformat()
-    for key, _ in db.retrieve_all_titles() or []:
+    for key, value in db.retrieve_all_titles() or []:
         parts = key.split(":")
-        if len(parts) >= 2 and parts[0] in ROW_KINDS and parts[1] < cutoff:
+        # failedpkg rows are keyed by package id and carry their date as the value
+        stamp = value if parts[0] == "failedpkg" else parts[1] if len(parts) > 1 else ""
+        if parts[0] in ROW_KINDS and stamp and stamp < cutoff:
             db.delete(key)
     db.update_store(marker, "1")
 
@@ -84,6 +86,16 @@ class StatsHelper:
         except ValueError:
             current = 0
         db.update_store(day_key, str(current + count))
+
+    def record_failed_package(self, package_id):
+        """Count a package in an error state once, however often it is polled"""
+        db = self._get_db()
+        prune_daily(db)
+        key = f"failedpkg:{package_id}"
+        if db.retrieve(key) is not None:
+            return
+        db.store(key, date.today().isoformat())
+        self._increment_stat("failed_downloads")
 
     def prune(self):
         prune_daily(self._get_db())

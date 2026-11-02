@@ -5,40 +5,49 @@
 import html
 import re
 import time
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote_plus
 
 from quasarr.constants import (
     FEED_REQUEST_TIMEOUT_SECONDS,
+    IMDB_REGEX,
+    MOVIE_REGEX,
     SEARCH_CAT_MOVIES,
     SEARCH_CAT_SHOWS,
     SEARCH_REQUEST_TIMEOUT_SECONDS,
+    SEASON_EP_REGEX,
 )
 from quasarr.downloads.sources.rm import (
-    _bootstrap_session,
     _build_release_page_url,
-    _convert_iso_to_rss_date,
-    _fetch_productions_page,
-    _fetch_releases_by_production_ids,
     _get_base_url,
-    _is_movie_release,
-    _search_productions,
+    _get_page,
 )
 from quasarr.providers import shared_state
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
-from quasarr.providers.imdb_metadata import get_localized_title, get_year
-from quasarr.providers.log import debug, info, trace, warn
+from quasarr.providers.log import debug, warn
 from quasarr.providers.utils import (
+    convert_to_mb,
     generate_download_link,
     get_base_search_category_id,
     is_imdb_id,
     is_valid_release,
-    normalize_optional_int,
     release_matches_search_category,
-    search_string_in_sanitized_title,
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
 
 _LEADING_TAG_REGEX = re.compile(r"^(?:\[[^\]]+\]\s*)+")
+_TRAILING_SIZE_REGEX = re.compile(r"\s*\(\s*\d+(?:\.\d+)?\s*[KMGT]B\s*\)\s*$", re.I)
+_SIZE_REGEX = re.compile(r"(\d+(?:\.\d+)?)\s*([KMGT]B)", re.I)
+_RELATIVE_TIME_REGEX = re.compile(
+    r"(\d+)\s*(second|minute|hour|day|week|month|year)s?", re.I
+)
+_RELATIVE_UNIT_DAYS = {"week": 7, "month": 30, "year": 365}
+
+# one result page lists 25 releases; a phrase search is ranked by relevance, so
+# the first pages carry what was asked for
+SEARCH_RESULT_PAGES = 3
+SEARCH_PAGE_SIZE = 25
 
 
 class Source(AbstractSearchSource):
@@ -54,38 +63,26 @@ class Source(AbstractSearchSource):
     ) -> list[SearchRelease]:
         releases = []
 
-        if get_base_search_category_id(search_category) not in (
-            SEARCH_CAT_MOVIES,
-            SEARCH_CAT_SHOWS,
-        ):
+        base_category = get_base_search_category_id(search_category)
+        if base_category not in (SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS):
             return releases
 
         try:
-            release_items = _load_feed_release_items(
-                shared_state,
-                search_category,
-                max_production_pages=10,
-                timeout=FEED_REQUEST_TIMEOUT_SECONDS,
+            soup = _require_layout(
+                _get_page(shared_state, "/", FEED_REQUEST_TIMEOUT_SECONDS),
+                "div.blog-post",
             )
-            releases = _build_search_results(
-                shared_state,
-                release_items,
-                search_category,
-                search_string="",
-                imdb_id=None,
-                is_feed=True,
-            )
-            releases = releases[:20]
+            items = [
+                item
+                for item in _parse_feed(soup)
+                if _title_fits_category(base_category, item["title"])
+            ]
+            releases = _build_search_results(shared_state, items, search_category)
         except Exception as e:
             warn(f"Error loading feed: {e}")
-            mark_hostname_issue(
-                self.initials,
-                "feed",
-                str(e) if "e" in dir() else "Error occurred",
-            )
+            mark_hostname_issue(self.initials, "feed", str(e))
 
-        elapsed_time = time.time() - start_time
-        debug(f"Time taken: {elapsed_time:.2f}s")
+        debug(f"Time taken: {time.time() - start_time:.2f}s")
 
         if releases:
             clear_hostname_issue(self.initials)
@@ -101,298 +98,252 @@ class Source(AbstractSearchSource):
         episode: int = None,
     ) -> list[SearchRelease]:
         releases = []
-        match_search_string = search_string
 
         if not search_string:
             return releases
 
         imdb_id = is_imdb_id(search_string)
-        if imdb_id:
-            localized_title = get_localized_title(
-                shared_state, imdb_id, "en", search_category
-            )
-            if not localized_title:
-                info(f"Could not extract title from IMDb-ID {imdb_id}")
-                return releases
-            search_string = html.unescape(localized_title)
-            match_search_string = search_string
-            if get_base_search_category_id(search_category) == SEARCH_CAT_MOVIES and (
-                year := get_year(imdb_id)
-            ):
-                search_string += f" {year}"
 
         try:
-            release_items = []
-            search_session, productions = _load_search_productions(
-                shared_state,
-                search_string,
-                SEARCH_REQUEST_TIMEOUT_SECONDS,
-            )
-            if productions:
-                release_items = _fetch_releases_by_production_ids(
-                    shared_state,
-                    [production.get("id") for production in productions],
-                    SEARCH_REQUEST_TIMEOUT_SECONDS,
-                    session=search_session,
-                )
+            if imdb_id:
+                items = _search_by_imdb(shared_state, imdb_id)
+            else:
+                items = _search_by_phrase(shared_state, search_string, season, episode)
 
+            items = [
+                item
+                for item in items
+                if release_matches_search_category(search_category, item["title"])
+                and is_valid_release(
+                    item["title"], search_category, search_string, season, episode
+                )
+            ]
             releases = _build_search_results(
-                shared_state,
-                release_items,
-                search_category,
-                search_string=match_search_string,
-                imdb_id=imdb_id,
-                season=season,
-                episode=episode,
+                shared_state, items, search_category, imdb_id=imdb_id
             )
         except Exception as e:
             warn(f"Error loading search: {e}")
-            mark_hostname_issue(
-                self.initials,
-                "search",
-                str(e) if "e" in dir() else "Error occurred",
-            )
+            mark_hostname_issue(self.initials, "search", str(e))
 
-        elapsed_time = time.time() - start_time
-        debug(f"Time taken: {elapsed_time:.2f}s")
+        debug(f"Time taken: {time.time() - start_time:.2f}s")
 
         if releases:
             clear_hostname_issue(self.initials)
         return releases
 
 
-def _load_feed_release_items(
-    shared_state, search_category, max_production_pages, timeout
-):
-    session = _bootstrap_session(shared_state, timeout)
-    production_ids = []
-    base_search_category = get_base_search_category_id(search_category)
+def _require_layout(soup, selector):
+    """Fail loudly on a mirror that does not serve the expected page layout.
 
-    for page in range(1, max_production_pages + 1):
-        payload = _fetch_productions_page(
-            shared_state,
-            page,
-            timeout,
-            session=session,
+    Without this a mirror with another markup would just look like an empty
+    site instead of showing up as a hostname issue.
+    """
+    if not soup.select_one(selector):
+        raise ValueError(f"Unexpected page layout (missing {selector})")
+    return soup
+
+
+def _title_fits_category(base_category, title):
+    if base_category == SEARCH_CAT_MOVIES:
+        return bool(MOVIE_REGEX.match(title))
+    return bool(SEASON_EP_REGEX.search(title))
+
+
+def _clean_title(raw_title):
+    title = html.unescape(str(raw_title or ""))
+    title = _LEADING_TAG_REGEX.sub("", " ".join(title.split()))
+    title = _TRAILING_SIZE_REGEX.sub("", title)
+    return title.strip().replace("(", "").replace(")", "").replace(" ", ".")
+
+
+def _size_mb(text):
+    match = _SIZE_REGEX.search(str(text or ""))
+    if not match:
+        return 0
+    return convert_to_mb({"size": match.group(1), "sizeunit": match.group(2)})
+
+
+def _rfc_date(moment):
+    return moment.astimezone(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
+
+
+def _relative_date(text):
+    """Turn a listing's "7 hours" / "2 years" age into an approximate date."""
+    match = _RELATIVE_TIME_REGEX.search(str(text or "").replace("\xa0", " "))
+    now = datetime.now(timezone.utc)
+    if not match:
+        return _rfc_date(now)
+
+    unit = match.group(2).lower()
+    amount = int(match.group(1))
+    if unit in _RELATIVE_UNIT_DAYS:
+        delta = timedelta(days=amount * _RELATIVE_UNIT_DAYS[unit])
+    else:
+        delta = timedelta(**{f"{unit}s": amount})
+    return _rfc_date(now - delta)
+
+
+def _feed_date(post):
+    """Feed posts carry a calendar date ("11/02" + year) without a time."""
+    month_day = post.select_one("div.bloglist-date p.month-day")
+    year = post.select_one("div.bloglist-date p.year")
+    try:
+        month, day = (int(part) for part in month_day.get_text(strip=True).split("/"))
+        return _rfc_date(
+            datetime(int(year.get_text(strip=True)), month, day, tzinfo=timezone.utc)
         )
-        productions = payload.get("productions") or []
-        if not productions:
+    except Exception:
+        return _rfc_date(datetime.now(timezone.utc))
+
+
+def _release_href(anchor):
+    href = anchor.get("href", "") if anchor else ""
+    return href if href.startswith("/release/") else None
+
+
+def _parse_feed(soup):
+    items = []
+    for post in soup.select("div.blog-post"):
+        anchor = post.select_one("h3 a")
+        href = _release_href(anchor)
+        if not href:
+            continue
+
+        size_match = re.search(r"FILE SIZE:\s*([\d.]+\s*[KMGT]B)", post.get_text(" "))
+        imdb_link = post.find("a", href=IMDB_REGEX)
+        items.append(
+            {
+                "title": _clean_title(anchor.get_text()),
+                "href": href,
+                "size_mb": _size_mb(size_match.group(1)) if size_match else 0,
+                "date": _feed_date(post),
+                "imdb_id": IMDB_REGEX.search(imdb_link["href"]).group(1)
+                if imdb_link
+                else None,
+            }
+        )
+    return items
+
+
+def _parse_production_page(soup):
+    """A title page lists all of its releases (movies, season packs, episodes)."""
+    items = []
+    for entry in soup.select("ul.allrls li"):
+        anchor = entry.find("a", href=True)
+        href = _release_href(anchor)
+        if not href:
+            continue
+
+        items.append(
+            {
+                "title": _clean_title(anchor.get_text()),
+                "href": href,
+                "size_mb": _size_mb(anchor.get_text()),
+                "date": _relative_date(
+                    entry.select_one(".DIS_time").get_text()
+                    if entry.select_one(".DIS_time")
+                    else ""
+                ),
+                "imdb_id": None,
+            }
+        )
+    return items
+
+
+def _result_anchors(soup):
+    """Titles and releases of a search result page share one list markup."""
+    return soup.select("div.list_items li a.title")
+
+
+def _parse_release_results(soup):
+    items = []
+    for anchor in _result_anchors(soup):
+        href = _release_href(anchor)
+        if not href:
+            continue
+
+        raw_title = anchor.get_text()
+        items.append(
+            {
+                "title": _clean_title(raw_title),
+                "href": href,
+                "size_mb": _size_mb(raw_title),
+                # result lists carry no date; the release is at least current
+                "date": _rfc_date(datetime.now(timezone.utc)),
+                "imdb_id": None,
+            }
+        )
+    return items
+
+
+def _search_by_imdb(shared_state, imdb_id):
+    soup = _require_layout(
+        _get_page(shared_state, f"/search/{imdb_id}", SEARCH_REQUEST_TIMEOUT_SECONDS),
+        "div.lists-list",
+    )
+
+    for anchor in _result_anchors(soup):
+        href = anchor.get("href", "")
+        if href and not href.startswith("/release/"):
+            # the title page has every release of the production, not just the
+            # handful the search page previews
+            title_soup = _require_layout(
+                _get_page(shared_state, href, SEARCH_REQUEST_TIMEOUT_SECONDS),
+                "div.blog-details",
+            )
+            return _parse_production_page(title_soup)
+
+    return _parse_release_results(soup)
+
+
+def _build_phrase_query(search_string, season, episode):
+    query = str(search_string).strip()
+    if season is not None:
+        query += f" S{int(season):02d}"
+        if episode is not None:
+            query += f"E{int(episode):02d}"
+    return query
+
+
+def _search_by_phrase(shared_state, search_string, season, episode):
+    query = quote_plus(_build_phrase_query(search_string, season, episode))
+    items = []
+
+    for page in range(1, SEARCH_RESULT_PAGES + 1):
+        path = f"/search/{query}/releases/query"
+        if page > 1:
+            path += f"/b/{page}"
+        page_items = _parse_release_results(
+            _require_layout(
+                _get_page(shared_state, path, SEARCH_REQUEST_TIMEOUT_SECONDS),
+                "div.lists-list",
+            )
+        )
+        items.extend(page_items)
+        if len(page_items) < SEARCH_PAGE_SIZE:
             break
 
-        for production in productions:
-            if not _matches_production_category(production, base_search_category):
-                continue
-            production_id = production.get("id")
-            if production_id:
-                production_ids.append(production_id)
-
-    if not production_ids:
-        return []
-
-    return _fetch_releases_by_production_ids(
-        shared_state,
-        production_ids,
-        timeout,
-        session=session,
-    )
+    return items
 
 
-def _build_search_variants(search_string):
-    normalized = " ".join(str(search_string or "").split())
-    if not normalized:
-        return []
-
-    normalized = re.sub(r"[^\w\s]+", " ", normalized)
-    normalized = " ".join(normalized.split())
-    words = normalized.split()
-    variants = []
-
-    def append_word_variants(parts):
-        if not parts:
-            return
-
-        variants.append(" ".join(parts))
-
-        if len(parts) > 3:
-            variants.append(" ".join(parts[:2]))
-            variants.append(" ".join(parts[-3:]))
-        elif len(parts) == 3:
-            variants.append(parts[0])
-            variants.append(" ".join(parts[-2:]))
-        elif len(parts) == 2:
-            variants.append(parts[0])
-            variants.append(parts[1])
-
-    append_word_variants(words)
-
-    if words and words[-1].isdigit() and len(words[-1]) == 4:
-        append_word_variants(words[:-1])
-
-    seen = set()
-    ordered = []
-    for variant in variants:
-        cleaned = " ".join(variant.split()).strip()
-        if not cleaned or cleaned in seen:
-            continue
-        seen.add(cleaned)
-        ordered.append(cleaned)
-
-    return ordered
-
-
-def _load_search_productions(shared_state, search_string, timeout):
-    session = _bootstrap_session(shared_state, timeout)
-    productions_by_id = {}
-
-    for variant in _build_search_variants(search_string):
-        try:
-            productions = _search_productions(
-                shared_state,
-                variant,
-                timeout,
-                session=session,
-            )
-        except Exception as e:
-            trace(f'RM production search failed for variant "{variant}": {e}')
-            continue
-        for production in productions:
-            production_id = production.get("id")
-            if production_id and production_id not in productions_by_id:
-                productions_by_id[production_id] = production
-
-    return session, list(productions_by_id.values())
-
-
-def _matches_production_category(production, base_search_category):
-    medium_slug = (
-        str((production.get("medium") or {}).get("slug") or "").strip().lower()
-    )
-    if not medium_slug:
-        return False
-
-    if base_search_category == SEARCH_CAT_MOVIES:
-        return medium_slug == "movie"
-
-    if base_search_category == SEARCH_CAT_SHOWS:
-        return medium_slug != "movie"
-
-    return False
-
-
-def _matches_release_category(search_category, release):
-    base_search_category = get_base_search_category_id(search_category)
-    is_movie_release = _is_movie_release(release)
-
-    if base_search_category == SEARCH_CAT_MOVIES:
-        return is_movie_release
-
-    if base_search_category == SEARCH_CAT_SHOWS:
-        return not is_movie_release
-
-    return False
-
-
-def _matches_requested_release(
-    release,
-    title,
-    search_category,
-    search_string,
-    season=None,
-    episode=None,
-):
-    base_search_category = get_base_search_category_id(search_category)
-    if base_search_category != SEARCH_CAT_SHOWS:
-        return is_valid_release(title, search_category, search_string, season, episode)
-
-    release_season = normalize_optional_int(release.get("season"))
-    release_episode = normalize_optional_int(release.get("episode"))
-    requested_season = normalize_optional_int(season)
-    requested_episode = normalize_optional_int(episode)
-    if release_season is None and release_episode is None:
-        return is_valid_release(title, search_category, search_string, season, episode)
-
-    if not search_string_in_sanitized_title(search_string, title):
-        return False
-
-    if requested_season is not None:
-        if release_season is None:
-            return is_valid_release(
-                title, search_category, search_string, season, episode
-            )
-        if release_season != requested_season:
-            return False
-
-    if requested_episode is not None:
-        if release_episode is None:
-            return is_valid_release(
-                title, search_category, search_string, season, episode
-            )
-        if release_episode != requested_episode:
-            return False
-
-    return True
-
-
-def _normalize_display_title(title):
-    normalized = html.unescape(str(title or "").strip())
-    normalized = _LEADING_TAG_REGEX.sub("", normalized)
-    normalized = " ".join(normalized.split())
-    return normalized.replace(" ", ".")
-
-
-def _build_search_results(
-    shared_state,
-    release_items,
-    search_category,
-    search_string,
-    imdb_id,
-    season=None,
-    episode=None,
-    is_feed=False,
-):
+def _build_search_results(shared_state, items, search_category, imdb_id=None):
     base_url = _get_base_url(shared_state)
     releases = []
     seen_sources = set()
 
-    for release in release_items:
+    for item in items:
         try:
-            if not _matches_release_category(search_category, release):
+            title = item["title"]
+            if not title:
                 continue
 
-            raw_title = html.unescape(str(release.get("title") or "").strip())
-            if not raw_title:
-                continue
-
-            if not release_matches_search_category(search_category, raw_title):
-                continue
-
-            if not is_feed and not _matches_requested_release(
-                release,
-                raw_title,
-                search_category,
-                search_string,
-                season,
-                episode,
-            ):
-                continue
-
-            title = _normalize_display_title(raw_title)
-
-            slug = str(release.get("slug") or "").strip()
-            if not slug:
-                continue
-
-            source = _build_release_page_url(base_url, slug)
+            source = _build_release_page_url(base_url, item["href"].rsplit("/", 1)[-1])
             if source in seen_sources:
                 continue
             seen_sources.add(source)
 
-            size_bytes = int(release.get("size") or 0)
-            size_mb = size_bytes / (1024 * 1024) if size_bytes else 0
-            published = _convert_iso_to_rss_date(
-                release.get("updated_at") or release.get("created_at")
-            )
-            release_imdb_id = imdb_id
+            size_mb = item["size_mb"]
+            release_imdb_id = item["imdb_id"] or imdb_id
 
             releases.append(
                 {
@@ -409,8 +360,8 @@ def _build_search_results(
                             release_imdb_id,
                             Source.initials,
                         ),
-                        "size": size_bytes,
-                        "date": published,
+                        "size": size_mb * 1024 * 1024,
+                        "date": item["date"],
                         "source": source,
                     },
                     "type": "protected",

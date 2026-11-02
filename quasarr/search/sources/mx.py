@@ -10,7 +10,8 @@
 #   2. search the title endpoint -> candidate entries (carry imdb_id + id)
 #   3. match the entry whose imdb_id equals the requested IMDb ID
 #   4. the download endpoint -> per-quality hoster links for that entry
-#   5. the decode endpoint -> the real hoster URL
+#   5. emit direct hoster URLs when present, or defer the Turnstile-gated
+#      decode endpoint to the download twin
 #
 # The API returns the matching tmdb_id in its own search response and the
 # download endpoint keys on the internal id alone, so no external
@@ -21,6 +22,7 @@ import re
 import time
 from datetime import datetime, timezone
 from threading import Lock
+from urllib.parse import urlencode
 
 import requests
 
@@ -150,31 +152,29 @@ class Source(AbstractSearchSource):
             return data.get("all", [])
         return []
 
-    def _decode_link(self, api_base, host, link_id, media_id, shared_state, timeout):
-        # Some entries already expose a direct URL as their id.
-        str_id = str(link_id)
-        if str_id.startswith("http://") or str_id.startswith("https://"):
-            return str_id
+    @staticmethod
+    def _link_url(api_base, link, media_id):
+        # Entries from live-indexed sources carry a direct hoster URL in
+        # "lien"/"url" (or as their "id"). DarkiWorld entries carry only a
+        # numeric id whose decode endpoint is gated by Turnstile, so defer that
+        # resolution to the download twin until a release is actually grabbed.
+        for candidate in (link.get("lien"), link.get("url"), link.get("id")):
+            text = str(candidate or "").strip()
+            if text.startswith("http://") or text.startswith("https://"):
+                return text
 
-        data = self._get(
-            api_base,
-            host,
-            f"/darkiworld/decode/{link_id}",
-            {"title_id": media_id},
-            shared_state,
-            timeout,
-        )
-        if not data:
+        link_id = link.get("id")
+        if link_id is None or str(link_id).strip() == "":
             return None
-        embed_url = data.get("embed_url")
-        if isinstance(embed_url, dict):
-            # Object form (e.g. the Send hoster): real URL is under "lien".
-            return (
-                embed_url.get("lien") or embed_url.get("url") or embed_url.get("link")
-            )
-        if isinstance(embed_url, str) and embed_url:
-            return embed_url
-        return data.get("url") or data.get("link")
+
+        params = {}
+        if media_id is not None:
+            params["title_id"] = media_id
+        host_name = link.get("host_name") or link.get("provider")
+        if host_name:
+            params["host"] = host_name
+        query = f"?{urlencode(params)}" if params else ""
+        return f"{api_base}/darkiworld/decode/{link_id}{query}"
 
     # ------------------------------------------------------------------ #
     #  Release assembly                                                   #
@@ -187,7 +187,7 @@ class Source(AbstractSearchSource):
         result,
         links,
         shared_state,
-        timeout,
+        timeout=None,
         season=None,
         episode=None,
     ):
@@ -199,11 +199,9 @@ class Source(AbstractSearchSource):
         imdb_id = result.get("imdb_id")
 
         for link in links:
-            real_url = self._decode_link(
-                api_base, host, link.get("id"), media_id, shared_state, timeout
-            )
+            real_url = self._link_url(api_base, link, media_id)
             if not real_url:
-                debug(f"[mx] decode failed for link {link.get('id')}")
+                debug(f"[mx] missing link target for {link.get('id')}")
                 continue
 
             quality = _normalize_quality(link.get("quality", ""))

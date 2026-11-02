@@ -145,7 +145,7 @@ docker run -d \
   -v /path/to/magazarr-config:/config:rw \
   -v /path/to/magazine-library:/library:rw \
   -v /path/to/jdownloader-output:/output:rw \
-  -e 'TZ'='Europe/Berlin' \
+  -e TZ=Europe/Berlin \
   ghcr.io/rix1337/magazarr:latest
 ```
 
@@ -175,16 +175,14 @@ docker run -d \
   --name="Quasarr" \
   -p port:8080 \
   -v /path/to/config/:/config:rw \
-  -e 'INTERNAL_ADDRESS'='http://192.168.0.1:8080' \
-  -e 'EXTERNAL_ADDRESS'='https://foo.bar/' \
-  -e 'USER'='admin' \
-  -e 'PASS'='change-me' \
-  -e 'AUTH'='form' \
-  -e 'TZ'='Europe/Berlin' \
+  -e INTERNAL_ADDRESS=http://192.168.0.1:8080 \
+  -e EXTERNAL_ADDRESS=https://foo.bar/ \
+  -e USER=admin \
+  -e PASS=change-me \
+  -e AUTH=form \
+  -e TZ=Europe/Berlin \
   ghcr.io/rix1337/quasarr:latest
   ```
-
-> 🪟 **Windows users:** the single quotes above are for Linux/macOS shells. In Windows `cmd` and PowerShell the quotes are **not** stripped, so they end up as part of the variable name (`'INTERNAL_ADDRESS'` instead of `INTERNAL_ADDRESS`) and Quasarr stops with `You must set the INTERNAL_ADDRESS variable...`. Drop the single quotes and put everything on one line, e.g. `-e INTERNAL_ADDRESS=http://192.168.0.1:8080`.
 
 | Parameter          | Description                                                                                                |
 |--------------------|------------------------------------------------------------------------------------------------------------|
@@ -192,7 +190,7 @@ docker run -d \
 | `EXTERNAL_ADDRESS` | Optional. External URL (e.g. reverse proxy). Always protect external access with authentication.           |
 | `USER` / `PASS`    | Optional, but recommended! Username / Password to protect the web UI.                                      |
 | `AUTH`             | Authentication mode. Supported values: `form` or `basic`.                                                  |
-| `TZ`               | Optional. Timezone. Incorrect values may cause HTTPS/SSL issues.                                           |
+| `TZ`               | Timezone. Incorrect values may cause HTTPS/SSL issues.                                           |
 
 # Manual setup
 
@@ -317,13 +315,13 @@ The image is public, but requires a valid [active monthly GitHub sponsor](https:
 
 ```bash
 docker run -d \
-  --name='SponsorsHelper' \
-  -v '/path/to/sponsorshelper-config:/config' \
-  -e 'QUASARR_URL'='http://192.168.0.1:8080' \
-  -e 'QUASARR_API_KEY'='your_quasarr_api_key_here' \
-  -e 'FLARESOLVERR_URL'='http://192.168.0.1:8191/v1' \
-  -e 'APIKEY_2CAPTCHA'='your_2captcha_api_key_here' \
-  -e 'TZ'='Europe/Berlin' \
+  --name=SponsorsHelper \
+  -v /path/to/sponsorshelper-config:/config \
+  -e QUASARR_URL=http://192.168.0.1:8080 \
+  -e QUASARR_API_KEY=your_quasarr_api_key_here \
+  -e FLARESOLVERR_URL=http://192.168.0.1:8191/v1 \
+  -e APIKEY_2CAPTCHA=your_2captcha_api_key_here \
+  -e TZ=Europe/Berlin \
   ghcr.io/rix1337/sponsors-helper:latest
 ```
 
@@ -333,6 +331,5 @@ docker run -d \
 | `QUASARR_API_KEY`      | Your Quasarr API key (found in Quasarr web UI under "API Settings")                           |
 | `FLARESOLVERR_URL`     | Local URL of [flaresolverr-next](https://github.com/rix1337/flaresolverr-next)                |
 | `APIKEY_2CAPTCHA`      | [2Captcha](https://2captcha.com/?from=27506687) account API key                               |
-| `DEATHBYCAPTCHA_TOKEN` | Optional. DeathByCaptcha API token, usable instead of or alongside 2Captcha                   |
-| `TZ`                   | Optional. Timezone for SponsorsHelper (e.g., `Europe/Berlin`)                                 |
+| `TZ`                   | Timezone for SponsorsHelper (e.g., `Europe/Berlin`)                                 |
 

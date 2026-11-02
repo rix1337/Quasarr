@@ -16,6 +16,7 @@ from quasarr.constants import (
 )
 from quasarr.providers.jd_cache import JDPackageCache
 from quasarr.providers.log import debug, info, trace
+from quasarr.providers.statistics import StatsHelper
 from quasarr.storage.categories import get_download_category_from_package_id
 
 # =============================================================================
@@ -724,6 +725,13 @@ def get_packages(shared_state, _cache=None, auto_start=True):
             if error:
                 status = "Failed"
                 fail_message = str(error)
+                # any error state is a failed download; counted once per package
+                # (packages in the failed DB were already counted by fail())
+                if effective_id and package.get("type") in (
+                    "linkgrabber",
+                    "downloader",
+                ):
+                    StatsHelper(shared_state).record_failed_package(effective_id)
             else:
                 status = "Completed"
 
