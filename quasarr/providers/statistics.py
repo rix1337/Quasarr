@@ -2,59 +2,137 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
-from datetime import datetime
-from json import loads
+from datetime import date, timedelta
 from typing import Any, Dict
+
+from quasarr.providers.hostname_issues import record_configured_hostnames
+
+HISTORY_DAYS = 30
+# counter name -> chart series; each increment bumps today's row
+HISTORY_METRICS = {
+    "packages_downloaded": "packages",
+    "failed_downloads": "failed",
+    "captcha_decryptions_automatic": "auto",
+    "captcha_decryptions_manual": "manual",
+    "failed_decryptions_automatic": "decrypt_failed",
+    "failed_decryptions_manual": "decrypt_failed",
+}
+
+
+ROW_KINDS = ("day", "issue", "hosts", "pruned")
+ROW_PREFIXES = tuple(f"{kind}:" for kind in ROW_KINDS)
+
+# lifetime counters from before the per-day history; dropped by the first prune
+LEGACY_KEYS = (
+    "packages_downloaded",
+    "links_processed",
+    "captcha_decryptions_automatic",
+    "captcha_decryptions_manual",
+    "failed_downloads",
+    "failed_decryptions_automatic",
+    "failed_decryptions_manual",
+)
+
+
+def prune_daily(db):
+    """On the first call of each day, drop expired rows and pre-history lifetime counters"""
+    today = date.today()
+    marker = f"pruned:{today.isoformat()}"
+    if db.retrieve(marker) is not None:
+        return
+
+    for key in LEGACY_KEYS:
+        db.delete(key)
+
+    cutoff = (today - timedelta(days=HISTORY_DAYS - 1)).isoformat()
+    for key, _ in db.retrieve_all_titles() or []:
+        parts = key.split(":")
+        if len(parts) >= 2 and parts[0] in ROW_KINDS and parts[1] < cutoff:
+            db.delete(key)
+    db.update_store(marker, "1")
 
 
 class StatsHelper:
     """
-    Multiprocessing-safe stats helper using separate rows.
+    Multiprocessing-safe stats helper using separate per-day rows.
     Uses shared_state for database access across processes.
     """
 
     def __init__(self, shared_state):
         self.shared_state = shared_state
-        self._ensure_stats_exist()
 
     def _get_db(self):
         """Get database interface through shared_state"""
         return self.shared_state.values["database"]("statistics")
 
-    def _ensure_stats_exist(self):
-        """Initialize stats if they don't exist"""
-        default_stats = {
-            "packages_downloaded": 0,
-            "links_processed": 0,
-            "captcha_decryptions_automatic": 0,
-            "captcha_decryptions_manual": 0,
-            "failed_downloads": 0,
-            "failed_decryptions_automatic": 0,
-            "failed_decryptions_manual": 0,
+    def _increment_stat(self, key: str, count: int = 1):
+        """Process-safe increment of today's row for a tracked counter"""
+        metric = HISTORY_METRICS.get(key)
+        if not metric:
+            return
+        db = self._get_db()
+        prune_daily(db)
+        day_key = f"day:{date.today().isoformat()}:{metric}"
+        try:
+            current = int(db.retrieve(day_key) or 0)
+        except ValueError:
+            current = 0
+        db.update_store(day_key, str(current + count))
+
+    def prune(self):
+        prune_daily(self._get_db())
+
+    def get_history(self) -> Dict[str, Any]:
+        """Per-day counts for the last HISTORY_DAYS days"""
+        today = date.today()
+        days = [
+            (today - timedelta(days=offset)).isoformat()
+            for offset in range(HISTORY_DAYS - 1, -1, -1)
+        ]
+
+        self.prune()
+        try:
+            record_configured_hostnames()
+        except Exception:
+            pass
+
+        db = self._get_db()
+        counts = {}
+        for key, value in db.retrieve_all_titles() or []:
+            if not key.startswith(ROW_PREFIXES):
+                continue
+            try:
+                kind, day, name = key.split(":")
+                counts[(kind, day, name)] = int(value)
+            except ValueError:
+                continue
+
+        # hostname count only changes on config edits: carry the last snapshot forward
+        known = [counts.get(("hosts", day, "n")) for day in days]
+        last = next((v for v in known if v is not None), 0)
+        hosts = []
+        for value in known:
+            last = last if value is None else value
+            hosts.append(last)
+
+        issue_hosts = [
+            sorted(k[2].upper() for k in counts if k[0] == "issue" and k[1] == day)
+            for day in days
+        ]
+
+        return {
+            "days": days,
+            "series": {
+                metric: [counts.get(("day", day, metric), 0) for day in days]
+                for metric in set(HISTORY_METRICS.values())
+            },
+            "hosts": hosts,
+            "issues": [len(names) for names in issue_hosts],
+            "issue_hosts": issue_hosts,
         }
 
-        db = self._get_db()
-        for key, default_value in default_stats.items():
-            if db.retrieve(key) is None:
-                db.store(key, str(default_value))
-
-    def _get_stat(self, key: str, default: int = 0) -> int:
-        """Get a single stat value"""
-        try:
-            db = self._get_db()
-            value = db.retrieve(key)
-            return int(value) if value is not None else default
-        except (ValueError, TypeError):
-            return default
-
-    def _increment_stat(self, key: str, count: int = 1):
-        """Process-safe increment of a single stat"""
-        db = self._get_db()
-        current = self._get_stat(key, 0)
-        db.update_store(key, str(current + count))
-
     def increment_package_with_links(self, links):
-        """Increment package downloaded and links processed for one package, or failed download if no links
+        """Increment package downloaded for one package, or failed download if no links
 
         Args:
             links: Can be:
@@ -102,197 +180,3 @@ class StatsHelper:
     def increment_failed_decryptions_manual(self):
         """Increment failed manual decryptions counter"""
         self._increment_stat("failed_decryptions_manual", 1)
-
-    def get_imdb_cache_stats(self) -> Dict[str, int]:
-        """
-        Get statistics about the IMDb metadata cache.
-        Returns counts of cached items with various attributes.
-        """
-        try:
-            db = self.shared_state.values["database"]("imdb_metadata")
-            all_entries = db.retrieve_all_titles()
-
-            total_cached = 0
-            with_title = 0
-            with_poster = 0
-            with_localized = 0
-
-            for _, data_str in all_entries:
-                try:
-                    data = loads(data_str)
-                    total_cached += 1
-
-                    if data.get("title"):
-                        with_title += 1
-
-                    if data.get("poster_link"):
-                        with_poster += 1
-
-                    if (
-                        data.get("localized")
-                        and isinstance(data["localized"], dict)
-                        and len(data["localized"]) > 0
-                    ):
-                        with_localized += 1
-
-                except (ValueError, TypeError):
-                    continue
-
-            return {
-                "imdb_total_cached": total_cached,
-                "imdb_with_title": with_title,
-                "imdb_with_poster": with_poster,
-                "imdb_with_localized": with_localized,
-            }
-        except Exception:
-            return {
-                "imdb_total_cached": 0,
-                "imdb_with_title": 0,
-                "imdb_with_poster": 0,
-                "imdb_with_localized": 0,
-            }
-
-    def get_xem_cache_stats(self) -> Dict[str, int]:
-        """
-        Get statistics about TheXEM metadata caches.
-
-        - xem_all_names contains one global allNames cache row (key: "allnames")
-        - xem_season_names contains per-show season name cache rows (key: tvdb_id)
-        """
-        try:
-            now = datetime.now().timestamp()
-            all_names_db = self.shared_state.values["database"]("xem_all_names")
-            season_names_db = self.shared_state.values["database"]("xem_season_names")
-
-            all_names_cached = 0
-            all_names_valid = 0
-            all_names_raw = all_names_db.retrieve("allnames")
-            if all_names_raw:
-                all_names_cached = 1
-                try:
-                    all_names_data = loads(all_names_raw)
-                    if all_names_data.get("ttl") and all_names_data["ttl"] > now:
-                        all_names_valid = 1
-                except (ValueError, TypeError):
-                    pass
-
-            season_total_cached = 0
-            season_valid_cached = 0
-            season_entries = season_names_db.retrieve_all_titles() or []
-
-            for _, data_str in season_entries:
-                try:
-                    data = loads(data_str)
-                    season_total_cached += 1
-                    if data.get("ttl") and data["ttl"] > now:
-                        season_valid_cached += 1
-                except (ValueError, TypeError):
-                    continue
-
-            return {
-                "xem_all_names_cached": all_names_cached,
-                "xem_all_names_valid": all_names_valid,
-                "xem_season_total_cached": season_total_cached,
-                "xem_season_valid_cached": season_valid_cached,
-                "xem_total_cached": all_names_cached + season_total_cached,
-                "xem_total_valid_cached": all_names_valid + season_valid_cached,
-            }
-        except Exception:
-            return {
-                "xem_all_names_cached": 0,
-                "xem_all_names_valid": 0,
-                "xem_season_total_cached": 0,
-                "xem_season_valid_cached": 0,
-                "xem_total_cached": 0,
-                "xem_total_valid_cached": 0,
-            }
-
-    def get_stats(self) -> Dict[str, Any]:
-        """Get all current statistics"""
-        stats = {
-            "packages_downloaded": self._get_stat("packages_downloaded", 0),
-            "links_processed": self._get_stat("links_processed", 0),
-            "captcha_decryptions_automatic": self._get_stat(
-                "captcha_decryptions_automatic", 0
-            ),
-            "captcha_decryptions_manual": self._get_stat(
-                "captcha_decryptions_manual", 0
-            ),
-            "failed_downloads": self._get_stat("failed_downloads", 0),
-            "failed_decryptions_automatic": self._get_stat(
-                "failed_decryptions_automatic", 0
-            ),
-            "failed_decryptions_manual": self._get_stat("failed_decryptions_manual", 0),
-        }
-
-        # Calculate totals and rates
-        total_captcha_decryptions = (
-            stats["captcha_decryptions_automatic"] + stats["captcha_decryptions_manual"]
-        )
-        total_failed_decryptions = (
-            stats["failed_decryptions_automatic"] + stats["failed_decryptions_manual"]
-        )
-        total_download_attempts = (
-            stats["packages_downloaded"] + stats["failed_downloads"]
-        )
-        total_decryption_attempts = total_captcha_decryptions + total_failed_decryptions
-        total_automatic_attempts = (
-            stats["captcha_decryptions_automatic"]
-            + stats["failed_decryptions_automatic"]
-        )
-        total_manual_attempts = (
-            stats["captcha_decryptions_manual"] + stats["failed_decryptions_manual"]
-        )
-
-        # Add calculated fields
-        stats.update(
-            {
-                "total_captcha_decryptions": total_captcha_decryptions,
-                "total_failed_decryptions": total_failed_decryptions,
-                "total_download_attempts": total_download_attempts,
-                "total_decryption_attempts": total_decryption_attempts,
-                "total_automatic_attempts": total_automatic_attempts,
-                "total_manual_attempts": total_manual_attempts,
-                "download_success_rate": (
-                    (stats["packages_downloaded"] / total_download_attempts * 100)
-                    if total_download_attempts > 0
-                    else 0
-                ),
-                "decryption_success_rate": (
-                    (total_captcha_decryptions / total_decryption_attempts * 100)
-                    if total_decryption_attempts > 0
-                    else 0
-                ),
-                "automatic_decryption_success_rate": (
-                    (
-                        stats["captcha_decryptions_automatic"]
-                        / total_automatic_attempts
-                        * 100
-                    )
-                    if total_automatic_attempts > 0
-                    else 0
-                ),
-                "manual_decryption_success_rate": (
-                    (stats["captcha_decryptions_manual"] / total_manual_attempts * 100)
-                    if total_manual_attempts > 0
-                    else 0
-                ),
-                "average_links_per_package": (
-                    stats["links_processed"] / stats["packages_downloaded"]
-                    if stats["packages_downloaded"] > 0
-                    else 0
-                ),
-            }
-        )
-
-        # Add metadata cache stats
-        stats.update(self.get_imdb_cache_stats())
-        stats.update(self.get_xem_cache_stats())
-        stats["metadata_total_cached"] = (
-            stats["imdb_total_cached"] + stats["xem_total_cached"]
-        )
-        stats["metadata_total_valid_cached"] = (
-            stats["imdb_total_cached"] + stats["xem_total_valid_cached"]
-        )
-
-        return stats
