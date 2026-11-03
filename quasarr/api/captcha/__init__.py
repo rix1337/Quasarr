@@ -991,16 +991,24 @@ def setup_captcha_routes(app):
                 protected_data = json.loads(
                     shared_state.get_db("protected").retrieve(package_id)
                 )
+                protected_links = protected_data.get("links", [])
+                has_hide_links = any(
+                    "hide."
+                    in (link[0] if isinstance(link, (list, tuple)) else str(link))
+                    for link in protected_links
+                )
                 try:
                     expected_selection = confirm_hide_episode_selection(
-                        protected_data.get("links", []), get_hide_episode_confirmation()
+                        protected_links, get_hide_episode_confirmation()
                     )
                 except HideEpisodeError as e:
                     return render_manual_failure(str(e))
-                if expected_selection is None:
+                if has_hide_links and expected_selection is None:
                     return render_manual_failure(failure_reason)
                 StatsHelper(shared_state).increment_failed_decryptions_manual()
-                return mark_manual_package_failed(package_id, "Unknown", failure_reason)
+                return mark_manual_package_failed(
+                    package_id, protected_data.get("title", "Unknown"), failure_reason
+                )
             compressed_links = request.query.get("links", "")
 
             if not package_id or not compressed_links:

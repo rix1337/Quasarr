@@ -366,6 +366,34 @@ class CaptchaUserscriptRoutingTests(unittest.TestCase):
         fail.assert_not_called()
         stats.assert_not_called()
 
+    def test_quick_transfer_offline_filecrypt_marks_package_failed(self):
+        package = build_package(
+            "pkg-filecrypt",
+            "https://filecrypt.cc/Container/synthetic.html",
+            "filecrypt",
+        )
+        app = self._serve([package])
+        reason = "Package is offline (0 files online)"
+
+        with (
+            patch("quasarr.api.captcha.fail") as fail,
+            patch("quasarr.api.captcha.update_release_notification"),
+            patch("quasarr.api.captcha.StatsHelper") as stats,
+        ):
+            status, _, body = self._request(
+                app,
+                "/captcha/quick-transfer",
+                "pkg_id=pkg-filecrypt&error=Package+is+offline+%280+files+online%29",
+            )
+
+        self.assertEqual("200 OK", status)
+        self.assertIn("Package marked as failed.", body)
+        self.assertIn(reason, body)
+        fail.assert_called_once()
+        self.assertEqual("pkg-filecrypt", fail.call_args.args[1])
+        self.assertEqual(reason, fail.call_args.kwargs["reason"])
+        stats.return_value.increment_failed_decryptions_manual.assert_called_once()
+
     def test_quick_transfer_error_does_not_fail_on_mismatched_selection(self):
         package = build_package(
             "pkg-hide",

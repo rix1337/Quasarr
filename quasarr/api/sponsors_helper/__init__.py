@@ -235,6 +235,10 @@ def setup_sponsors_helper_routes(app):
         ):
             return None
 
+        # Offline packages cannot be resolved manually; let the failure persist
+        if "offline" in str(reason).lower():
+            return None
+
         # Solver exhaustion does not establish that the container is unavailable.
         # Keep its links for the browser, but stop automatic helper retries.
         protected_release["disabled"] = True
