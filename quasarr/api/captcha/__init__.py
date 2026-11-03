@@ -1003,7 +1003,8 @@ def setup_captcha_routes(app):
                     )
                 except HideEpisodeError as e:
                     return render_manual_failure(str(e))
-                if has_hide_links and expected_selection is None:
+                is_offline = "Package is offline (0 files online)" in failure_reason
+                if has_hide_links and expected_selection is None and not is_offline:
                     return render_manual_failure(failure_reason)
                 StatsHelper(shared_state).increment_failed_decryptions_manual()
                 return mark_manual_package_failed(

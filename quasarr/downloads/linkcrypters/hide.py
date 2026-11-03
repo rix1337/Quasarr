@@ -27,6 +27,30 @@ class HideEpisodeError(Exception):
     """An episode grab must never fall back to an unfiltered container."""
 
 
+class HideOfflineError(Exception):
+    """The Hide container is offline (0 files online). Terminal failure."""
+
+
+def is_hide_container_offline(data):
+    """Return True if Hide container metadata indicates the container is offline."""
+    if not isinstance(data, dict):
+        return False
+    if str(data.get("access_status", "")).lower() == "offline":
+        return True
+    links = data.get("links")
+    if (
+        isinstance(links, list)
+        and links
+        and all(
+            isinstance(link, dict)
+            and str(link.get("link_status", "")).lower() == "offline"
+            for link in links
+        )
+    ):
+        return True
+    return False
+
+
 class HideEpisodeBrowserUnavailable(HideEpisodeError):
     """The explicit selection can still be handled by the browser/helper flow."""
 
@@ -252,6 +276,10 @@ def unhide_links(shared_state, url, session):
         response.raise_for_status()
         data = response.json()
 
+        if is_hide_container_offline(data):
+            debug(f"Hide container {container_id} is offline")
+            raise HideOfflineError("Package is offline (0 files online)")
+
         if selection and (
             not isinstance(data, dict)
             or not isinstance(data.get("links"), list)
@@ -320,6 +348,8 @@ def unhide_links(shared_state, url, session):
             StatsHelper(shared_state).increment_failed_decryptions_automatic()
 
         return links
+    except HideOfflineError:
+        raise
     except HideEpisodeError:
         raise
     except requests.RequestException as exc:
@@ -428,6 +458,7 @@ def decrypt_links_if_hide(shared_state: Any, items: List[List[str]]) -> Dict[str
     decrypted_links: List[str] = []
     episode_error = None
     browser_unavailable = False
+    offline_error = None
     for url in hide_urls:
         try:
             links = unhide_links(shared_state, url, session)
@@ -435,6 +466,9 @@ def decrypt_links_if_hide(shared_state: Any, items: List[List[str]]) -> Dict[str
                 debug(f"No links decrypted for {url}")
                 continue
             decrypted_links.extend(links)
+        except HideOfflineError as e:
+            offline_error = str(e)
+            debug(f"Hide container is offline: {e}")
         except HideEpisodeError as e:
             episode_error = str(e)
             if isinstance(e, HideEpisodeBrowserUnavailable):
@@ -444,6 +478,14 @@ def decrypt_links_if_hide(shared_state: Any, items: List[List[str]]) -> Dict[str
             continue
 
     if not decrypted_links:
+        if offline_error:
+            StatsHelper(shared_state).increment_failed_decryptions_automatic()
+            return {
+                "status": "error",
+                "results": [],
+                "reason": offline_error,
+                "terminal": True,
+            }
         if episode_requested:
             terminal = not browser_unavailable
             if terminal:

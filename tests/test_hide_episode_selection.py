@@ -745,5 +745,63 @@ class HideEpisodeSelectionTests(unittest.TestCase):
         stats.increment_failed_decryptions_automatic.assert_called_once_with()
 
 
+class HideOfflineTests(unittest.TestCase):
+    def test_is_hide_container_offline_status(self):
+        self.assertTrue(hide.is_hide_container_offline({"access_status": "offline"}))
+        self.assertTrue(hide.is_hide_container_offline({"access_status": "OFFLINE"}))
+        self.assertFalse(hide.is_hide_container_offline({"access_status": "online"}))
+        self.assertFalse(hide.is_hide_container_offline({}))
+        self.assertFalse(hide.is_hide_container_offline(None))
+
+    def test_is_hide_container_offline_links_status(self):
+        self.assertTrue(
+            hide.is_hide_container_offline(
+                {"links": [{"link_status": "offline"}, {"link_status": "offline"}]}
+            )
+        )
+        self.assertFalse(
+            hide.is_hide_container_offline(
+                {"links": [{"link_status": "online"}, {"link_status": "offline"}]}
+            )
+        )
+
+    def test_unhide_links_raises_hide_offline_error(self):
+        session = Mock()
+        session.get.return_value = Response(
+            "https://api.hide.cx/containers/de41afab",
+            payload={"access_status": "offline"},
+        )
+        with self.assertRaises(hide.HideOfflineError) as ctx:
+            hide.unhide_links(
+                SimpleNamespace(values={"user_agent": "synthetic"}),
+                "https://hide.cx/container/de41afab",
+                session,
+            )
+        self.assertEqual("Package is offline (0 files online)", str(ctx.exception))
+
+    def test_decrypt_links_if_hide_offline_returns_terminal_error(self):
+        session = Mock()
+        session.head.return_value = Response(CONTAINER_URL)
+        session.get.return_value = Response(
+            "https://api.hide.cx/containers/synthetic",
+            payload={"access_status": "offline"},
+        )
+        stats = Mock()
+
+        with (
+            patch.object(hide.requests, "Session", return_value=session),
+            patch.object(hide, "StatsHelper", return_value=stats),
+        ):
+            result = hide.decrypt_links_if_hide(
+                SimpleNamespace(values={"user_agent": "synthetic"}),
+                [[CONTAINER_URL, "hide"]],
+            )
+
+        self.assertEqual("error", result["status"])
+        self.assertTrue(result["terminal"])
+        self.assertEqual("Package is offline (0 files online)", result["reason"])
+        stats.increment_failed_decryptions_automatic.assert_called_once_with()
+
+
 if __name__ == "__main__":
     unittest.main()
