@@ -68,13 +68,15 @@ class Source(AbstractSearchSource):
             return releases
 
         try:
-            soup = _require_layout(
-                _get_page(shared_state, "/", FEED_REQUEST_TIMEOUT_SECONDS),
-                "div.blog-post",
+            items = _parse_feed(
+                _get_page(shared_state, "/", FEED_REQUEST_TIMEOUT_SECONDS)
             )
+            # single odd posts are skipped; only a feed without any release is broken
+            if not items:
+                raise ValueError("Unexpected page layout (no parsable releases)")
             items = [
                 item
-                for item in _parse_feed(soup)
+                for item in items
                 if _title_fits_category(base_category, item["title"])
             ]
             releases = _build_search_results(shared_state, items, search_category)
@@ -204,24 +206,29 @@ def _release_href(anchor):
 def _parse_feed(soup):
     items = []
     for post in soup.select("div.blog-post"):
-        anchor = post.select_one("h3 a")
-        href = _release_href(anchor)
-        if not href:
-            continue
+        try:
+            anchor = post.select_one("h3 a")
+            href = _release_href(anchor)
+            if not href:
+                continue
 
-        size_match = re.search(r"FILE SIZE:\s*([\d.]+\s*[KMGT]B)", post.get_text(" "))
-        imdb_link = post.find("a", href=IMDB_REGEX)
-        items.append(
-            {
-                "title": _clean_title(anchor.get_text()),
-                "href": href,
-                "size_mb": _size_mb(size_match.group(1)) if size_match else 0,
-                "date": _feed_date(post),
-                "imdb_id": IMDB_REGEX.search(imdb_link["href"]).group(1)
-                if imdb_link
-                else None,
-            }
-        )
+            size_match = re.search(
+                r"FILE SIZE:\s*([\d.]+\s*[KMGT]B)", post.get_text(" ")
+            )
+            imdb_link = post.find("a", href=IMDB_REGEX)
+            items.append(
+                {
+                    "title": _clean_title(anchor.get_text()),
+                    "href": href,
+                    "size_mb": _size_mb(size_match.group(1)) if size_match else 0,
+                    "date": _feed_date(post),
+                    "imdb_id": IMDB_REGEX.search(imdb_link["href"]).group(1)
+                    if imdb_link
+                    else None,
+                }
+            )
+        except Exception as e:
+            debug(f"Skipping unparsable feed post: {e}")
     return items
 
 

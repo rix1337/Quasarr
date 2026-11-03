@@ -57,6 +57,8 @@ class FeedBudgetSpent(Exception):
 class Source(AbstractSearchSource):
     initials = "mx"
     language = "fr"
+    # downloads solve a Turnstile check through FlareSolverr
+    requires_flaresolverr = True
     supports_imdb = True
     supports_phrase = False
     supports_date_numbering = False

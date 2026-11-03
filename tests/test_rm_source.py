@@ -309,6 +309,38 @@ class SearchFlowTests(unittest.TestCase):
         mark.assert_called_once()
         self.assertIn("Unexpected page layout", mark.call_args.args[2])
 
+    def test_unparsable_post_is_skipped_without_marking_the_host(self):
+        with (
+            self.pages({"/": FEED_HTML}),
+            patch(
+                "quasarr.search.sources.rm._feed_date",
+                side_effect=[ValueError("odd post"), "Sat, 31 Oct 2026 00:00:00 +0000"],
+            ),
+            patch("quasarr.search.sources.rm.mark_hostname_issue") as mark,
+        ):
+            releases = SearchSource().feed(
+                shared_state(), time.time(), SEARCH_CAT_SHOWS
+            )
+
+        self.assertEqual(
+            ["Synthetic.Show.S01E02.720p.WEB-DL.x264-GRP"],
+            [r["details"]["title"] for r in releases],
+        )
+        mark.assert_not_called()
+
+    def test_feed_without_category_matches_is_not_an_issue(self):
+        movie_only = FEED_HTML.split('<div class="blog-post clear">')[1]
+        with (
+            self.pages({"/": f'<div class="blog-post clear">{movie_only}'}),
+            patch("quasarr.search.sources.rm.mark_hostname_issue") as mark,
+        ):
+            releases = SearchSource().feed(
+                shared_state(), time.time(), SEARCH_CAT_SHOWS
+            )
+
+        self.assertEqual([], releases)
+        mark.assert_not_called()
+
     def test_failed_request_marks_the_host(self):
         with (
             patch(

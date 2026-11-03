@@ -398,6 +398,67 @@ def get_api(shared_state_dict, shared_state_lock):
         </div>
 
         <div class="section">
+            <details id="jdDetails">
+                <summary id="jdSummary"><img src="{images.jdownloader}" type="image/webp" alt="JDownloader logo" class="inline-icon"/> JDownloader</summary>
+                <div class="api-settings">
+                    <p class="api-hint"><strong>JDownloader must be running and connected to My JDownloader!</strong></p>
+                    
+                    <div id="jd-login-section">
+                        <div class="input-group">
+                            <label>E-Mail</label>
+                            <div class="input-row">
+                                <input type="text" id="jd-user" placeholder="user@example.org" value="{jd_user}">
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>Password</label>
+                            <div class="input-row">
+                                <input type="password" id="jd-pass" placeholder="Password" value="{jd_pass}">
+                            </div>
+                        </div>
+                        <div id="jd-status" style="margin-bottom: 10px; font-size: 0.9em; min-height: 1.2em;"></div>
+                        <p>{render_button("Verify Credentials", "primary", {"onclick": "verifyJDCredentials()"})}</p>
+                    </div>
+
+                    <div id="jd-device-section" style="display:none; margin-top: 15px; border-top: 1px solid var(--card-border, #dee2e6); padding-top: 15px;">
+                        <input type="hidden" id="jd-current-device" value="{jd_device}">
+                        <div class="input-group">
+                            <label>Select Instance</label>
+                            <div class="input-row">
+                                <select id="jd-device-select" style="flex:1; padding:8px; border-radius:4px; border:1px solid var(--input-border, #ced4da); background:var(--input-bg, #e9ecef); color:var(--fg-color, #212529);"></select>
+                            </div>
+                        </div>
+                        <div id="jd-save-status" style="margin-bottom: 10px; font-size: 0.9em; min-height: 1.2em;"></div>
+                        <p>{render_button("Save", "primary", {"onclick": "saveJDSettings()"})}</p>
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        <div class="section">
+            <details id="flaresolverrDetails">
+                <summary id="flaresolverrSummary"><img src="{images.flaresolverr}" type="image/webp" alt="JDownloader logo" class="inline-icon"/> FlareSolverr</summary>
+                <div class="api-settings">
+                    {flaresolverr_warning}
+                    <p class="api-hint">
+                        <a href="https://github.com/rix1337/flaresolverr-next" target="_blank">flaresolverr-next</a>
+                        must be running and reachable to Quasarr for some sites to work.
+                    </p>
+
+                    <form action="/api/flaresolverr" method="post" onsubmit="return handleFlareSolverrSubmit(this)">
+                        <div class="input-group">
+                            <label for="fsUrl">URL</label>
+                            <div class="input-row">
+                                <input type="text" id="fsUrl" name="url" placeholder="http://192.168.0.1:8191/v1" value="{flaresolverr_url}">
+                                <button type="submit" id="fsSubmitBtn">Save</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </details>
+        </div>
+
+        <div class="section">
             <details id="arrDetails">
                 <summary id="arrSummary">🎬 Metadata Lookup</summary>
                 <div class="api-settings">
@@ -464,67 +525,6 @@ def get_api(shared_state_dict, shared_state_lock):
                     </p>
                     <div id="crypter-status" class="notification-status"></div>
                     <p>{render_button("Save Kill Switches", "primary", {"onclick": "saveCrypterSettings()", "type": "button", "id": "crypterSaveBtn"})}</p>
-                </div>
-            </details>
-        </div>
-
-        <div class="section">
-            <details id="jdDetails">
-                <summary id="jdSummary"><img src="{images.jdownloader}" type="image/webp" alt="JDownloader logo" class="inline-icon"/> JDownloader</summary>
-                <div class="api-settings">
-                    <p class="api-hint"><strong>JDownloader must be running and connected to My JDownloader!</strong></p>
-                    
-                    <div id="jd-login-section">
-                        <div class="input-group">
-                            <label>E-Mail</label>
-                            <div class="input-row">
-                                <input type="text" id="jd-user" placeholder="user@example.org" value="{jd_user}">
-                            </div>
-                        </div>
-                        <div class="input-group">
-                            <label>Password</label>
-                            <div class="input-row">
-                                <input type="password" id="jd-pass" placeholder="Password" value="{jd_pass}">
-                            </div>
-                        </div>
-                        <div id="jd-status" style="margin-bottom: 10px; font-size: 0.9em; min-height: 1.2em;"></div>
-                        <p>{render_button("Verify Credentials", "primary", {"onclick": "verifyJDCredentials()"})}</p>
-                    </div>
-
-                    <div id="jd-device-section" style="display:none; margin-top: 15px; border-top: 1px solid var(--card-border, #dee2e6); padding-top: 15px;">
-                        <input type="hidden" id="jd-current-device" value="{jd_device}">
-                        <div class="input-group">
-                            <label>Select Instance</label>
-                            <div class="input-row">
-                                <select id="jd-device-select" style="flex:1; padding:8px; border-radius:4px; border:1px solid var(--input-border, #ced4da); background:var(--input-bg, #e9ecef); color:var(--fg-color, #212529);"></select>
-                            </div>
-                        </div>
-                        <div id="jd-save-status" style="margin-bottom: 10px; font-size: 0.9em; min-height: 1.2em;"></div>
-                        <p>{render_button("Save", "primary", {"onclick": "saveJDSettings()"})}</p>
-                    </div>
-                </div>
-            </details>
-        </div>
-
-        <div class="section">
-            <details id="flaresolverrDetails">
-                <summary id="flaresolverrSummary"><img src="{images.flaresolverr}" type="image/webp" alt="JDownloader logo" class="inline-icon"/> FlareSolverr</summary>
-                <div class="api-settings">
-                    {flaresolverr_warning}
-                    <p class="api-hint">
-                        <a href="https://github.com/rix1337/flaresolverr-next" target="_blank">flaresolverr-next</a>
-                        must be running and reachable to Quasarr for some sites to work.
-                    </p>
-
-                    <form action="/api/flaresolverr" method="post" onsubmit="return handleFlareSolverrSubmit(this)">
-                        <div class="input-group">
-                            <label for="fsUrl">URL</label>
-                            <div class="input-row">
-                                <input type="text" id="fsUrl" name="url" placeholder="http://192.168.0.1:8191/v1" value="{flaresolverr_url}">
-                                <button type="submit" id="fsSubmitBtn">Save</button>
-                            </div>
-                        </div>
-                    </form>
                 </div>
             </details>
         </div>

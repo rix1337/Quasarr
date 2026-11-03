@@ -19,7 +19,7 @@ HISTORY_METRICS = {
 }
 
 
-ROW_KINDS = ("day", "issue", "hosts", "pruned", "failedpkg")
+ROW_KINDS = ("day", "issue", "timeout", "hosts", "pruned", "failedpkg")
 ROW_PREFIXES = tuple(f"{kind}:" for kind in ROW_KINDS)
 
 # lifetime counters from before the per-day history; dropped by the first prune
@@ -133,8 +133,13 @@ class StatsHelper:
             last = counts.get(("hosts", day, "n"), last)
             hosts.append(last)
 
-        issue_hosts = [
-            sorted(k[2].upper() for k in counts if k[0] == "issue" and k[1] == day)
+        def hosts_with(kind, day):
+            return {k[2].upper() for k in counts if k[0] == kind and k[1] == day}
+
+        # a host with both errors and timeouts on one day counts as an error only
+        issue_hosts = [sorted(hosts_with("issue", day)) for day in days]
+        timeout_hosts = [
+            sorted(hosts_with("timeout", day) - hosts_with("issue", day))
             for day in days
         ]
 
@@ -147,6 +152,8 @@ class StatsHelper:
             "hosts": hosts,
             "issues": [len(names) for names in issue_hosts],
             "issue_hosts": issue_hosts,
+            "timeouts": [len(names) for names in timeout_hosts],
+            "timeout_hosts": timeout_hosts,
         }
 
     def increment_package_with_links(self, links):
