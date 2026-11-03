@@ -3,6 +3,7 @@
 # Project by https://github.com/rix1337
 
 import re
+import time
 from urllib.parse import unquote, urljoin, urlparse
 
 import requests
@@ -36,10 +37,11 @@ class Source(AbstractDownloadSource):
                 slug,
                 DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
             )
+            raw_links = _extract_download_links(soup)
             links = _extract_download_links(soup, mirrors)
             imdb_id = _extract_imdb_id(soup)
 
-            if links:
+            if raw_links:
                 clear_hostname_issue(Source.initials)
             else:
                 mark_hostname_issue(
@@ -61,6 +63,9 @@ class Source(AbstractDownloadSource):
             info(f"Could not load release data for {title or slug}: {e}")
             mark_hostname_issue(Source.initials, "download", str(e))
             return {"links": [], "imdb_id": None}
+
+    def get_package_identity(self, url: str) -> str | None:
+        return _extract_release_slug(url)
 
 
 def _get_base_url(shared_state):
@@ -84,18 +89,30 @@ def _build_headers(shared_state):
     return {"User-Agent": shared_state.values["user_agent"]}
 
 
+# keep-alive across requests; headers go per request so concurrent searches share no mutable state
+_SESSION = requests.Session()
+
+
 def _get_page(shared_state, path, timeout):
     base_url = _get_base_url(shared_state)
     if not base_url:
         raise ValueError("Missing hostname configuration")
 
-    response = requests.get(
-        urljoin(f"{base_url}/", path.lstrip("/")),
-        headers=_build_headers(shared_state),
-        timeout=timeout,
-    )
-    response.raise_for_status()
-    return BeautifulSoup(response.content, "html.parser")
+    url = urljoin(f"{base_url}/", path.lstrip("/"))
+    headers = _build_headers(shared_state)
+
+    # one retry after a second for transient failures (connection, timeout, 5xx)
+    for attempt in range(2):
+        try:
+            response = _SESSION.get(url, headers=headers, timeout=timeout)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            if attempt:
+                raise
+        else:
+            if response.status_code < 500 or attempt:
+                response.raise_for_status()
+                return BeautifulSoup(response.content, "html.parser")
+        time.sleep(1)
 
 
 def _build_release_page_url(base_url, slug):

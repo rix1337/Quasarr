@@ -101,6 +101,20 @@ class ParsingTests(unittest.TestCase):
             _clean_title("[RR/NF/CU] Synthetic Movie (2026) 1080p WEBRip-GRP (1.4GB)"),
         )
 
+    def test_clean_title_unescapes_entities_and_sanitizes_punctuation(self):
+        self.assertEqual(
+            "Boule.and.Bill.2013.720p",
+            _clean_title("Boule &amp; Bill (2013) 720p"),
+        )
+        self.assertEqual(
+            "The.Worlds.Fastest.Indian.Special.Edition",
+            _clean_title("The World&#039;s Fastest Indian: Special [Edition]"),
+        )
+        self.assertEqual(
+            "Double.and.Escaped",
+            _clean_title("Double &amp;amp; Escaped"),
+        )
+
     def test_feed_posts_carry_date_size_and_imdb(self):
         items = _parse_feed(soup(FEED_HTML))
 
@@ -123,6 +137,21 @@ class ParsingTests(unittest.TestCase):
             [item["title"] for item in items],
         )
         self.assertEqual(527, items[1]["size_mb"])
+
+    def test_production_page_skips_archived_and_dead_releases(self):
+        html_with_archived = """
+        <div class="blog-details">
+        <ul class="allrls" id="episodes">
+          <li><a href="/release/active-s01e01-1080p">Active S01E01 1080p</a></li>
+          <li><span class="dead">Dead</span> <a href="/release/dead-s01e02-1080p">Dead S01E02 1080p</a></li>
+        </ul>
+        <ul class="allrls" id="archived">
+          <li><a href="/release/archived-s01e03-1080p">Archived S01E03 1080p</a></li>
+        </ul>
+        </div>
+        """
+        items = _parse_production_page(soup(html_with_archived))
+        self.assertEqual(["Active.S01E01.1080p"], [i["title"] for i in items])
 
     def test_result_lists_only_yield_releases(self):
         items = _parse_release_results(soup(RESULTS_HTML))
@@ -197,6 +226,27 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual("tt0000001", result["imdb_id"])
         self.assertEqual(3, len(result["links"]))
         clear.assert_called_once()
+
+    def test_download_unmatched_mirror_filter_clears_issue(self):
+        with (
+            patch(
+                "quasarr.downloads.sources.rm._fetch_release_page",
+                return_value=soup(RELEASE_HTML),
+            ),
+            patch("quasarr.downloads.sources.rm.clear_hostname_issue") as clear,
+            patch("quasarr.downloads.sources.rm.mark_hostname_issue") as mark,
+        ):
+            result = DownloadSource().get_download_links(
+                shared_state(),
+                "https://source.invalid/release/x",
+                ["unmatchedmirror"],
+                "t",
+                "",
+            )
+
+        self.assertEqual([], result["links"])
+        clear.assert_called_once()
+        mark.assert_not_called()
 
     def test_removed_release_is_not_a_host_issue(self):
         response = requests.Response()
@@ -284,6 +334,32 @@ class SearchFlowTests(unittest.TestCase):
             "https://source.invalid/release/synthetic-show-s01e02-1080p-web-dl-grp",
             releases[0]["details"]["source"],
         )
+
+    def test_imdb_search_falls_back_to_results_on_production_failure(self):
+        two_titles = RESULTS_HTML.replace(
+            "</a></li></ul>",
+            '</a></li><li><a class="title" href="/other-show">Other</a></li></ul>',
+            1,
+        )
+        fetched = []
+
+        def fake(_state, path, _timeout):
+            fetched.append(path)
+            if path == "/search/tt0000009":
+                return soup(two_titles)
+            raise RuntimeError("500 Server Error")
+
+        with patch("quasarr.search.sources.rm._get_page", side_effect=fake):
+            releases = SearchSource().search(
+                shared_state(), time.time(), SEARCH_CAT_SHOWS, "tt0000009", 1, 2
+            )
+
+        self.assertEqual(
+            ["Synthetic.Show.S01E02.1080p.WEB-DL-GRP"],
+            [r["details"]["title"] for r in releases],
+        )
+        # only the first title page is tried before falling back
+        self.assertEqual(["/search/tt0000009", "/synthetic-show"], fetched)
 
     def test_phrase_search_filters_by_title(self):
         with self.pages({"/search/Synthetic+Show+S01E03/releases/query": RESULTS_HTML}):
