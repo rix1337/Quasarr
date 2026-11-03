@@ -78,6 +78,50 @@ class SponsorsHelperApiTests(unittest.TestCase):
             result,
         )
 
+    def test_filecrypt_fail_callback_with_offline_reason_marks_package_failed(self):
+        app = Bottle()
+        setup_sponsors_helper_routes(app)
+        route = next(
+            route for route in app.routes if route.rule == "/sponsors_helper/api/fail/"
+        )
+        package_id = "Quasarr_movies_" + "c" * 32
+        package_data = self._filecrypt_package()
+        protected_db = mock.Mock()
+        protected_db.retrieve.return_value = json.dumps(package_data)
+        protected_db.retrieve_all_titles.return_value = [
+            (package_id, json.dumps(package_data))
+        ]
+        reason = "Package is offline (0 files online)"
+        payload = {"package_id": package_id, "reason": reason}
+        stats = mock.Mock()
+
+        with (
+            mock.patch(
+                "quasarr.api.sponsors_helper.shared_state.values",
+                {"helper_active": True, "helper_last_seen": 0},
+            ),
+            mock.patch(
+                "quasarr.api.sponsors_helper.shared_state.get_db",
+                return_value=protected_db,
+            ),
+            mock.patch("quasarr.api.sponsors_helper.request", mock.Mock(json=payload)),
+            mock.patch("quasarr.api.sponsors_helper.StatsHelper", return_value=stats),
+            mock.patch("quasarr.api.sponsors_helper.fail") as fail,
+            mock.patch(
+                "quasarr.api.sponsors_helper.update_release_notification"
+            ) as notification,
+        ):
+            result = route.callback()
+
+        protected_db.delete.assert_called_once_with(package_id)
+        fail.assert_called_once_with(
+            package_data["title"], package_id, mock.ANY, reason=reason
+        )
+        stats.increment_failed_decryptions_automatic.assert_called_once_with()
+        notification.assert_called_once()
+        self.assertEqual("FAILED", notification.call_args.args[2].name)
+        self.assertIn("marked as failed", result)
+
     def test_filecrypt_fail_callback_resolves_package_by_title(self):
         app = Bottle()
         setup_sponsors_helper_routes(app)
