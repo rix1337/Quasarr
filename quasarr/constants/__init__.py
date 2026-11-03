@@ -401,8 +401,17 @@ PROTECTED_PATTERNS = {
     "keeplinks": re.compile(r"keeplinks\.", re.IGNORECASE),
 }
 
-# Table storing the filecrypt kill switch flag.
-FILECRYPT_ENABLED_TABLE = "filecrypt_enabled"
+# Table storing the crypter kill switches. The name predates the
+# per-crypter switches and is kept so saved FileCrypt settings survive.
+CRYPTER_ENABLED_TABLE = "filecrypt_enabled"
+
+# Crypters that can be switched off while they are broken.
+LINK_PROTECTION_NAMES = {
+    "filecrypt": "FileCrypt",
+    "hide": "Hide",
+    "keeplinks": "KeepLinks",
+    "tolink": "ToLink",
+}
 
 
 # ==============================================================================

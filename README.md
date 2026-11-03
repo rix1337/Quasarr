@@ -19,8 +19,8 @@ This requires [Tampermonkey](https://www.tampermonkey.net/) and the matching Qua
 guides you through installing both once. Solve the CAPTCHA on the crypter's own page and the userscript sends the
 links back, so Quasarr can confidently handle the rest.
 
-If a link crypter's CAPTCHAs become temporarily unsolvable, you can disable it under **Web UI → Link Protection**.
-Affected releases then fail so your *arr app grabs an alternative instead of stalling.
+If a crypter stops working for a while, switch it off under **Web UI → Crypter Kill Switches**.
+New grabs that only have links from it then fail, so your *arr app can try another release instead of stalling.
 
 # Instructions
 

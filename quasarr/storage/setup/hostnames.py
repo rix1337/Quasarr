@@ -193,7 +193,7 @@ def hostname_form_html(shared_state, message, show_skip_management=False):
             status_title = f"{missing_arr_client} not configured"
             error_details_for_modal = (
                 f"This site requires {missing_arr_client}. Configure its URL and API "
-                "key in the *arr Configuration section on the home page."
+                "key under Metadata Lookup on the home page."
             )
         elif issue:
             status = "error"

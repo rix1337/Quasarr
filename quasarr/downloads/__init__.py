@@ -8,6 +8,7 @@ import json
 from quasarr.constants import (
     AUTO_DECRYPT_PATTERNS,
     CLIENT_DOWNLOAD_CATEGORY_FALLBACK_MAP,
+    LINK_PROTECTION_NAMES,
     PROTECTED_PATTERNS,
 )
 from quasarr.downloads.linkcrypters.hide import decrypt_links_if_hide
@@ -101,25 +102,32 @@ def detect_crypter(url):
     return None, None
 
 
-def _drop_filecrypt_if_disabled(shared_state, classified, title):
-    """Drop filecrypt links from the protected bucket when the kill switch is off."""
-    if shared_state.values.get("filecrypt_enabled", True):
-        return classified
+def _drop_disabled_crypters(shared_state, classified, title):
+    """Drop auto and protected links whose crypter is switched off.
 
-    filecrypt_re = PROTECTED_PATTERNS["filecrypt"]
-    kept, dropped = [], 0
-    for link in classified["protected"]:
-        if filecrypt_re.search(link[0]):
-            dropped += 1
-        else:
-            kept.append(link)
+    Returns the classified links and the display names that were skipped.
+    """
+    enabled = shared_state.values.get("crypters_enabled") or {}
+    disabled = {key for key, is_on in enabled.items() if not is_on}
+    if not disabled:
+        return classified, []
 
-    if dropped:
+    dropped = {}
+    for bucket in ("auto", "protected"):
+        kept = []
+        for link in classified[bucket]:
+            key = detect_crypter(link[0])[0]
+            if key in disabled:
+                dropped[key] = dropped.get(key, 0) + 1
+            else:
+                kept.append(link)
+        classified[bucket] = kept
+
+    for key, count in dropped.items():
         info(
-            f"Filecrypt disabled - dropped <r>{dropped}</r> filecrypt link(s) for {title}"
+            f"{LINK_PROTECTION_NAMES[key]} is turned off, skipping <r>{count}</r> link(s) for {title}"
         )
-    classified["protected"] = kept
-    return classified
+    return classified, [LINK_PROTECTION_NAMES[key] for key in dropped]
 
 
 def classify_links(links):
@@ -396,7 +404,9 @@ def process_links(
         classified = {"direct": [], "auto": [], "protected": links}
     else:
         classified = classify_links(links)
-    classified = _drop_filecrypt_if_disabled(shared_state, classified, title)
+    classified, skipped_protections = _drop_disabled_crypters(
+        shared_state, classified, title
+    )
 
     # PRIORITY 1: Direct hoster links
     if classified["direct"]:
@@ -466,12 +476,13 @@ def process_links(
         )
         return {"success": True, "title": title}
 
-    return fail(
-        title,
-        package_id,
-        shared_state,
-        reason=f'No usable links found for {title} on {label} - "{source_url}"',
-    )
+    reason = f'No usable links found for {title} on {label} - "{source_url}"'
+    if skipped_protections:
+        reason = (
+            f"No usable links for {title} on {label}: "
+            f"{', '.join(skipped_protections)} turned off in settings"
+        )
+    return fail(title, package_id, shared_state, reason=reason)
 
 
 # =============================================================================

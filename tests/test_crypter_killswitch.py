@@ -4,23 +4,24 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
-from quasarr.downloads import _drop_filecrypt_if_disabled, process_links
+from quasarr.downloads import _drop_disabled_crypters, process_links
 
 FILECRYPT_URL = "https://filecrypt.invalid/Container/ABC123"
 TOLINK_URL = "https://tolink.invalid/f/example-token"
+HIDE_URL = "https://hide.invalid/container/example-token"
 PACKAGE_ID = "Quasarr_tv_" + "a" * 32
 
 
-def _build_shared_state(filecrypt_enabled=True):
+def _build_shared_state(filecrypt_enabled=True, **enabled):
     shared_state = MagicMock()
     shared_state.values = {
-        "filecrypt_enabled": filecrypt_enabled,
+        "crypters_enabled": {"filecrypt": filecrypt_enabled, **enabled},
         "external_address": "http://localhost:5678",
     }
     return shared_state
 
 
-class DropFilecryptIfDisabledTests(unittest.TestCase):
+class DropDisabledCryptersTests(unittest.TestCase):
     def test_drops_filecrypt_only_link_when_disabled(self):
         shared_state = _build_shared_state(filecrypt_enabled=False)
         classified = {
@@ -29,7 +30,7 @@ class DropFilecryptIfDisabledTests(unittest.TestCase):
             "protected": [[FILECRYPT_URL, "filecrypt"]],
         }
 
-        result = _drop_filecrypt_if_disabled(shared_state, classified, "Example.Title")
+        result, _ = _drop_disabled_crypters(shared_state, classified, "Example.Title")
 
         self.assertEqual([], result["protected"])
 
@@ -44,7 +45,7 @@ class DropFilecryptIfDisabledTests(unittest.TestCase):
             ],
         }
 
-        result = _drop_filecrypt_if_disabled(shared_state, classified, "Example.Title")
+        result, _ = _drop_disabled_crypters(shared_state, classified, "Example.Title")
 
         self.assertEqual([[TOLINK_URL, "rapidgator"]], result["protected"])
 
@@ -56,12 +57,37 @@ class DropFilecryptIfDisabledTests(unittest.TestCase):
             "protected": [[FILECRYPT_URL, "filecrypt"]],
         }
 
-        result = _drop_filecrypt_if_disabled(shared_state, classified, "Example.Title")
+        result, _ = _drop_disabled_crypters(shared_state, classified, "Example.Title")
 
         self.assertEqual([[FILECRYPT_URL, "filecrypt"]], result["protected"])
 
+    def test_drops_hide_and_keeps_hostname_links_when_disabled(self):
+        shared_state = _build_shared_state(hide=False)
+        classified = {
+            "direct": [],
+            "auto": [[HIDE_URL, "rapidgator"]],
+            "protected": [
+                ["https://source.invalid/release-1.html", "he"],
+                [TOLINK_URL, "rapidgator"],
+            ],
+        }
 
-class ProcessLinksFilecryptKillSwitchTests(unittest.TestCase):
+        result, skipped = _drop_disabled_crypters(
+            shared_state, classified, "Example.Title"
+        )
+
+        self.assertEqual([], result["auto"])
+        self.assertEqual(
+            [
+                ["https://source.invalid/release-1.html", "he"],
+                [TOLINK_URL, "rapidgator"],
+            ],
+            result["protected"],
+        )
+        self.assertEqual(["Hide"], skipped)
+
+
+class ProcessLinksCrypterKillSwitchTests(unittest.TestCase):
     def _run_process_links(self, shared_state, links):
         source_result = {"links": links}
 
@@ -114,6 +140,9 @@ class ProcessLinksFilecryptKillSwitchTests(unittest.TestCase):
         )
 
         mock_fail.assert_called_once()
+        self.assertIn(
+            "FileCrypt turned off in settings", mock_fail.call_args.kwargs["reason"]
+        )
         mock_send_tracked.assert_not_called()
         mock_store_protected.assert_not_called()
         self.assertTrue(result.get("failed"))

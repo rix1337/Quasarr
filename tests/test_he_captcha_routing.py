@@ -290,7 +290,7 @@ class HeCaptchaRoutingTests(unittest.TestCase):
         shared_state = SimpleNamespace(
             values={
                 "external_address": "https://quasarr.invalid",
-                "filecrypt_enabled": True,
+                "crypters_enabled": {},
             }
         )
 
