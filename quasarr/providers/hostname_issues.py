@@ -17,6 +17,12 @@ def _get_db(table_name):
     return DataBase(table_name)
 
 
+def is_timeout_message(error_message):
+    """Timeouts are slow hosts, not broken ones; the statistics chart keeps them apart."""
+    message = str(error_message).lower()
+    return "timed out" in message or "timeout" in message
+
+
 def mark_hostname_issue(shorthand, operation, error_message):
     shorthand = shorthand.lower()
     db = _get_db("hostname_issues")
@@ -35,7 +41,8 @@ def mark_hostname_issue(shorthand, operation, error_message):
 
         stats_db = _get_db("statistics")
         prune_daily(stats_db)
-        stats_db.update_store(f"issue:{date.today().isoformat()}:{shorthand}", "1")
+        kind = "timeout" if is_timeout_message(error_message) else "issue"
+        stats_db.update_store(f"{kind}:{date.today().isoformat()}:{shorthand}", "1")
         record_configured_hostnames(refresh=False)
     except Exception:
         pass

@@ -4,6 +4,7 @@ import unittest
 from datetime import date, timedelta
 from unittest.mock import patch
 
+from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.statistics import HISTORY_DAYS, StatsHelper
 
 
@@ -62,6 +63,42 @@ class StatsHistoryTests(unittest.TestCase):
         self.assertEqual(history["issue_hosts"][0], [])
         self.assertEqual(history["issues"][0], 0)
         self.assertEqual(history["hosts"], [None] * HISTORY_DAYS)
+
+    def test_timeouts_are_counted_apart_from_errors(self):
+        helper, rows = self.make_helper()
+        today = date.today().isoformat()
+        rows[f"issue:{today}:xx"] = "1"
+        rows[f"timeout:{today}:xx"] = "1"
+        rows[f"timeout:{today}:yy"] = "1"
+        with patch("quasarr.providers.statistics.record_configured_hostnames"):
+            history = helper.get_history()
+
+        # a host with an error that day is not also counted as a timeout
+        self.assertEqual(history["issue_hosts"][-1], ["XX"])
+        self.assertEqual(history["timeout_hosts"][-1], ["YY"])
+        self.assertEqual(history["timeouts"][-1], 1)
+        self.assertEqual(history["timeouts"][0], 0)
+
+    def test_mark_hostname_issue_classifies_timeouts(self):
+        rows = {}
+        db = FakeDb(rows)
+        with (
+            patch("quasarr.providers.hostname_issues._get_db", return_value=db),
+            patch("quasarr.providers.hostname_issues.record_configured_hostnames"),
+            patch("quasarr.providers.statistics.record_configured_hostnames"),
+        ):
+            mark_hostname_issue(
+                "XX",
+                "search",
+                "HTTPSConnectionPool(host='source.invalid', port=443): "
+                "Read timed out. (read timeout=10)",
+            )
+            mark_hostname_issue("YY", "search", "Login rejected")
+
+        today = date.today().isoformat()
+        self.assertIn(f"timeout:{today}:xx", rows)
+        self.assertNotIn(f"issue:{today}:xx", rows)
+        self.assertIn(f"issue:{today}:yy", rows)
 
     def test_hostname_count_carries_forward(self):
         helper, rows = self.make_helper()
