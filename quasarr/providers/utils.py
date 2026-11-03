@@ -1294,11 +1294,12 @@ def is_valid_release(
     - episode_date: validated date for a date-numbered TV episode (or None)
     """
     try:
-        is_movie_search = search_category // 1000 * 1000 == SEARCH_CAT_MOVIES
-        is_tv_search = search_category // 1000 * 1000 == SEARCH_CAT_SHOWS
-        is_docs_search = search_category // 1000 * 1000 == SEARCH_CAT_BOOKS
-        is_music_search = search_category // 1000 * 1000 == SEARCH_CAT_MUSIC
-        is_xxx_search = search_category // 1000 * 1000 == SEARCH_CAT_XXX
+        cat_id = int(search_category)
+        is_movie_search = cat_id // 1000 * 1000 == SEARCH_CAT_MOVIES
+        is_tv_search = cat_id // 1000 * 1000 == SEARCH_CAT_SHOWS
+        is_docs_search = cat_id // 1000 * 1000 == SEARCH_CAT_BOOKS
+        is_music_search = cat_id // 1000 * 1000 == SEARCH_CAT_MUSIC
+        is_xxx_search = cat_id // 1000 * 1000 == SEARCH_CAT_XXX
 
         # if search string is NOT an imdb id, require a title match
         if not is_docs_search and not is_imdb_id(search_string):
