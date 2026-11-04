@@ -1,6 +1,6 @@
 ---
 title: RM reads the server-rendered site, not a JSON API
-date: 2026-11-02
+date: 2026-11-04
 author: Quasarr
 touches:
   - quasarr/search/sources/rm.py
@@ -15,4 +15,4 @@ Why: The earlier JSON API only existed on one mirror and forced a host prefix on
 
 ## Watch out
 
-Search lists carry no date, so searches report the current time; feed posts carry a calendar date without a time, title pages an approximate age. One upload is mirrored on several domains of a hoster, so a file counts once per hoster and path. A 404 release page is a removed release, not a hostname issue. A mirror whose pages lack the expected markup is reported as a hostname issue instead of passing as an empty site.
+Search lists carry no date, so searches report the current time; feed posts carry a calendar date without a time, title pages an approximate age. One upload is mirrored on several domains of a hoster, so a file counts once per hoster and path. A 404 release page is a removed release, not a hostname issue. A mirror whose pages lack the expected markup is reported as a hostname issue instead of passing as an empty site. Page texts (the random banner above every page's content, release descriptions) may carry raw markup: one stray comment, script, style, textarea, title or CDATA opener turns the rest of the page into text when it is parsed as one document. Every page is fetched with unclosed openers escaped, and the feed additionally parses each post on its own so one broken post cannot hide the others. Newer Python patch releases (the Docker image) treat more of these openers as raw text than older local interpreters, so a page that parses locally can still break in production.
