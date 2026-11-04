@@ -4,6 +4,7 @@
 
 import re
 import string
+import threading
 import time
 from urllib.parse import unquote, urljoin, urlparse
 
@@ -12,13 +13,20 @@ from bs4 import BeautifulSoup, UnicodeDammit
 
 from quasarr.constants import (
     DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
+    FLARESOLVERR_REQUEST_TIMEOUT_SECONDS,
     IMDB_REGEX,
+    SEARCH_FANOUT_DEADLINE_SECONDS,
     SHARE_HOSTERS_LOWERCASE,
 )
 from quasarr.downloads.mirror_filters import normalize_mirror_token
 from quasarr.downloads.sources.helpers.abstract_source import AbstractDownloadSource
+from quasarr.providers.cloudflare import (
+    LazyFlareSolverrSession,
+    is_cloudflare_challenge,
+)
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.log import info
+from quasarr.providers.utils import is_flaresolverr_available
 
 _URL_REGEX = re.compile(r"https?://\S+")
 _RAW_TEXT_TAGS = (
@@ -111,6 +119,8 @@ def _build_headers(shared_state):
 
 # keep-alive across requests; headers go per request so concurrent searches share no mutable state
 _SESSION = requests.Session()
+_SECURITY_CHECK_LOCK = threading.Lock()
+_security_checks_passed = 0
 
 
 def _get_page(shared_state, path, timeout):
@@ -153,12 +163,15 @@ def _get_content(shared_state, path, timeout):
         raise ValueError("Missing hostname configuration")
 
     url = urljoin(f"{base_url}/", path.lstrip("/"))
-    headers = _build_headers(shared_state)
 
     # one retry after a second for transient failures (connection, timeout, 5xx)
     for attempt in range(2):
         try:
-            response = _SESSION.get(url, headers=headers, timeout=timeout)
+            response = _SESSION.get(
+                url, headers=_build_headers(shared_state), timeout=timeout
+            )
+            if _is_security_check(response):
+                response = _pass_security_check(shared_state, url, timeout, response)
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
             if attempt:
                 raise
@@ -167,6 +180,55 @@ def _get_content(shared_state, path, timeout):
                 response.raise_for_status()
                 return response.content
         time.sleep(1)
+
+
+def _is_security_check(response):
+    return response.status_code == 403 or is_cloudflare_challenge(response.text)
+
+
+def _pass_security_check(shared_state, url, timeout, checked_response):
+    """Pass the site's security check once and reuse its cookie for plain requests."""
+    if not is_flaresolverr_available(shared_state):
+        raise ValueError(
+            "The site shows a security check to this server; "
+            "configure FlareSolverr to pass it"
+        )
+
+    global _security_checks_passed
+    seen = _security_checks_passed
+    started = time.monotonic()
+    # one solve at a time: parallel requests wait here and reuse its cookie
+    with _SECURITY_CHECK_LOCK:
+        if _security_checks_passed != seen:
+            checked_response = _SESSION.get(
+                url, headers=_build_headers(shared_state), timeout=timeout
+            )
+            if not _is_security_check(checked_response):
+                return checked_response
+
+        solver = LazyFlareSolverrSession(shared_state)
+        try:
+            response = solver.get(
+                url,
+                headers=_build_headers(shared_state),
+                timeout=max(timeout, FLARESOLVERR_REQUEST_TIMEOUT_SECONDS),
+                # the check was just seen; go straight to FlareSolverr
+                request_get=lambda *_args, **_kwargs: checked_response,
+            )
+        finally:
+            solver.close()
+        _SESSION.cookies.update(response.cookies)
+        _security_checks_passed += 1
+
+    elapsed = time.monotonic() - started
+    if elapsed > SEARCH_FANOUT_DEADLINE_SECONDS:
+        info(
+            f"Passing the security check took {elapsed:.0f}s, longer than "
+            "Radarr and Sonarr wait for search results, so this search may come "
+            "back without RM. That is expected for the first request after the "
+            "check; the following ones reuse it and answer normally."
+        )
+    return response
 
 
 def _build_release_page_url(base_url, slug):

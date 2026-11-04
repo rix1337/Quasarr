@@ -230,7 +230,10 @@ def get_api(shared_state_dict, shared_state_lock):
                 timeout_key: {
                     "base_seconds": int(timeout_data["base_seconds"]),
                     "slow_seconds": int(
-                        timeout_data["base_seconds"] * TIMEOUT_SLOW_MODE_MULTIPLIER
+                        timeout_data.get(
+                            "slow_seconds",
+                            timeout_data["base_seconds"] * TIMEOUT_SLOW_MODE_MULTIPLIER,
+                        )
                     ),
                 }
                 for timeout_key, timeout_data in TIMEOUT_SLOW_MODE_DEFINITIONS.items()
@@ -478,7 +481,7 @@ def get_api(shared_state_dict, shared_state_lock):
                         <div class="input-group">
                             <label for="radarrApiKey">API Key</label>
                             <div class="input-row">
-                                <input type="text" id="radarrApiKey" placeholder="Radarr API key" value="{radarr_api_key}">
+                                <input type="password" id="radarrApiKey" placeholder="Radarr API key" value="{radarr_api_key}">
                             </div>
                         </div>
                         <div id="radarr-save-status" class="notification-status"></div>
@@ -500,7 +503,7 @@ def get_api(shared_state_dict, shared_state_lock):
                         <div class="input-group">
                             <label for="sonarrApiKey">API Key</label>
                             <div class="input-row">
-                                <input type="text" id="sonarrApiKey" placeholder="Sonarr API key" value="{sonarr_api_key}">
+                                <input type="password" id="sonarrApiKey" placeholder="Sonarr API key" value="{sonarr_api_key}">
                             </div>
                         </div>
                         <div id="sonarr-save-status" class="notification-status"></div>

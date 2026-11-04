@@ -64,6 +64,7 @@ class Source(AbstractSearchSource):
     supports_phrase = True
     supports_date_numbering = False
     supported_categories = [SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS]
+    requires_flaresolverr = True
 
     def feed(
         self, shared_state: shared_state, start_time: float, search_category: str

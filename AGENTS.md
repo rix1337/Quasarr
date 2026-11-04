@@ -18,7 +18,7 @@ Privacy checks protect repository content; do not add runtime sandboxes or netwo
 
 ## Product and scope
 
-Quasarr connects JDownloader2 with Radarr, Sonarr, Lidarr, and Magazarr by emulating Newznab and SABnzbd. It is not a usenet indexer. Protected crypters use browser userscripts served by Quasarr; do not add server-side CAPTCHA solving. SponsorsHelper is an optional companion, not the main product; do not advertise it beyond the existing README mention.
+Quasarr connects JDownloader2 with Radarr, Sonarr, Lidarr, and Magazarr by emulating Newznab and SABnzbd. It is not a usenet indexer. CAPTCHA-protected crypters, which guard the download links themselves, are decrypted only through browser userscripts served by Quasarr, so the user passes their CAPTCHA; Quasarr never solves crypter CAPTCHAs itself. This does not cover security checks in front of source sites: Quasarr routes those through FlareSolverr, and flaresolverr-next may solve their CAPTCHAs. SponsorsHelper is an optional companion, not the main product; do not advertise it beyond the existing README mention.
 
 Maintain the existing integration and automation. Keep changes small, use the existing package boundaries, and do not introduce unrelated features, abstractions, refactors, or test rewrites. Work on `dev` unless explicitly instructed otherwise.
 
