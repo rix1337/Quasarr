@@ -112,6 +112,7 @@ class SourceMetadataTests(unittest.TestCase):
     def test_metadata_marks_clear_flaresolverr_required_sources(self):
         metadata = get_source_metadata()
         self.assertTrue(metadata["al"]["requires_flaresolverr"])
+        self.assertTrue(metadata["rm"]["requires_flaresolverr"])
         self.assertTrue(metadata["sl"]["requires_flaresolverr"])
         self.assertTrue(metadata["wd"]["requires_flaresolverr"])
 

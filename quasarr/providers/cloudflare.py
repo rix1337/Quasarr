@@ -473,7 +473,9 @@ class FlareSolverrResponse:
     Minimal Response-like object so it behaves like requests.Response.
     """
 
-    def __init__(self, url, status_code, headers, text, execute_js_result=None):
+    def __init__(
+        self, url, status_code, headers, text, execute_js_result=None, cookies=None
+    ):
         self.url = url
         self.status_code = status_code
         self.headers = headers or {}
@@ -483,12 +485,16 @@ class FlareSolverrResponse:
         # when none was requested / the FlareSolverr build does not support it.
         self.execute_js_result = execute_js_result
 
-        # Cloudflare cookies are irrelevant here, but keep attribute for compatibility
-        self.cookies = requests.cookies.RequestsCookieJar()
+        if cookies is not None:
+            self.cookies = cookies
+        else:
+            self.cookies = requests.cookies.RequestsCookieJar()
 
     def raise_for_status(self):
         if 400 <= self.status_code:
-            raise requests.HTTPError(f"{self.status_code} Error at {self.url}")
+            raise requests.HTTPError(
+                f"{self.status_code} Error at {self.url}", response=self
+            )
 
     def json(self):
         try:
@@ -569,12 +575,22 @@ def flaresolverr_get(
     if user_agent and user_agent != shared_state.values.get("user_agent"):
         shared_state.update("user_agent", user_agent)
 
+    cookies = requests.cookies.RequestsCookieJar()
+    for ck in solution.get("cookies", []):
+        cookies.set(
+            ck.get("name"),
+            ck.get("value"),
+            domain=ck.get("domain"),
+            path=ck.get("path", "/"),
+        )
+
     return FlareSolverrResponse(
         url=url,
         status_code=status_code,
         headers=fs_headers,
         text=html,
         execute_js_result=solution.get("executeJsResult"),
+        cookies=cookies,
     )
 
 

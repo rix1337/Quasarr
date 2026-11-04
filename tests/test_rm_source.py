@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import threading
 import time
 import unittest
 from contextlib import ExitStack
@@ -11,6 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from quasarr.constants import SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS
+from quasarr.downloads.sources import rm as rm_downloads
 from quasarr.downloads.sources.rm import (
     Source as DownloadSource,
 )
@@ -20,6 +22,10 @@ from quasarr.downloads.sources.rm import (
     _extract_release_slug,
     _get_base_url,
     _get_page,
+)
+from quasarr.providers.cloudflare import (
+    FlareSolverrResponse,
+    _clear_cloudflare_gate_cache,
 )
 from quasarr.search.sources.rm import (
     Source as SearchSource,
@@ -321,6 +327,113 @@ class DownloadTests(unittest.TestCase):
             )
 
         mark.assert_called_once()
+
+
+def page_response(status, body):
+    response = requests.Response()
+    response.status_code = status
+    response._content = body.encode()
+    return response
+
+
+SECURITY_CHECK = "<title>Attention Required! | Synthetic</title><form></form>"
+
+
+class SecurityCheckTests(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(_clear_cloudflare_gate_cache)
+        self.addCleanup(rm_downloads._SESSION.cookies.clear)
+        self.passed = threading.Event()
+        self.solves = []
+        for target in ("quasarr.downloads.sources.rm", "quasarr.providers.cloudflare"):
+            available = patch(f"{target}.is_flaresolverr_available", return_value=True)
+            available.start()
+            self.addCleanup(available.stop)
+        for name, value in (
+            ("flaresolverr_create_session", "session"),
+            ("flaresolverr_destroy_session", None),
+        ):
+            helper = patch(f"quasarr.providers.cloudflare.{name}", return_value=value)
+            helper.start()
+            self.addCleanup(helper.stop)
+
+    def plain_get(self, *_args, **_kwargs):
+        if self.passed.is_set():
+            return page_response(200, "<title>Synthetic</title>passed")
+        return page_response(200, SECURITY_CHECK)
+
+    def solve(self, status=200):
+        def fake(_state, url, **_kwargs):
+            self.solves.append(url)
+            time.sleep(0.2)
+            self.passed.set()
+            cookies = requests.cookies.RequestsCookieJar()
+            cookies.set("clearance", "x", domain="source.invalid", path="/")
+            return FlareSolverrResponse(url, status, {}, "solved", cookies=cookies)
+
+        return patch("quasarr.providers.cloudflare.flaresolverr_get", side_effect=fake)
+
+    def test_parallel_requests_share_one_solve(self):
+        results = []
+        start = threading.Barrier(2)
+
+        def fetch(path):
+            start.wait()
+            results.append(rm_downloads._get_content(shared_state(), path, 5))
+
+        with (
+            patch.object(rm_downloads._SESSION, "get", side_effect=self.plain_get),
+            self.solve(),
+        ):
+            threads = [
+                threading.Thread(target=fetch, args=(path,))
+                for path in ("/release/a", "/release/b")
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+        self.assertEqual(1, len(self.solves))
+        self.assertEqual(
+            sorted([b"solved", b"<title>Synthetic</title>passed"]), sorted(results)
+        )
+        self.assertEqual("x", rm_downloads._SESSION.cookies.get("clearance"))
+
+    def test_removed_release_behind_the_check_stays_a_404(self):
+        with (
+            patch.object(rm_downloads._SESSION, "get", side_effect=self.plain_get),
+            self.solve(status=404),
+            patch("quasarr.downloads.sources.rm.mark_hostname_issue") as mark,
+        ):
+            result = DownloadSource().get_download_links(
+                shared_state(), "https://source.invalid/release/gone", [], "t", ""
+            )
+
+        self.assertEqual({"links": [], "imdb_id": None}, result)
+        mark.assert_not_called()
+
+    def test_missing_flaresolverr_names_the_security_check(self):
+        with (
+            patch.object(rm_downloads._SESSION, "get", side_effect=self.plain_get),
+            patch(
+                "quasarr.downloads.sources.rm.is_flaresolverr_available",
+                return_value=False,
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "security check"):
+                rm_downloads._get_content(shared_state(), "/", 5)
+
+    def test_slow_solve_explains_the_missing_results(self):
+        with (
+            patch.object(rm_downloads._SESSION, "get", side_effect=self.plain_get),
+            self.solve(),
+            patch("quasarr.downloads.sources.rm.SEARCH_FANOUT_DEADLINE_SECONDS", 0),
+            patch("quasarr.downloads.sources.rm.info") as info,
+        ):
+            rm_downloads._get_content(shared_state(), "/", 5)
+
+        self.assertIn("security check", info.call_args.args[0])
 
 
 class SearchFlowTests(unittest.TestCase):

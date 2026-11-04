@@ -25,6 +25,11 @@ TIMEOUT_SLOW_MODE_DEFINITIONS = {
     "feed": {"label": "Feed Timeout", "base_seconds": 30},
     "download": {"label": "Download Timeout", "base_seconds": 30},
     "session": {"label": "Session Timeout", "base_seconds": 30},
+    "flaresolverr": {
+        "label": "FlareSolverr Timeout",
+        "base_seconds": 90,
+        "slow_seconds": 180,
+    },
 }
 
 
@@ -60,22 +65,28 @@ _TIMEOUT_RUNTIME_KEY_TO_NAME = {
     "feed": "FEED_REQUEST_TIMEOUT_SECONDS",
     "download": "DOWNLOAD_REQUEST_TIMEOUT_SECONDS",
     "session": "SESSION_REQUEST_TIMEOUT_SECONDS",
+    "flaresolverr": "FLARESOLVERR_REQUEST_TIMEOUT_SECONDS",
 }
 
 
 def _calculate_timeout_value(timeout_key, slow_mode_enabled):
-    base_seconds = int(TIMEOUT_SLOW_MODE_DEFINITIONS[timeout_key]["base_seconds"])
+    definition = TIMEOUT_SLOW_MODE_DEFINITIONS[timeout_key]
+    base_seconds = int(definition["base_seconds"])
     if slow_mode_enabled:
+        if "slow_seconds" in definition:
+            return int(definition["slow_seconds"])
         return int(base_seconds * TIMEOUT_SLOW_MODE_MULTIPLIER)
     return base_seconds
 
 
 def apply_timeout_slow_mode_settings(settings=None):
-    if not isinstance(settings, dict):
-        settings = {
-            timeout_key: _is_timeout_slow_mode_enabled(timeout_key)
-            for timeout_key in TIMEOUT_SLOW_MODE_DEFINITIONS
-        }
+    merged = {
+        timeout_key: _is_timeout_slow_mode_enabled(timeout_key)
+        for timeout_key in TIMEOUT_SLOW_MODE_DEFINITIONS
+    }
+    if isinstance(settings, dict):
+        merged.update(settings)
+    settings = merged
 
     resolved_timeout_values = {}
     for timeout_key, const_name in _TIMEOUT_RUNTIME_KEY_TO_NAME.items():
@@ -117,6 +128,9 @@ DOWNLOAD_REQUEST_TIMEOUT_SECONDS = int(
 )
 SESSION_REQUEST_TIMEOUT_SECONDS = int(
     TIMEOUT_SLOW_MODE_DEFINITIONS["session"]["base_seconds"]
+)
+FLARESOLVERR_REQUEST_TIMEOUT_SECONDS = int(
+    TIMEOUT_SLOW_MODE_DEFINITIONS["flaresolverr"]["base_seconds"]
 )
 
 # Ceiling for one *arr-facing search or feed response. Radarr and Sonarr disable
