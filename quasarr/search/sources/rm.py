@@ -6,7 +6,10 @@ import html
 import re
 import time
 from datetime import datetime, timedelta, timezone
+from itertools import pairwise
 from urllib.parse import quote_plus
+
+from bs4 import BeautifulSoup
 
 from quasarr.constants import (
     FEED_REQUEST_TIMEOUT_SECONDS,
@@ -20,6 +23,7 @@ from quasarr.constants import (
 from quasarr.downloads.sources.rm import (
     _build_release_page_url,
     _get_base_url,
+    _get_markup,
     _get_page,
 )
 from quasarr.providers import shared_state
@@ -43,6 +47,9 @@ _RELATIVE_TIME_REGEX = re.compile(
     r"(\d+)\s*(second|minute|hour|day|week|month|year)s?", re.I
 )
 _RELATIVE_UNIT_DAYS = {"week": 7, "month": 30, "year": 365}
+_FEED_POST_START_REGEX = re.compile(
+    r"<div\b[^>]*\bclass\s*=\s*[\"']?[^\"'>]*(?<![\w-])blog-post(?![\w-])", re.I
+)
 
 # one result page lists 25 releases; a phrase search is ranked by relevance, so
 # the first pages carry what was asked for
@@ -69,7 +76,7 @@ class Source(AbstractSearchSource):
 
         try:
             items = _parse_feed(
-                _get_page(shared_state, "/", FEED_REQUEST_TIMEOUT_SECONDS)
+                _get_markup(shared_state, "/", FEED_REQUEST_TIMEOUT_SECONDS)
             )
             # single odd posts are skipped; only a feed without any release is broken
             if not items:
@@ -211,9 +218,24 @@ def _release_href(anchor):
     return href if href.startswith("/release/") else None
 
 
-def _parse_feed(soup):
+def _split_feed_posts(markup):
+    """Parse every feed post on its own.
+
+    A stray comment, script or textarea opener in one post's text turns every
+    later post into plain text when the page is parsed as one document.
+    """
+    starts = [match.start() for match in _FEED_POST_START_REGEX.finditer(markup)]
+    for start, end in pairwise([*starts, len(markup)]):
+        post = BeautifulSoup(markup[start:end], "html.parser").select_one(
+            "div.blog-post"
+        )
+        if post:
+            yield post
+
+
+def _parse_feed(markup):
     items = []
-    for post in soup.select("div.blog-post"):
+    for post in _split_feed_posts(markup):
         try:
             anchor = post.select_one("h3 a")
             href = _release_href(anchor)

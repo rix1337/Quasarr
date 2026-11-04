@@ -3,11 +3,12 @@
 # Project by https://github.com/rix1337
 
 import re
+import string
 import time
 from urllib.parse import unquote, urljoin, urlparse
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, UnicodeDammit
 
 from quasarr.constants import (
     DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
@@ -20,6 +21,25 @@ from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostnam
 from quasarr.providers.log import info
 
 _URL_REGEX = re.compile(r"https?://\S+")
+_RAW_TEXT_TAGS = (
+    "script",
+    "style",
+    "textarea",
+    "title",
+    "xmp",
+    "iframe",
+    "noembed",
+    "noframes",
+    "noscript",
+    "plaintext",
+)
+# matched against lowercased markup
+_OPENER_REGEX = re.compile(
+    r"<!--|<!\[cdata\[|<(?:" + "|".join(_RAW_TEXT_TAGS) + r")(?=[\s/>])"
+)
+_OPENER_CLOSERS = {"<!--": "-->", "<![cdata[": "]]>"}
+# str.lower() may change the length of non-ASCII text and misplace the matches
+_ASCII_LOWERCASE = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 
 
 class Source(AbstractDownloadSource):
@@ -94,6 +114,40 @@ _SESSION = requests.Session()
 
 
 def _get_page(shared_state, path, timeout):
+    return BeautifulSoup(_get_markup(shared_state, path, timeout), "html.parser")
+
+
+def _get_markup(shared_state, path, timeout):
+    content = _get_content(shared_state, path, timeout)
+    return _escape_unclosed_openers(UnicodeDammit(content, is_html=True).unicode_markup)
+
+
+def _escape_unclosed_openers(markup):
+    """Escape comment and raw-text openers that are not closed before the next one.
+
+    Page texts (the random banner on every page, release descriptions) may carry
+    raw markup. A stray opener in one of them would turn the rest of the page
+    into plain text and hide every release and link after it.
+    """
+    lowered = markup.translate(_ASCII_LOWERCASE)
+    pieces = []
+    position = 0
+    while match := _OPENER_REGEX.search(lowered, position):
+        opener = match.group(0)
+        closer = _OPENER_CLOSERS.get(opener, f"</{opener[1:]}")
+        end = lowered.find(closer, match.end())
+        next_opener = lowered.find(opener, match.end())
+        if end == -1 or -1 < next_opener < end:
+            pieces.append(markup[position : match.start()] + "&lt;")
+            position = match.start() + 1
+        else:
+            pieces.append(markup[position : end + len(closer)])
+            position = end + len(closer)
+    pieces.append(markup[position:])
+    return "".join(pieces)
+
+
+def _get_content(shared_state, path, timeout):
     base_url = _get_base_url(shared_state)
     if not base_url:
         raise ValueError("Missing hostname configuration")
@@ -111,7 +165,7 @@ def _get_page(shared_state, path, timeout):
         else:
             if response.status_code < 500 or attempt:
                 response.raise_for_status()
-                return BeautifulSoup(response.content, "html.parser")
+                return response.content
         time.sleep(1)
 
 
