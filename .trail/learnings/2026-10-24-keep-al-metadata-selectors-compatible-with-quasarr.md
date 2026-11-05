@@ -3,8 +3,8 @@ title: Keep AL metadata selectors compatible with strict SoupSieve
 author: Quasarr
 date: 2026-10-24
 touches:
-  - quasarr/downloads/sources/al.py
-  - quasarr/search/sources/al.py
+  - quasarr/search/sources/templates/al/download.py
+  - quasarr/search/sources/templates/al/search.py
   - tests/test_al_metadata_parsing.py
 ---
 

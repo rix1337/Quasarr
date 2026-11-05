@@ -15,11 +15,6 @@ from quasarr.constants import (
     SEARCH_CAT_SHOWS_ANIME,
     SEARCH_REQUEST_TIMEOUT_SECONDS,
 )
-from quasarr.downloads.sources.al import (
-    _guess_title,
-    _parse_info_from_download_item,
-    _parse_info_from_feed_entry,
-)
 from quasarr.providers import shared_state
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title, get_year
@@ -36,6 +31,11 @@ from quasarr.providers.utils import (
 from quasarr.providers.xem_metadata import get_season_name
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates.al.download import (
+    _guess_title,
+    _parse_info_from_download_item,
+    _parse_info_from_feed_entry,
+)
 
 
 class Source(AbstractSearchSource):

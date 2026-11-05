@@ -3,7 +3,7 @@ title: Preserve native episode selection and raw season evidence
 date: 2026-10-19
 author: Quasarr
 touches:
-  - quasarr/downloads/sources/al.py
+  - quasarr/search/sources/templates/al/download.py
   - quasarr/search/sources/templates/wx/download.py
   - quasarr/downloads/linkcrypters/hide.py
   - quasarr/downloads/__init__.py

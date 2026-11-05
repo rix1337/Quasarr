@@ -2,7 +2,7 @@
 
 import unittest
 
-from quasarr.downloads.sources.al import _resolve_episode_selection
+from quasarr.search.sources.templates.al.download import _resolve_episode_selection
 
 
 def _details_html(release_id, labels):
