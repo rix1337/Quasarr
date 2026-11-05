@@ -68,7 +68,7 @@ IMDB_IDENTITIES = ("strict", "strict_fill", "fill", "none")
 # exact compares bare hoster names, as "rapidgator" against "RG"
 MIRROR_FILTERS = ("none", "mirror", "url", "exact")
 # scene also drops listing dates and sizes around the name, sanitize does not
-TITLE_CLEANUPS = ("scene", "sanitize", "dots", "none")
+TITLE_CLEANUPS = ("scene", "sanitize", "dots", "spaces", "none")
 DATE_FALLBACKS = ("now", "hour_ago")
 # release checks a search applies on top of the shared title matching
 SEARCH_FILTERS = ("require_quality", "no_spaces", "skip_xxx")
@@ -963,6 +963,8 @@ def _parse_item(item, page_url, listing, hostname, now):
         title = sanitize_title(_LEADING_DATE.sub("", _TRAILING_SIZE.sub("", title)))
     elif listing["title_cleanup"] == "sanitize":
         title = sanitize_title(title)
+    elif listing["title_cleanup"] == "spaces":
+        title = title.replace(" ", ".")
     elif listing["title_cleanup"] == "dots":
         # "Name - Group (2026)" -> "Name-Group.2026"
         title = (

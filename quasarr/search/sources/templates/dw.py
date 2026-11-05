@@ -54,9 +54,9 @@ TEMPLATE = {
 }
 
 
-def download(source, shared_state, url, mirrors, title, password):
+def download(site, shared_state, url, mirrors, title, password):
     """Resolve the AJAX link buttons of a release page."""
-    dw = source.hostname
+    dw = site.hostname
     ajax_url = "https://" + dw + "/wp-admin/admin-ajax.php"
 
     headers = {
@@ -78,7 +78,7 @@ def download(source, shared_state, url, mirrors, title, password):
         info(
             f"Site has been updated. Grabbing download links for {title} not possible!"
         )
-        mark_hostname_issue(source.initials, "download", str(e))
+        mark_hostname_issue(site.initials, "download", str(e))
         return {"links": []}
 
     download_links = []
@@ -126,8 +126,8 @@ def download(source, shared_state, url, mirrors, title, password):
                 download_links.append([link, hoster])
     except Exception as e:
         info(f"Site has been updated. Parsing download links for {title} not possible!")
-        mark_hostname_issue(source.initials, "download", str(e))
+        mark_hostname_issue(site.initials, "download", str(e))
 
     if download_links:
-        clear_hostname_issue(source.initials)
+        clear_hostname_issue(site.initials)
     return {"links": download_links}
