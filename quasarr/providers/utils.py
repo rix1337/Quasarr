@@ -6,6 +6,7 @@ import html
 import json
 import re
 import socket
+import string
 import sys
 import traceback
 import unicodedata
@@ -919,6 +920,52 @@ def extract_client_type(request_from):
         return "magazarr"
 
     return client
+
+
+_RAW_TEXT_TAGS = (
+    "script",
+    "style",
+    "textarea",
+    "title",
+    "xmp",
+    "iframe",
+    "noembed",
+    "noframes",
+    "noscript",
+    "plaintext",
+)
+# matched against lowercased markup
+_OPENER_REGEX = re.compile(
+    r"<!--|<!\[cdata\[|<(?:" + "|".join(_RAW_TEXT_TAGS) + r")(?=[\s/>])"
+)
+_OPENER_CLOSERS = {"<!--": "-->", "<![cdata[": "]]>"}
+# str.lower() may change the length of non-ASCII text and misplace the matches
+_ASCII_LOWERCASE = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
+
+
+def escape_unclosed_openers(markup):
+    """Escape comment and raw-text openers that are not closed before the next one.
+
+    Page texts (the random banner on every page, release descriptions) may carry
+    raw markup. A stray opener in one of them would turn the rest of the page
+    into plain text and hide every release and link after it.
+    """
+    lowered = markup.translate(_ASCII_LOWERCASE)
+    pieces = []
+    position = 0
+    while match := _OPENER_REGEX.search(lowered, position):
+        opener = match.group(0)
+        closer = _OPENER_CLOSERS.get(opener, f"</{opener[1:]}")
+        end = lowered.find(closer, match.end())
+        next_opener = lowered.find(opener, match.end())
+        if end == -1 or -1 < next_opener < end:
+            pieces.append(markup[position : match.start()] + "&lt;")
+            position = match.start() + 1
+        else:
+            pieces.append(markup[position : end + len(closer)])
+            position = end + len(closer)
+    pieces.append(markup[position:])
+    return "".join(pieces)
 
 
 def convert_to_mb(item):

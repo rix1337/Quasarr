@@ -44,6 +44,7 @@ from quasarr.search.sources.helpers import (
     get_sonarr_required_hostnames,
 )
 from quasarr.storage.config import Config
+from quasarr.storage.custom_sources import get_custom_sources
 from quasarr.storage.setup.arr import missing_arr_client_requirement
 from quasarr.storage.setup.radarr import is_radarr_configured
 from quasarr.storage.setup.sonarr import is_sonarr_configured
@@ -120,6 +121,11 @@ def get_api(shared_state_dict, shared_state_lock):
             ):
                 continue
             working_count += 1
+
+        for custom_key in get_custom_sources():
+            total_count += 1
+            if custom_key not in hostname_issues:
+                working_count += 1
 
         # Determine status
         if total_count == 0:

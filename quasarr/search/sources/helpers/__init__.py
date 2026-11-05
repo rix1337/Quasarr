@@ -9,11 +9,13 @@ def get_hostnames():
 
     hostnames = []
     for _, module_name, _ in pkgutil.iter_modules(spec.submodule_search_locations):
-        if module_name == "helpers" or module_name.startswith("_"):
+        if module_name in ("helpers", "templates") or module_name.startswith("_"):
             continue
         hostnames.append(module_name)
 
-    return sorted(hostnames)
+    from quasarr.search.sources.templates import get_template_keys
+
+    return sorted(set(hostnames) | set(get_template_keys()))
 
 
 def get_login_required_hostnames():

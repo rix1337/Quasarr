@@ -10,6 +10,7 @@ import time
 
 from bottle import request, response
 
+from quasarr.api.config.custom_sources import setup_custom_source_routes
 from quasarr.constants import (
     DOWNLOAD_CATEGORIES,
     RECOMMENDED_HOSTERS,
@@ -65,6 +66,8 @@ from quasarr.storage.setup import (
 
 
 def setup_config(app, shared_state):
+    setup_custom_source_routes(app, shared_state)
+
     @app.get("/api/hostname-issues")
     @require_api_key
     def get_hostname_issues_api():

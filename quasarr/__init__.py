@@ -43,6 +43,7 @@ from quasarr.search.sources.helpers import (
     get_sonarr_required_hostnames,
 )
 from quasarr.storage.config import Config, get_clean_hostnames
+from quasarr.storage.custom_sources import get_custom_sources
 from quasarr.storage.setup import (
     flaresolverr_config,
     hostname_credentials_config,
@@ -165,7 +166,7 @@ def run():
             )
 
         hostnames = get_clean_hostnames(shared_state)
-        if not hostnames:
+        if not hostnames and not get_custom_sources():
             hostnames_config(shared_state)
             hostnames = get_clean_hostnames(shared_state)
 

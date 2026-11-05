@@ -21,7 +21,7 @@ def get_source_module_names() -> list[str]:
 
     discovered = []
     for _, module_name, _ in pkgutil.iter_modules(__path__):
-        if module_name == "helpers" or module_name.startswith("_"):
+        if module_name in ("helpers", "templates") or module_name.startswith("_"):
             continue
         discovered.append(module_name)
 
@@ -30,8 +30,13 @@ def get_source_module_names() -> list[str]:
 
 
 def get_sources() -> dict[str, AbstractSearchSource]:
+    from quasarr.search.sources.templates import get_templates
+
+    templates = get_templates()
     if not _sources:
         for module_name in get_source_module_names():
+            if module_name in templates:
+                continue
             try:
                 mod = importlib.import_module(f"{__name__}.{module_name}")
             except Exception as e:
@@ -52,4 +57,6 @@ def get_sources() -> dict[str, AbstractSearchSource]:
                     )
             else:
                 warn(f"Source '{module_name.upper()}' does not expose a Source class")
-    return _sources
+    from quasarr.storage.custom_sources import get_custom_sources
+
+    return {**_sources, **templates, **get_custom_sources()}

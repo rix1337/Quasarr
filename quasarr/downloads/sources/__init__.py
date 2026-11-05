@@ -28,10 +28,16 @@ def get_download_source_module_names() -> list[str]:
 def get_sources() -> dict[str, AbstractDownloadSource]:
     global _sources
 
+    from quasarr.search.sources.templates import get_templates
+    from quasarr.storage.custom_sources import get_custom_sources
+
+    templates = get_templates()
     if _sources:
-        return _sources
+        return {**_sources, **templates, **get_custom_sources()}
 
     for module_name in get_download_source_module_names():
+        if module_name in templates:
+            continue
         try:
             mod = importlib.import_module(f"{__name__}.{module_name}")
         except Exception as e:
@@ -73,4 +79,4 @@ def get_sources() -> dict[str, AbstractDownloadSource]:
 
         _sources[source_key] = source
 
-    return _sources
+    return {**_sources, **templates, **get_custom_sources()}
