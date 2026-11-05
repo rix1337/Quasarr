@@ -5,15 +5,15 @@ import time
 import unittest
 from unittest.mock import ANY, MagicMock, patch
 
-from quasarr.downloads.sources.ff import Source as FfDownloadSource
-from quasarr.downloads.sources.sf import Source as SfDownloadSource
 from quasarr.providers.cloudflare import (
     FlareSolverrResponse,
     LazyFlareSolverrSession,
     _clear_cloudflare_gate_cache,
 )
-from quasarr.search.sources.ff import Source as FfSearchSource
-from quasarr.search.sources.sf import Source as SfSearchSource
+from quasarr.search.sources.templates.ff.download import Source as FfDownloadSource
+from quasarr.search.sources.templates.ff.search import Source as FfSearchSource
+from quasarr.search.sources.templates.sf.download import Source as SfDownloadSource
+from quasarr.search.sources.templates.sf.search import Source as SfSearchSource
 
 
 class FakeResponse:
@@ -93,17 +93,23 @@ class FfSourceTests(unittest.TestCase):
             raise AssertionError(f"Unexpected URL requested: {url}")
 
         with (
-            patch("quasarr.search.sources.ff.requests.get", side_effect=fake_get),
             patch(
-                "quasarr.search.sources.ff.get_localized_title",
+                "quasarr.search.sources.templates.ff.search.requests.get",
+                side_effect=fake_get,
+            ),
+            patch(
+                "quasarr.search.sources.templates.ff.search.get_localized_title",
                 return_value="Synthetic Uemlaut",
             ),
-            patch("quasarr.search.sources.ff.get_recently_searched", return_value={}),
             patch(
-                "quasarr.search.sources.ff.generate_download_link",
+                "quasarr.search.sources.templates.ff.search.get_recently_searched",
+                return_value={},
+            ),
+            patch(
+                "quasarr.search.sources.templates.ff.search.generate_download_link",
                 return_value="download://synthetic",
             ),
-            patch("quasarr.search.sources.ff.clear_hostname_issue"),
+            patch("quasarr.search.sources.templates.ff.search.clear_hostname_issue"),
         ):
             result = FfSearchSource().search(
                 _build_shared_state({"ff": host}),
@@ -163,13 +169,18 @@ class FfSourceTests(unittest.TestCase):
             raise AssertionError(f"Unexpected URL requested: {url}")
 
         with (
-            patch("quasarr.search.sources.ff.requests.get", side_effect=fake_get),
             patch(
-                "quasarr.search.sources.ff.generate_download_link",
+                "quasarr.search.sources.templates.ff.search.requests.get",
+                side_effect=fake_get,
+            ),
+            patch(
+                "quasarr.search.sources.templates.ff.search.generate_download_link",
                 side_effect=lambda *args: f"download://{args[1]}",
             ),
-            patch("quasarr.search.sources.ff.clear_hostname_issue"),
-            patch("quasarr.search.sources.ff.datetime") as fake_datetime,
+            patch("quasarr.search.sources.templates.ff.search.clear_hostname_issue"),
+            patch(
+                "quasarr.search.sources.templates.ff.search.datetime"
+            ) as fake_datetime,
         ):
             fake_datetime.now.return_value.strftime.return_value = "2026-06-24"
             fake_datetime.now.return_value = __import__("datetime").datetime(
@@ -211,13 +222,21 @@ class FfSourceTests(unittest.TestCase):
             raise AssertionError(f"Unexpected URL requested: {url}")
 
         with (
-            patch("quasarr.search.sources.ff.requests.get", side_effect=fake_get),
-            patch("quasarr.search.sources.ff.FEED_REQUEST_TIMEOUT_SECONDS", 1),
             patch(
-                "quasarr.search.sources.ff.time.time",
+                "quasarr.search.sources.templates.ff.search.requests.get",
+                side_effect=fake_get,
+            ),
+            patch(
+                "quasarr.search.sources.templates.ff.search.FEED_REQUEST_TIMEOUT_SECONDS",
+                1,
+            ),
+            patch(
+                "quasarr.search.sources.templates.ff.search.time.time",
                 side_effect=[0, 0, 1.1, 1.1, 1.1],
             ),
-            patch("quasarr.search.sources.ff.datetime") as fake_datetime,
+            patch(
+                "quasarr.search.sources.templates.ff.search.datetime"
+            ) as fake_datetime,
         ):
             fake_datetime.now.return_value.strftime.return_value = "2026-06-24"
             fake_datetime.now.return_value = __import__("datetime").datetime(
@@ -247,7 +266,7 @@ class FfSourceTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.downloads.sources.ff.requests.Session",
+                "quasarr.search.sources.templates.ff.download.requests.Session",
                 return_value=FakeSession(),
             ),
             patch(
@@ -335,9 +354,15 @@ class FfSfCloudflareTests(unittest.TestCase):
             raise AssertionError(f"Unexpected URL requested: {url}")
 
         with (
-            patch("quasarr.search.sources.sf.requests.get", side_effect=fake_get),
-            patch("quasarr.search.sources.sf.get_recently_searched", return_value={}),
-            patch("quasarr.search.sources.sf.warn") as warn_log,
+            patch(
+                "quasarr.search.sources.templates.sf.search.requests.get",
+                side_effect=fake_get,
+            ),
+            patch(
+                "quasarr.search.sources.templates.sf.search.get_recently_searched",
+                return_value={},
+            ),
+            patch("quasarr.search.sources.templates.sf.search.warn") as warn_log,
         ):
             result = SfSearchSource().search(
                 _build_shared_state({"sf": host}),
@@ -362,7 +387,7 @@ class FfSfCloudflareTests(unittest.TestCase):
                 )
                 with (
                     patch(
-                        f"quasarr.search.sources.{initials}.requests.get",
+                        f"quasarr.search.sources.templates.{initials}.search.requests.get",
                         return_value=response,
                     ) as plain_get,
                     patch(
@@ -411,7 +436,7 @@ class FfSfCloudflareTests(unittest.TestCase):
                 solved = FakeResponse(request_url, json_data={"result": []})
                 with (
                     patch(
-                        f"quasarr.search.sources.{initials}.requests.get",
+                        f"quasarr.search.sources.templates.{initials}.search.requests.get",
                         return_value=challenged,
                     ) as plain_get,
                     patch(
@@ -458,7 +483,7 @@ class FfSfCloudflareTests(unittest.TestCase):
                 )
                 with (
                     patch(
-                        f"quasarr.search.sources.{initials}.requests.get",
+                        f"quasarr.search.sources.templates.{initials}.search.requests.get",
                         return_value=challenged,
                     ),
                     patch(
@@ -475,7 +500,7 @@ class FfSfCloudflareTests(unittest.TestCase):
                         "quasarr.providers.cloudflare.flaresolverr_destroy_session"
                     ) as destroy_session,
                     patch(
-                        f"quasarr.search.sources.{initials}.mark_hostname_issue"
+                        f"quasarr.search.sources.templates.{initials}.search.mark_hostname_issue"
                     ) as mark_issue,
                 ):
                     result = source_class().search(
@@ -556,7 +581,7 @@ class FfSfCloudflareTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.downloads.sources.ff.requests.get",
+                "quasarr.search.sources.templates.ff.download.requests.get",
                 return_value=challenged,
             ),
             patch(
@@ -630,9 +655,12 @@ class FfSfCloudflareTests(unittest.TestCase):
             return FlareSolverrResponse(final_url, 200, {}, body)
 
         with (
-            patch("quasarr.downloads.sources.ff.requests.get", side_effect=plain_get),
             patch(
-                "quasarr.downloads.sources.ff.requests.Session",
+                "quasarr.search.sources.templates.ff.download.requests.get",
+                side_effect=plain_get,
+            ),
+            patch(
+                "quasarr.search.sources.templates.ff.download.requests.Session",
                 return_value=FakeSession(),
             ),
             patch(
@@ -716,9 +744,12 @@ class FfSfCloudflareTests(unittest.TestCase):
             return FlareSolverrResponse(final_url, 200, {}, body)
 
         with (
-            patch("quasarr.downloads.sources.sf.requests.get", side_effect=plain_get),
             patch(
-                "quasarr.downloads.sources.sf.requests.Session",
+                "quasarr.search.sources.templates.sf.download.requests.get",
+                side_effect=plain_get,
+            ),
+            patch(
+                "quasarr.search.sources.templates.sf.download.requests.Session",
                 return_value=FakeSession(),
             ),
             patch(
@@ -767,7 +798,7 @@ class FfSfCloudflareTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.search.sources.sf.requests.get",
+                "quasarr.search.sources.templates.sf.search.requests.get",
                 return_value=challenged,
             ),
             patch(
@@ -785,7 +816,7 @@ class FfSfCloudflareTests(unittest.TestCase):
             patch(
                 "quasarr.providers.cloudflare.flaresolverr_destroy_session"
             ) as destroy_session,
-            patch("quasarr.search.sources.sf.mark_hostname_issue"),
+            patch("quasarr.search.sources.templates.sf.search.mark_hostname_issue"),
         ):
             result = SfSearchSource().search(
                 _build_shared_state({"sf": host}),

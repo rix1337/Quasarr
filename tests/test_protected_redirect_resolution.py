@@ -5,10 +5,10 @@ from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
 from quasarr.downloads import download
-from quasarr.downloads.sources.sf import Source as SfSource
 from quasarr.search.sources import templates
 from quasarr.search.sources.helpers import custom_source
 from quasarr.search.sources.templates.by.download import Source as BySource
+from quasarr.search.sources.templates.sf.download import Source as SfSource
 
 
 class FakeResponse:
@@ -354,7 +354,7 @@ class ProtectedRedirectSourceTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.downloads.sources.sf.requests.Session",
+                "quasarr.search.sources.templates.sf.download.requests.Session",
                 return_value=FakeSession(),
             ),
             patch(
@@ -407,7 +407,7 @@ class ProtectedRedirectSourceTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.downloads.sources.sf.requests.Session",
+                "quasarr.search.sources.templates.sf.download.requests.Session",
                 return_value=FakeSession(),
             ),
             patch(
@@ -822,7 +822,7 @@ class ProtectedRedirectDownloadTests(unittest.TestCase):
             hostnames={"sf": "host-sf.invalid"},
             patchers=[
                 patch(
-                    "quasarr.downloads.sources.sf.requests.Session",
+                    "quasarr.search.sources.templates.sf.download.requests.Session",
                     return_value=FakeSession(),
                 ),
                 patch(
