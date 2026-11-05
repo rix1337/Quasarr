@@ -29,6 +29,7 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractSearchSource):
@@ -67,7 +68,7 @@ class Source(AbstractSearchSource):
             warn(f"Unknown search category: {search_category}")
             return releases
 
-        url = f"https://{nx}/api/releases/by-date?page=1&limit=50&type={stype}"
+        url = site_url(shared_state, self.initials, "api_feed", type=stype)
         headers = {
             "User-Agent": shared_state.values["user_agent"],
         }
@@ -93,7 +94,9 @@ class Source(AbstractSearchSource):
                         if base_search_category == SEARCH_CAT_BOOKS:
                             title = normalize_magazine_title(title)
 
-                        source = f"https://{nx}/release/{item['slug']}"
+                        source = site_url(
+                            shared_state, self.initials, "release", slug=item["slug"]
+                        )
                         imdb_id = None
                         mb = convert_to_mb(
                             {
@@ -196,7 +199,7 @@ class Source(AbstractSearchSource):
                 if year := get_year(imdb_id):
                     search_string += f" {year}"
 
-        url = f"https://{nx}/api/search?q={search_string}&page=1"
+        url = site_url(shared_state, self.initials, "api_search", query=search_string)
         headers = {
             "User-Agent": shared_state.values["user_agent"],
         }
@@ -232,7 +235,12 @@ class Source(AbstractSearchSource):
                             title = normalize_magazine_title(title)
 
                         try:
-                            source = f"https://{nx}/release/{item['slug']}"
+                            source = site_url(
+                                shared_state,
+                                self.initials,
+                                "release",
+                                slug=item["slug"],
+                            )
                             release_imdb_id = imdb_id
 
                             mb = convert_to_mb(

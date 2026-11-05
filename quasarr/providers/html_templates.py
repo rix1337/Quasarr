@@ -2,6 +2,7 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+import json
 import time
 
 import quasarr.providers.html_images as images
@@ -576,3 +577,15 @@ def render_fail(message):
         <h2>{message}</h2>
         {button_html}
     """)
+
+
+def json_for_script(value):
+    """JSON that cannot close or break out of the script element holding it."""
+    return (
+        json.dumps(value)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )

@@ -14,6 +14,7 @@ from quasarr.downloads.sources.helpers.redirect import resolve_crypter_redirect
 from quasarr.providers.cloudflare import LazyFlareSolverrSession
 from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractDownloadSource):
@@ -70,7 +71,12 @@ class Source(AbstractDownloadSource):
                 return {"links": [], "imdb_id": imdb_id}
 
             r = cf_session.get(
-                f"https://{host}/api/v1/{token_match.group(1)}?filter=",
+                site_url(
+                    shared_state,
+                    Source.initials,
+                    "api_releases",
+                    token=token_match.group(1),
+                ),
                 headers,
                 DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
                 request_get=requests.get,

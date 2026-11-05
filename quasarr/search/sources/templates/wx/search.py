@@ -11,10 +11,9 @@ from datetime import datetime
 from urllib.parse import urlencode, urlsplit
 
 import requests
-from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
+from bs4 import XMLParsedAsHTMLWarning
 
 from quasarr.constants import (
-    FEED_REQUEST_TIMEOUT_SECONDS,
     SEARCH_CAT_MOVIES,
     SEARCH_CAT_SHOWS,
     SEARCH_CAT_SHOWS_ANIME,
@@ -32,6 +31,7 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 from quasarr.search.sources.templates.wx.download import HIDE_CX_MIRROR_USER_IDS
 
 warnings.filterwarnings(
@@ -47,122 +47,9 @@ class Source(AbstractSearchSource):
     supports_date_numbering = False
     supported_categories = [SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS, SEARCH_CAT_SHOWS_ANIME]
 
-    def feed(
-        self, shared_state: shared_state, start_time: float, search_category: str
-    ) -> list[SearchRelease]:
-        """
-        Fetch latest releases from RSS feed.
-        """
-        releases = []
-        host = shared_state.values["config"]("Hostnames").get(self.initials)
-
-        rss_url = f"https://{host}/rss"
-        headers = {
-            "User-Agent": shared_state.values["user_agent"],
-        }
-
-        try:
-            r = requests.get(
-                rss_url,
-                headers=headers,
-                timeout=FEED_REQUEST_TIMEOUT_SECONDS,
-            )
-            r.raise_for_status()
-
-            soup = BeautifulSoup(r.content, "html.parser")
-            items = soup.find_all("entry")
-
-            if not items:
-                items = soup.find_all("item")
-
-            if not items:
-                warn("No entries found in RSS feed")
-                return releases
-
-            trace(f"Found {len(items)} entries in RSS feed")
-
-            for item in items:
-                try:
-                    title_tag = item.find("title")
-                    if not title_tag:
-                        continue
-
-                    title = title_tag.get_text(strip=True)
-                    if not title:
-                        continue
-
-                    title = html.unescape(title)
-                    title = title.replace("]]>", "").replace("<![CDATA[", "")
-                    title = title.replace(" ", ".")
-
-                    link_tag = item.find("link", rel="alternate")
-                    if link_tag and link_tag.has_attr("href"):
-                        source = link_tag["href"]
-                    else:
-                        link_tag = item.find("link")
-                        if not link_tag:
-                            continue
-                        source = link_tag.get_text(strip=True)
-
-                    if not source:
-                        continue
-
-                    pub_date = item.find("updated") or item.find("pubDate")
-                    if pub_date:
-                        published = pub_date.get_text(strip=True)
-                    else:
-                        # Fallback: use current time if no pubDate found
-                        published = datetime.now().strftime(
-                            "%a, %d %b %Y %H:%M:%S +0000"
-                        )
-
-                    mb = 0
-                    size = 0
-                    imdb_id = None
-                    password = host.upper()
-
-                    link = generate_download_link(
-                        shared_state,
-                        title,
-                        source,
-                        mb,
-                        password,
-                        imdb_id or "",
-                        self.initials,
-                    )
-
-                    releases.append(
-                        {
-                            "details": {
-                                "title": title,
-                                "hostname": self.initials,
-                                "imdb_id": imdb_id,
-                                "link": link,
-                                "size": size,
-                                "date": published,
-                                "source": source,
-                            },
-                            "type": "protected",
-                        }
-                    )
-
-                except Exception as e:
-                    debug(f"Error parsing RSS entry: {e}")
-                    continue
-
-        except Exception as e:
-            error(f"Error loading feed: {e}")
-            mark_hostname_issue(
-                self.initials, "feed", str(e) if "e" in dir() else "Error occurred"
-            )
-            return releases
-
-        elapsed_time = time.time() - start_time
-        debug(f"Time taken: {elapsed_time:.2f}s")
-
-        if releases:
-            clear_hostname_issue(self.initials)
-        return releases
+    def feed(self, shared_state, start_time, search_category):
+        """The template reads WX's feed; this module only searches."""
+        return []
 
     def search(
         self,
@@ -194,12 +81,12 @@ class Source(AbstractSearchSource):
         else:
             debug(f"Using search string directly: '{search_string}'")
 
-        api_url = f"https://api.{host}/start/search"
+        api_url = site_url(shared_state, self.initials, "api_search")
 
         headers = {
             "User-Agent": shared_state.values["user_agent"],
             "Accept": "application/json, text/plain, */*",
-            "Referer": f"https://{host}/search",
+            "Referer": site_url(shared_state, self.initials, "search_page"),
         }
 
         params = {
@@ -264,7 +151,9 @@ class Source(AbstractSearchSource):
 
                     trace(f"Fetching details for UID: {uid}")
 
-                    detail_url = f"https://api.{host}/start/d/{uid}"
+                    detail_url = site_url(
+                        shared_state, self.initials, "api_detail", uid=uid
+                    )
                     detail_r = requests.get(
                         detail_url,
                         headers=headers,
@@ -294,7 +183,7 @@ class Source(AbstractSearchSource):
                     if item_imdb_id is None:
                         item_imdb_id = imdb_id
 
-                    source = f"https://{host}/detail/{uid}"
+                    source = site_url(shared_state, self.initials, "detail", uid=uid)
 
                     main_title = (
                         detail_item.get("fulltitle")
@@ -424,7 +313,15 @@ class Source(AbstractSearchSource):
                                     query = {"release": release_uid}
                                     if episode_candidate:
                                         query.update(season=season, episode=episode)
-                                    release_source = f"https://{host}/detail/{uid}?{urlencode(query)}"
+                                    release_source = (
+                                        site_url(
+                                            shared_state,
+                                            self.initials,
+                                            "detail",
+                                            uid=uid,
+                                        )
+                                        + f"?{urlencode(query)}"
+                                    )
                                 else:
                                     release_source = source
 

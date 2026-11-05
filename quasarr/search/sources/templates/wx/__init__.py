@@ -2,18 +2,40 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
-"""WX as a bundled template whose steps are the site code beside it.
+"""WX as a bundled template whose code steps live in the modules beside it.
 
 WX reads RSS for the feed and a JSON API for search and release details.
 """
-
-from quasarr.search.sources.templates.wx import download as _download
-from quasarr.search.sources.templates.wx import search as _search
 
 TEMPLATE = {
     "name": "WX",
     "language": "de",
     "categories": [2000, 5000, 5070],
+    # one Atom feed lists every kind of release
+    "feeds": [
+        {"category": 2000, "url": "https://{host}/rss"},
+        {"category": 5000, "url": "https://{host}/rss"},
+        {"category": 5070, "url": "https://{host}/rss"},
+    ],
+    "list": {
+        "item": "entry, item",
+        "title": {"selector": "title"},
+        "link": [
+            {"selector": 'link[rel="alternate"]', "attr": "href"},
+            {"selector": "permalink"},
+        ],
+        "date": [{"selector": "updated"}, {"selector": "pubDate"}],
+        "title_cleanup": "spaces",
+        "dedupe": False,
+        "find_imdb": False,
+    },
+    "download": {"password": "hostname_upper"},
+    "urls": {
+        "search_page": "https://{host}/search",
+        "detail": "https://{host}/detail/{uid}",
+        "api_search": "https://api.{host}/start/search",
+        "api_detail": "https://api.{host}/start/d/{uid}",
+    },
     "capabilities": {
         "supports_imdb": True,
         "supports_phrase": False,
@@ -25,38 +47,8 @@ TEMPLATE = {
         "requires_flaresolverr": False,
     },
     "hooks": {
-        "feed": "run_feed",
-        "search": "run_search",
-        "download": "run_download",
-        "package_identity": "run_package_identity",
+        "search": "search",
+        "download": "download",
+        "package_identity": "download",
     },
 }
-
-
-def run_feed(site, shared_state, start_time, search_category):
-    return _search.Source().feed(shared_state, start_time, search_category)
-
-
-def run_search(
-    site,
-    shared_state,
-    start_time,
-    search_category,
-    search_string,
-    season,
-    episode,
-    episode_date=None,
-):
-    return _search.Source().search(
-        shared_state, start_time, search_category, search_string, season, episode
-    )
-
-
-def run_download(site, shared_state, url, mirrors, title, password):
-    return _download.Source().get_download_links(
-        shared_state, url, mirrors, title, password
-    )
-
-
-def run_package_identity(site, url):
-    return _download.Source().get_package_identity(url)

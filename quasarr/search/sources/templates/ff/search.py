@@ -34,6 +34,7 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractSearchSource):
@@ -80,7 +81,9 @@ class Source(AbstractSearchSource):
 
             try:
                 r = cf_session.get(
-                    f"https://{host}/updates/{formatted_date}#list",
+                    site_url(
+                        shared_state, self.initials, "updates", date=formatted_date
+                    ),
                     headers,
                     timeout,
                     request_get=requests.get,
@@ -234,7 +237,9 @@ class Source(AbstractSearchSource):
             search_string = html.unescape(search_string)
 
         headers = {"User-Agent": shared_state.values["user_agent"]}
-        url = f"https://{host}/api/v2/search?q={quote_plus(search_string)}&ql=DE"
+        url = site_url(
+            shared_state, self.initials, "api_search", query=quote_plus(search_string)
+        )
 
         try:
             r = cf_session.get(
@@ -357,7 +362,7 @@ def _load_movie_data(
     if timeout is None:
         return None
 
-    movie_url = f"https://{host}/{movie_id}"
+    movie_url = site_url(shared_state, Source.initials, "movie", movie_id=movie_id)
     try:
         r = cf_session.get(
             movie_url,
@@ -390,7 +395,12 @@ def _load_movie_data(
 
     try:
         r = cf_session.get(
-            f"https://{host}/api/v1/{token_match.group(1)}?filter=",
+            site_url(
+                shared_state,
+                Source.initials,
+                "api_releases",
+                token=token_match.group(1),
+            ),
             headers,
             timeout,
             request_get=requests.get,

@@ -44,6 +44,7 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 
 # Bound how many library items a single feed run queries, keeping RSS sync
 # responsive on large libraries.
@@ -83,7 +84,7 @@ class Source(AbstractSearchSource):
         host = shared_state.values["config"]("Hostnames").get(self.initials)
         if not host:
             return None, None
-        return f"https://api.{host}/api", host
+        return site_url(shared_state, self.initials, "api"), host
 
     def _get(self, api_base, host, path, params, shared_state, timeout):
         if callable(timeout):

@@ -6,6 +6,7 @@
 
 import html
 import re
+import string
 import threading
 import time
 from collections import Counter
@@ -23,6 +24,7 @@ from quasarr.constants import (
     DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
     FEED_REQUEST_TIMEOUT_SECONDS,
     IMDB_REGEX,
+    LINK_PROTECTION_NAMES,
     MONTHS_MAP,
     SEARCH_CAT_BOOKS,
     SEARCH_CAT_MOVIES,
@@ -68,13 +70,14 @@ IMDB_IDENTITIES = ("strict", "strict_fill", "fill", "none")
 # exact compares bare hoster names, as "rapidgator" against "RG"
 MIRROR_FILTERS = ("none", "mirror", "url", "exact")
 # scene also drops listing dates and sizes around the name, sanitize does not
-TITLE_CLEANUPS = ("scene", "sanitize", "dots", "spaces", "none")
+# trim drops a listing date or size stuck to the name and keeps the rest
+TITLE_CLEANUPS = ("trim", "scene", "sanitize", "dots", "spaces", "none")
 DATE_FALLBACKS = ("now", "hour_ago")
 # release checks a search applies on top of the shared title matching
 SEARCH_FILTERS = ("require_quality", "no_spaces", "skip_xxx")
 SEARCH_METHODS = ("get", "post")
 DOWNLOAD_FILTERS = ("known", "all")
-PASSWORD_MODES = ("hostname", "site_name", "none")
+PASSWORD_MODES = ("hostname", "hostname_upper", "site_name", "none")
 LIST_FIELDS = ("title", "link", "size", "date", "imdb", "source", "password")
 REQUIRED_LIST_FIELDS = ("title", "link")
 MAX_BODY_BYTES = 5 * 1024 * 1024
@@ -87,6 +90,8 @@ MAX_REDIRECT_LINKS = 10
 # every followed result page costs a request inside the search budget
 MAX_FOLLOWED_PAGES = 5
 BLOCKED_ERROR = "Security check detected - configure FlareSolverr"
+# the mirror of release pages that the user's own userscript solves
+USERSCRIPT_MIRROR = "userscript"
 _LABEL_SEPARATORS = " \t\r\n:|-\u00a0"
 
 _TEXT_URL = re.compile(r"https?://[^\s<>'\"]+")
@@ -95,6 +100,8 @@ _RSS_LINK_OPEN = re.compile(r"<link>", re.I)
 _RSS_LINK_CLOSE = re.compile(r"</link>", re.I)
 # a size appended to a release name, as in "Name – 14.6 GB"
 _TRAILING_SIZE = re.compile(r"[\s|/–—-]+[\d.,]+\s*[KMGT]i?B\s*$", re.I)
+# quote marks sites put around a release name
+_NAME_QUOTES = " »«‹›“”„\"'"
 # a listing date shown before the release name, as in "05.11.2026 - 13:04 Name"
 _LEADING_DATE = re.compile(
     r"^\s*\d{1,2}\.\d{1,2}\.\d{2,4}(?:\s*[-,]?\s*\d{1,2}:\d{2})?[\s|–—-]+"
@@ -262,7 +269,7 @@ def parse_imdb_id(text):
 # --- Definition validation --------------------------------------------------
 
 
-def _normalize_hostname(value):
+def normalize_hostname(value):
     raw = str(value or "").strip().lower()
     if "://" not in raw:
         raw = f"https://{raw}"
@@ -271,8 +278,15 @@ def _normalize_hostname(value):
         domain = domain[4:]
     if not domain or "." not in domain.strip(".") or domain != domain.strip("."):
         raise DefinitionError("hostname: provide a full domain name")
-    if any(part in SHARE_HOSTERS_LOWERCASE for part in domain.split(".")):
-        raise DefinitionError("hostname: a file hoster cannot be a source")
+    parts = domain.split(".")
+    if any(part in SHARE_HOSTERS_LOWERCASE for part in parts):
+        raise DefinitionError(
+            "hostname: this is a file hoster, not a site that lists releases"
+        )
+    if any(part in LINK_PROTECTION_NAMES for part in parts):
+        raise DefinitionError(
+            "hostname: this is a link protection service, not a site that lists releases"
+        )
     return domain
 
 
@@ -313,6 +327,38 @@ def _require_template(value, name, needs_query=False):
     if needs_query and "{q}" not in template:
         raise DefinitionError(f"{name}: must contain {{q}}")
     return template
+
+
+def _compile_urls(value):
+    """Named site addresses the code of a bundled template requests.
+
+    Each address keeps the site in ``{host}`` (``https://api.{host}/`` is
+    fine) and names what the code fills in, as ``{slug}``.
+    """
+    if not value:
+        return {}
+    if not isinstance(value, dict):
+        raise DefinitionError("urls: must map names to addresses")
+    urls = {}
+    for url_name, template in value.items():
+        label = f"urls.{url_name}"
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", str(url_name)):
+            raise DefinitionError(f"{label}: names use lowercase letters and _")
+        template = str(template or "").strip()
+        scheme, _, rest = template.partition("://")
+        netloc = re.split(r"[/?#]", rest, maxsplit=1)[0]
+        if scheme not in ("https", "http") or "{host}" not in netloc:
+            raise DefinitionError(
+                f"{label}: must start with https:// and name {{host}}"
+            )
+        try:
+            fields = [f for _, f, _, _ in string.Formatter().parse(template) if f]
+        except ValueError as e:
+            raise DefinitionError(f"{label}: {e}") from e
+        if any(not re.fullmatch(r"[a-z][a-z0-9_]*", f) for f in fields):
+            raise DefinitionError(f"{label}: placeholders are {{name}} only")
+        urls[str(url_name)] = template
+    return urls
 
 
 def _compile_selector(value, name, required):
@@ -401,7 +447,7 @@ def _compile_listing(spec, name):
         raise DefinitionError(f"{name}.size: unit must be B, KB, MB, GB or TB")
     # "scene" turns names into dotted release names, "none" keeps the page text
     listing["title_cleanup"] = _require_choice(
-        spec.get("title_cleanup", "scene"), TITLE_CLEANUPS, f"{name}.title_cleanup"
+        spec.get("title_cleanup", "trim"), TITLE_CLEANUPS, f"{name}.title_cleanup"
     )
     listing["dedupe"] = _require_bool(spec.get("dedupe", True), f"{name}.dedupe")
     # releases point back to the page they were found on
@@ -466,7 +512,8 @@ def compile_definition(definition, bundled=False):
         if not isinstance(feed, dict):
             raise DefinitionError(f"feeds[{index}]: must be an object")
         category = feed.get("category")
-        if category not in CUSTOM_CATEGORIES:
+        # built-in sites may also feed subcategories, as anime
+        if category not in (ALL_CATEGORIES if bundled else CUSTOM_CATEGORIES):
             raise DefinitionError(f"feeds[{index}].category: unsupported category")
         if category in compiled_feeds:
             raise DefinitionError(f"feeds[{index}].category: listed twice")
@@ -653,15 +700,17 @@ def compile_definition(definition, bundled=False):
         "redirects": _require_bool(
             download.get("redirects", False), "download.redirects"
         ),
+        # the release page is solved in the browser by the user's own userscript
+        "userscript": _require_bool(
+            download.get("userscript", False), "download.userscript"
+        ),
     }
 
     return {
         "key": key,
         "name": name,
         # bundled templates read the hostname settings on every use
-        "hostname": None
-        if bundled
-        else _normalize_hostname(definition.get("hostname")),
+        "hostname": None if bundled else normalize_hostname(definition.get("hostname")),
         "bundled": bundled,
         "hooks": dict(hooks),
         "capabilities": dict(capabilities),
@@ -690,6 +739,7 @@ def compile_definition(definition, bundled=False):
             definition.get("feed_validate", False), "feed_validate"
         ),
         "search_urls": search_urls,
+        "urls": _compile_urls(definition.get("urls")),
         # Magazarr reads magazine dates only in a few spellings; "search"
         # rewrites search results only, true the feed as well
         "magazine_titles": _require_choice(
@@ -709,7 +759,7 @@ def compile_definition(definition, bundled=False):
 # --- Fetching --------------------------------------------------------------
 
 
-def _is_on_host(url, hostname):
+def is_on_host(url, hostname):
     host = (urlparse(url).hostname or "").lower().removeprefix("www.")
     hostname = (hostname or "").lower().removeprefix("www.")
     return bool(hostname) and (host == hostname or host.endswith(f".{hostname}"))
@@ -964,7 +1014,7 @@ def _resolve_link(page_url, href, hostname):
         return None
     # A release may link straight to its crypter or hoster: grabs then go
     # through the shared crypter detection instead of a release page.
-    if not (_is_on_host(link, hostname) or _is_known_link(link)):
+    if not (is_on_host(link, hostname) or _is_known_link(link)):
         return None
     return link
 
@@ -983,7 +1033,10 @@ def _parse_item(item, page_url, listing, hostname, now):
     title = extract_field(item, listing["title"])
     if not title:
         return None, "title not found"
-    if listing["title_cleanup"] == "scene":
+    if listing["title_cleanup"] == "trim":
+        title = " ".join(_LEADING_DATE.sub("", _TRAILING_SIZE.sub("", title)).split())
+        title = title.strip(_NAME_QUOTES)
+    elif listing["title_cleanup"] == "scene":
         title = sanitize_title(_LEADING_DATE.sub("", _TRAILING_SIZE.sub("", title)))
     elif listing["title_cleanup"] == "sanitize":
         title = sanitize_title(title)
@@ -1244,7 +1297,7 @@ def parse_download_links(markup, page_url, download, hostname=None):
                 return
         elif download["filter"] == "known" and not (
             _is_known_link(url)
-            or (download["redirects"] and hostname and _is_on_host(url, hostname))
+            or (download["redirects"] and hostname and is_on_host(url, hostname))
         ):
             return
         seen.add(url)
@@ -1393,6 +1446,10 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
         )
         return sorted(categories)
 
+    def url(self, name, host=None, **values):
+        """A named address of this site, as its template's code requests it."""
+        return self.spec["urls"][name].format(host=host or self.hostname, **values)
+
     def _url(self, template, query=""):
         return template.replace("{host}", self.hostname).replace(
             "{q}", quote_plus(query)
@@ -1402,6 +1459,8 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
         mode = self.spec["download"]["password"]
         if mode == "hostname":
             return self.hostname
+        if mode == "hostname_upper":
+            return (self.hostname or "").upper()
         if mode == "site_name":
             return (self.hostname or "").split(".")[0]
         return ""
@@ -1480,7 +1539,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             soup = BeautifulSoup(fetched.markup, "html.parser")
             for anchor in follow["selector"].select(soup):
                 target = urljoin(url, anchor.get("href") or "")
-                if _is_on_host(target, self.hostname) and (target, None) not in pages:
+                if is_on_host(target, self.hostname) and (target, None) not in pages:
                     pages.append((target, None))
                 if len(pages) >= follow["limit"]:
                     return pages
@@ -1722,7 +1781,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
 
     def load_download_links(self, shared_state, url):
         """Fetch one release page; returns (links, error, status, imdb_id)."""
-        if not _is_on_host(url, self.hostname):
+        if not is_on_host(url, self.hostname):
             return [], "Release page is not on this site", None, None
         download = self.spec["download"]
         if not (download["selector"] or download["container"] or download["section"]):
@@ -1758,7 +1817,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
         resolved = []
         try:
             for url, mirror in links:
-                if not _is_on_host(url, self.hostname):
+                if not is_on_host(url, self.hostname):
                     resolved.append([url, mirror])
                     continue
                 if len(resolved) >= MAX_REDIRECT_LINKS:
@@ -1782,6 +1841,9 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             return self.hooks["download"](
                 self, shared_state, url, mirrors, title, password
             )
+        if self.spec["download"]["userscript"] and is_on_host(url, self.hostname):
+            # the CAPTCHA page opens this page for the user's own userscript
+            return {"links": [[url, USERSCRIPT_MIRROR]], "protected": True}
         try:
             links, link_error, status, imdb_id = self.load_download_links(
                 shared_state, url

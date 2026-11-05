@@ -31,6 +31,7 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractSearchSource):
@@ -69,7 +70,9 @@ class Source(AbstractSearchSource):
 
             try:
                 r = cf_session.get(
-                    f"https://{sf}/updates/{formatted_date}#list",
+                    site_url(
+                        shared_state, self.initials, "updates", date=formatted_date
+                    ),
                     headers,
                     FEED_REQUEST_TIMEOUT_SECONDS,
                     request_get=requests.get,
@@ -201,7 +204,7 @@ class Source(AbstractSearchSource):
         )
 
         # search API
-        url = f"https://{sf}/api/v2/search?q={search_string}&ql=DE"
+        url = site_url(shared_state, self.initials, "api_search", query=search_string)
         headers = {"User-Agent": shared_state.values["user_agent"]}
 
         try:
@@ -255,7 +258,9 @@ class Source(AbstractSearchSource):
                 entry = {"timestamp": datetime.now()}
 
                 # load series page
-                series_url = f"https://{sf}/{series_id}"
+                series_url = site_url(
+                    shared_state, self.initials, "series", series_id=series_id
+                )
                 try:
                     r = cf_session.get(
                         series_url,
@@ -281,8 +286,13 @@ class Source(AbstractSearchSource):
 
                 # fetch API HTML
                 epoch = str(datetime.now().timestamp()).replace(".", "")[:-3]
-                api_url = (
-                    f"https://{sf}/api/v1/{season_id}/season/ALL?lang=ALL&_={epoch}"
+                api_url = site_url(
+                    shared_state,
+                    self.initials,
+                    "api_season",
+                    season_id=season_id,
+                    season="ALL",
+                    epoch=epoch,
                 )
                 trace(f"Requesting SF API URL: {api_url}")
                 try:

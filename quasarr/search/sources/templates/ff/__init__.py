@@ -2,18 +2,21 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
-"""FF as a bundled template whose steps are the site code beside it.
+"""FF as a bundled template whose code steps live in the modules beside it.
 
 FF passes Cloudflare in a shared solver session and resolves link redirects.
 """
-
-from quasarr.search.sources.templates.ff import download as _download
-from quasarr.search.sources.templates.ff import search as _search
 
 TEMPLATE = {
     "name": "FF",
     "language": "de",
     "categories": [2000, 2040, 2045],
+    "urls": {
+        "updates": "https://{host}/updates/{date}#list",
+        "movie": "https://{host}/{movie_id}",
+        "api_search": "https://{host}/api/v2/search?q={query}&ql=DE",
+        "api_releases": "https://{host}/api/v1/{token}?filter=",
+    },
     "capabilities": {
         "supports_imdb": True,
         "supports_phrase": False,
@@ -24,30 +27,5 @@ TEMPLATE = {
         "invite_only": False,
         "requires_flaresolverr": False,
     },
-    "hooks": {"feed": "run_feed", "search": "run_search", "download": "run_download"},
+    "hooks": {"feed": "search", "search": "search", "download": "download"},
 }
-
-
-def run_feed(site, shared_state, start_time, search_category):
-    return _search.Source().feed(shared_state, start_time, search_category)
-
-
-def run_search(
-    site,
-    shared_state,
-    start_time,
-    search_category,
-    search_string,
-    season,
-    episode,
-    episode_date=None,
-):
-    return _search.Source().search(
-        shared_state, start_time, search_category, search_string, season, episode
-    )
-
-
-def run_download(site, shared_state, url, mirrors, title, password):
-    return _download.Source().get_download_links(
-        shared_state, url, mirrors, title, password
-    )

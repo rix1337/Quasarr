@@ -13,6 +13,7 @@ from quasarr.downloads.sources.helpers.abstract_source import AbstractDownloadSo
 from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import debug, info
 from quasarr.providers.utils import check_links_online_status
+from quasarr.search.sources.templates import site_url
 
 # WX publishes filecrypt and hide.cx as mirror crypters of the same container
 # id. Uploads from these WX user ids are always also published on hide.cx, so
@@ -99,8 +100,6 @@ class Source(AbstractDownloadSource):
           3. green direct links        (no badge of their own; best effort)
           4. first offline-flagged mirror as a last resort
         """
-        host = shared_state.values["config"]("Hostnames").get(Source.initials)
-
         headers = {
             "User-Agent": shared_state.values["user_agent"],
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -134,7 +133,9 @@ class Source(AbstractDownloadSource):
                 info(f"Could not extract slug from URL: {url}")
                 return {"links": []}
 
-            api_url = f"https://api.{host}/start/d/{slug_match.group(1)}"
+            api_url = site_url(
+                shared_state, Source.initials, "api_detail", uid=slug_match.group(1)
+            )
 
             # Update headers for API request
             api_headers = {

@@ -31,6 +31,7 @@ from quasarr.providers.utils import (
 from quasarr.providers.xem_metadata import get_season_name
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 from quasarr.search.sources.templates.al.download import (
     _guess_title,
     _parse_info_from_download_item,
@@ -55,8 +56,6 @@ class Source(AbstractSearchSource):
     ) -> list[SearchRelease]:
         releases = []
 
-        host = shared_state.values["config"]("Hostnames").get(self.initials)
-
         base_search_category = get_base_search_category_id(search_category)
 
         if base_search_category == SEARCH_CAT_MOVIES:
@@ -71,7 +70,7 @@ class Source(AbstractSearchSource):
             r = fetch_via_requests_session(
                 shared_state,
                 method="GET",
-                target_url=f"https://www.{host}/",
+                target_url=site_url(shared_state, self.initials, "home"),
                 timeout=FEED_REQUEST_TIMEOUT_SECONDS,
             )
             r.raise_for_status()
@@ -201,8 +200,6 @@ class Source(AbstractSearchSource):
     ) -> list[SearchRelease]:
         releases = []
 
-        host = shared_state.values["config"]("Hostnames").get(self.initials)
-
         base_search_category = get_base_search_category_id(search_category)
 
         if base_search_category == SEARCH_CAT_MOVIES:
@@ -246,7 +243,9 @@ class Source(AbstractSearchSource):
                 year = get_year(imdb_id)
 
             try:
-                url = f"https://www.{host}/search?q={encoded_search_string}"
+                url = site_url(
+                    shared_state, self.initials, "search", query=encoded_search_string
+                )
                 r = fetch_via_requests_session(
                     shared_state,
                     method="GET",

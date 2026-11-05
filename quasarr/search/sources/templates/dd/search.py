@@ -30,6 +30,7 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractSearchSource):
@@ -133,7 +134,7 @@ class Source(AbstractSearchSource):
                         params["cursor"] = cursor
 
                     r = dd_session.get(
-                        f"https://{dd}/api/releases/search",
+                        site_url(shared_state, self.initials, "api_search"),
                         params=params,
                         headers=headers,
                         timeout=timeout,
@@ -188,7 +189,7 @@ class Source(AbstractSearchSource):
                             )
                             continue
 
-                        source = f"https://{dd}/"
+                        source = site_url(shared_state, self.initials, "home")
                         size_item = _extract_size(release.get("size"))
                         mb = convert_to_mb(size_item) * 1024 * 1024
                         published = _convert_to_rss_date(release.get("when"))

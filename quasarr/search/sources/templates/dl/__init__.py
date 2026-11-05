@@ -2,19 +2,24 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
-"""DL as a bundled template whose steps are the site code beside it.
+"""DL as a bundled template whose code steps live in the modules beside it.
 
 DL is a logged-in forum: search pages through threads and pins posts by
 fragment.
 """
 
-from quasarr.search.sources.templates.dl import download as _download
-from quasarr.search.sources.templates.dl import search as _search
-
 TEMPLATE = {
     "name": "DL",
     "language": "de",
     "categories": [2000, 5000, 3000, 7000],
+    "urls": {
+        "forum_movies": "https://www.{host}/forums/hd.8/?order=post_date&direction=desc",
+        "forum_shows": "https://www.{host}/forums/hd.14/?order=post_date&direction=desc",
+        "forum_music": "https://www.{host}/forums/alben.42/?order=post_date&direction=desc",
+        "forum_books": "https://www.{host}/forums/magazine-zeitschriften.72/?order=post_date&direction=desc",
+        "search": "https://www.{host}/search/search",
+        "search_results": "https://www.{host}/search/{search_id}/",
+    },
     "capabilities": {
         "supports_imdb": True,
         "supports_phrase": True,
@@ -25,36 +30,5 @@ TEMPLATE = {
         "invite_only": False,
         "requires_flaresolverr": False,
     },
-    "hooks": {"feed": "run_feed", "search": "run_search", "download": "run_download"},
+    "hooks": {"feed": "search", "search": "search", "download": "download"},
 }
-
-
-def run_feed(site, shared_state, start_time, search_category):
-    return _search.Source().feed(shared_state, start_time, search_category)
-
-
-def run_search(
-    site,
-    shared_state,
-    start_time,
-    search_category,
-    search_string,
-    season,
-    episode,
-    episode_date=None,
-):
-    return _search.Source().search(
-        shared_state,
-        start_time,
-        search_category,
-        search_string,
-        season,
-        episode,
-        episode_date=episode_date,
-    )
-
-
-def run_download(site, shared_state, url, mirrors, title, password):
-    return _download.Source().get_download_links(
-        shared_state, url, mirrors, title, password
-    )

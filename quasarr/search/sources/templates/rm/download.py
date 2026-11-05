@@ -26,6 +26,7 @@ from quasarr.providers.cloudflare import (
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.log import info
 from quasarr.providers.utils import escape_unclosed_openers, is_flaresolverr_available
+from quasarr.search.sources.templates import site_url
 
 _URL_REGEX = re.compile(r"https?://\S+")
 
@@ -191,7 +192,11 @@ def _build_release_page_url(base_url, slug):
 
 
 def _fetch_release_page(shared_state, slug, timeout):
-    return _get_page(shared_state, f"release/{slug}", timeout)
+    return _get_page(
+        shared_state,
+        site_url(shared_state, Source.initials, "release", slug=slug),
+        timeout,
+    )
 
 
 def _extract_release_slug(url):

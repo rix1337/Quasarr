@@ -12,6 +12,12 @@ touches:
   - quasarr/search/__init__.py
   - quasarr/downloads/__init__.py
   - quasarr/search/sources/templates/__init__.py
+  - quasarr/storage/setup/custom_sources.py
+  - quasarr/storage/setup/sites.py
+  - quasarr/storage/setup/hostnames.py
+  - quasarr/storage/setup/site_editor.py
+  - quasarr/storage/template_overrides.py
+  - quasarr/api/captcha/custom_userscript.py
 ---
 
 ## Decided
@@ -26,13 +32,30 @@ Custom keys are a letter from c to z plus a digit. Built-in keys are two letters
 
 Selectors are suggested, never guessed by the user alone. Every candidate is scored with the same extraction code the source runs, so the coverage shown is what the saved definition achieves. Item containers are found from the release links outward: the container that holds exactly one release link each. The release links are the ones whose text looks like a release name, or links in headings on sites without scene names.
 
-Built-in sites move to bundled templates, one module per two-letter key in the templates package: a `TEMPLATE` definition plus, only where selectors cannot express a step, hook functions in the same module (login sessions, JSON APIs, browser-only flows). Quirks that are data (paths, filters, query rules) extend the engine instead of becoming hooks. A template replaces the old module of the same key, so keys, hostname settings, credentials and grabbed payloads stay valid. Each site migrates in its own commit with full parity to the old module. Bundled templates are read-only; users copy one into a custom source, without its hooks. Templates are Python modules rather than JSON files because the standalone build only collects submodules.
+Built-in sites move to bundled templates, one module per two-letter key in the templates package: a `TEMPLATE` definition plus, only where selectors cannot express a step, a hook (login sessions, JSON APIs, browser-only flows). Quirks that are data (paths, filters, query rules) extend the engine instead of becoming hooks. A template replaces the old module of the same key, so keys, hostname settings, credentials and grabbed payloads stay valid. Each site migrates in its own commit with full parity to the old module. Templates are Python modules rather than JSON files because the standalone build only collects submodules.
 
-In Quasarr 6 every site is a template; module discovery is gone. Sites whose behavior is mostly code (logins, JSON APIs, solver sessions, episode selection) are template packages: `TEMPLATE` plus hook wrappers in the package, with the site code moved unchanged beside it as its search and download modules, so their parity holds by construction. Sites the engine expresses fully are single template modules; when a site needed something new, the engine gained a generic option instead of a hook.
+In Quasarr 6 every site is a template; module discovery is gone. Sites whose behavior is mostly code (logins, JSON APIs, solver sessions, episode selection) are template packages: the site code moved beside `TEMPLATE` as its search and download modules, and a hook names the module (`"search"`) whose `Source` runs that step. The loader builds the calls, passing the episode date only to searches that accept it, so packages hold no wrapper code. The site's addresses live in `TEMPLATE["urls"]` and the code reads them through `site_url`; only logic stays in code. A step the engine expresses fully moves into the template, as WX's feed did. Sites the engine expresses fully are single template modules; when a site needed something new, the engine gained a generic option instead of a hook.
 
 A custom source can be exported as a template module for a pull request only after its live feed and search work, and only with its hostname replaced by `{host}`.
 
+The wizard turns clicks into selectors on the server: a fetched page is parsed once, every element gets a number, and the browser only shows a sanitized copy in a sandboxed frame without scripts, links, forms or external resources. Selectors are built and counted on that same parse, so a browser that repairs markup differently cannot produce a selector the source will not match. Site and user text reaches the page only as text. Field counts only include values that read as their kind (a size, a date, a link), so a wrong pick shows as missing.
+
+Search result pages often differ from the newest-releases page. The wizard loads a real results page and checks whether the newest-releases fields read it; when they do not, the search gets its own fields.
+
+Sites are set up from one page for onboarding and settings. Users paste the hostnames they know; Quasarr opens each one and runs the template detection, adds the built-in matches together and sends only the rest to the wizard. The wizard is for experienced users who found no built-in match, so it is no longer the default path. A built-in site counts as a match only when its template reads the page or the user's list names its key. The two-letter hostname rule alone is weak evidence (most hostnames contain the letters of several keys), so such fits are offered but never preselected.
+
+Hostnames whose labels name a link protection service or a file hoster are refused for built-in and custom sites alike. Labels are compared whole, so a name that only contains such a word stays allowed.
+
+Users may change the data parts of a built-in template (addresses, feeds, selectors, download rules), never its hooks, name or capabilities. Changes are stored apart and laid over the shipped template, so deleting a changed site resets it to the shipped one instead of removing it. A changed or self-made site is the user's to maintain: the UI, the startup log and the issue form say issues about it are not supported. The editor is JSON with live tests per step and sits behind a secondary menu; the guided wizard would drop options it has no field for, so it never edits built-in sites, and it keeps unknown options when it edits an own site or an imported template.
+
+Shared templates import as JSON or as the exported module, read as a Python literal, never run; templates with hooks are refused because code ships only with Quasarr. Sites that need a login cannot be added by users at all: they need Python code through a pull request.
+
+Release pages that only reveal links in a browser can go to the user's own userscript: the definition turns on the `userscript` download option, the release goes to the CAPTCHA queue unfetched, and the CAPTCHA page offers a readable template with fixed input and output stubs. The template has no update URL, so Quasarr never overwrites the user's code, and it works only after the user writes that code.
+
 ## Tried and ruled out
+
+Editing built-in sites in the guided wizard: it rebuilds definitions from its own fields and silently drops filters, labels, parts and cleanups.
+
 
 Grouping repeated elements by their full class list missed real lists. Rows alternate classes, and posts carry per-post and per-genre classes, so no two items share a signature. Single stable classes per container fixed it.
 

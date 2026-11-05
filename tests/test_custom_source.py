@@ -442,7 +442,7 @@ class StorageTests(unittest.TestCase):
         custom_sources.save_definition(make_definition(key=None))
         with sqlite3.connect(self.dbfile) as conn:
             conn.execute("UPDATE custom_sources SET value='broken' WHERE key='c1'")
-        custom_sources._bump_revision()
+        custom_sources.bump_revision()
 
         self.assertEqual(["c2"], list(custom_sources.get_custom_sources()))
         self.assertEqual("broken", self.raw_rows()["c1"])

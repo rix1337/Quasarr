@@ -14,6 +14,7 @@ from quasarr.downloads.sources.helpers.redirect import resolve_crypter_redirect
 from quasarr.providers.cloudflare import LazyFlareSolverrSession
 from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import debug, info, warn
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractDownloadSource):
@@ -94,13 +95,13 @@ class Source(AbstractDownloadSource):
 
             season_id = re.findall(r"initSeason\('(.+?)\',", series_page)[0]
             epoch = str(datetime.now().timestamp()).replace(".", "")[:-3]
-            api_url = (
-                "https://"
-                + sf
-                + "/api/v1/"
-                + season_id
-                + f"/season/{season}?lang=ALL&_="
-                + epoch
+            api_url = site_url(
+                shared_state,
+                Source.initials,
+                "api_season",
+                season_id=season_id,
+                season=season,
+                epoch=epoch,
             )
 
             r = cf_session.get(
@@ -114,13 +115,13 @@ class Source(AbstractDownloadSource):
                 data = r.json()["html"]
             except ValueError:
                 epoch = str(datetime.now().timestamp()).replace(".", "")[:-3]
-                api_url = (
-                    "https://"
-                    + sf
-                    + "/api/v1/"
-                    + season_id
-                    + "/season/ALL?lang=ALL&_="
-                    + epoch
+                api_url = site_url(
+                    shared_state,
+                    Source.initials,
+                    "api_season",
+                    season_id=season_id,
+                    season="ALL",
+                    epoch=epoch,
                 )
                 r = cf_session.get(
                     api_url,

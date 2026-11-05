@@ -325,6 +325,17 @@ def run():
             count_str = f"<y>{set_hostnames_count}</y>/<g>{total_hostnames_count}</g>"
 
         info(f"Hostnames: [{' '.join(hostnames_log)}] {count_str} set")
+        own_sites = get_custom_sources()
+        if own_sites:
+            info(f"Your own sites: [{' '.join(k.upper() for k in sorted(own_sites))}]")
+        from quasarr.search.sources.templates import get_templates, is_modified
+
+        changed = [k.upper() for k in sorted(get_templates()) if is_modified(k)]
+        if changed:
+            warn(
+                f"Changed by you: [{' '.join(changed)}]. Issues about changed sites "
+                "are not supported; reset them under Sites before reporting a problem."
+            )
 
         protected = shared_state.get_db("protected").retrieve_all_titles()
         if protected:

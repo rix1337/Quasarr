@@ -33,6 +33,7 @@ from quasarr.providers.utils import (
 from quasarr.providers.xem_metadata import get_season_name
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 from quasarr.search.sources.templates.at.download import (
     _build_release_info_from_title,
     _extract_direct_links_from_anchors,
@@ -84,8 +85,8 @@ class Source(AbstractSearchSource):
         try:
             entries = _load_entries(
                 shared_state,
-                f"https://{host}/",
-                f"https://{host}/?disp=attachments",
+                site_url(shared_state, self.initials, "feed"),
+                site_url(shared_state, self.initials, "feed_files"),
                 FEED_REQUEST_TIMEOUT_SECONDS,
             )
         except Exception as e:
@@ -173,8 +174,8 @@ class Source(AbstractSearchSource):
                 query = quote_plus(variant["query"])
                 entries = _load_entries(
                     shared_state,
-                    f"https://{host}/search?q={query}",
-                    f"https://{host}/search?q={query}&disp=attachments",
+                    site_url(shared_state, self.initials, "search", query=query),
+                    site_url(shared_state, self.initials, "search_files", query=query),
                     SEARCH_REQUEST_TIMEOUT_SECONDS,
                 )
             except Exception as e:

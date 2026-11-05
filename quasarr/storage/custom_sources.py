@@ -34,14 +34,14 @@ def _db():
     return DataBase(TABLE)
 
 
-def _current_revision():
+def current_revision():
     try:
         return shared_state.values.get(REVISION_KEY) or 0
     except Exception:
         return 0
 
 
-def _bump_revision():
+def bump_revision():
     revision = time.time_ns()
     if shared_state.lock is None:
         shared_state.values[REVISION_KEY] = revision
@@ -83,7 +83,7 @@ def get_custom_sources():
 
     if "dbfile" not in shared_state.values:
         return {}
-    revision = _current_revision()
+    revision = current_revision()
     with _cache_lock:
         if _cache["revision"] == revision:
             return _cache["sources"]
@@ -126,7 +126,7 @@ def save_definition(definition):
     definition.setdefault("enabled", True)
     compile_definition(definition)
     db.update_store(definition["key"], encrypt_secret(json.dumps(definition)))
-    _bump_revision()
+    bump_revision()
     return definition
 
 
@@ -136,5 +136,5 @@ def delete_definition(key):
     if key == _NEXT_INDEX_KEY or db.retrieve(key) is None:
         return False
     db.delete(key)
-    _bump_revision()
+    bump_revision()
     return True

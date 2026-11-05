@@ -21,11 +21,11 @@ from quasarr.search.sources.helpers.custom_source import (
     _SIZE_REGEX,
     _compile_field,
     _is_known_link,
-    _is_on_host,
     _resolve_link,
     describe_report,
     extract_field,
     is_feed_markup,
+    is_on_host,
     normalize_feed_markup,
     parse_date,
     parse_imdb_id,
@@ -34,6 +34,7 @@ from quasarr.search.sources.helpers.custom_source import (
 )
 
 MIN_ITEMS = 3
+_ISO_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}[T ]\d{1,2}:\d{2}")
 _ACCOUNT_FIELD = re.compile(r"login|user|pass|mail|name", re.I)
 _RELEASE_TAGS = {
     "german",
@@ -493,6 +494,21 @@ def suggest_date(items, page_url, hostname):
     specs = []
     if any(item.find("time", datetime=True) for item in items):
         specs.append({"selector": "time[datetime]", "attr": "datetime"})
+    # machine-readable timestamps in attributes carry the time the text omits
+    attributes = Counter()
+    for item in items[:5]:
+        for element in item.find_all(True):
+            for name, value in element.attrs.items():
+                if name in ("class", "href", "src", "data-q") or not isinstance(
+                    value, str
+                ):
+                    continue
+                if _ISO_TIMESTAMP.match(value.strip()):
+                    attributes[(build_selector(element, item), name)] += 1
+    for (selector, name), _ in attributes.most_common(2):
+        specs.insert(
+            0, {"selector": selector, "attr": name} if selector else {"attr": name}
+        )
     labels = Counter()
     selectors = Counter()
     for item in items:
@@ -685,7 +701,7 @@ def suggest_search_url(soup, page_url, hostname):
         ):
             continue
         action = urljoin(page_url, form.get("action") or page_url)
-        if not _is_on_host(action, hostname):
+        if not is_on_host(action, hostname):
             continue
         path = urlparse(action).path or "/"
         fields = [f"{field['name']}={{q}}"] + [
@@ -759,7 +775,7 @@ def suggest_download(markup, page_url, hostname=None):
         known = [
             a
             for a in anchors
-            if _is_on_host(urljoin(page_url, a["href"]), hostname) and _hoster_named(a)
+            if is_on_host(urljoin(page_url, a["href"]), hostname) and _hoster_named(a)
         ]
         redirects = bool(known)
     if not known:
@@ -939,7 +955,10 @@ def discover_search(shared_state, hostname, feed_url, listing, fetch=None):
             "error": "No search URL answered the query",
         }
 
-    mode, mode_note = "title", "No release on the feed carries an IMDb ID"
+    mode, mode_note = (
+        "title",
+        "No release on the feed shows an IMDb ID, so Quasarr searches by title",
+    )
     imdb_row = next((r for r in feed_rows if r["imdb_id"]), None)
     if imdb_row and time.time() < deadline:
         url, form = _search_request(found["search"], hostname, imdb_row["imdb_id"])
@@ -959,9 +978,11 @@ def discover_search(shared_state, hostname, feed_url, listing, fetch=None):
                 for r in rows
             )
         if imdb_hits:
-            mode, mode_note = "imdb", "The site finds releases by IMDb ID"
+            mode, mode_note = "imdb", "The site also finds releases by their IMDb ID"
         else:
-            mode_note = "IMDb IDs return nothing; Quasarr searches by title"
+            mode_note = (
+                "The site finds nothing for IMDb IDs, so Quasarr searches by title"
+            )
 
     return {
         "success": True,
@@ -1100,3 +1121,275 @@ def export_template(shared_state, definition):
         "path": "quasarr/search/sources/templates/<two-letter key>.py",
         "module": module,
     }
+
+
+# --- Page picker ------------------------------------------------------------------
+
+# elements that run code, load resources or submit data: never shown in a preview
+_UNSAFE_TAGS = (
+    "script",
+    "noscript",
+    "iframe",
+    "frame",
+    "frameset",
+    "object",
+    "embed",
+    "applet",
+    "base",
+    "meta",
+    "link",
+    "form",
+    "input",
+    "button",
+    "textarea",
+    "select",
+    "option",
+    "template",
+    "svg",
+    "math",
+    "audio",
+    "video",
+    "source",
+    "track",
+    "canvas",
+    "portal",
+    "dialog",
+    "slot",
+)
+_URL_ATTRIBUTES = (
+    "href",
+    "src",
+    "srcset",
+    "action",
+    "formaction",
+    "poster",
+    "background",
+    "xlink:href",
+    "data",
+    "codebase",
+    "cite",
+    "ping",
+    "lowsrc",
+    "dynsrc",
+)
+PREVIEW_CSP = (
+    "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'"
+)
+_PREVIEW_STYLE = """
+[data-q]{cursor:crosshair}
+.q-hover{outline:2px dashed #f59f00 !important;outline-offset:1px}
+.q-item{outline:2px solid #0d6efd !important;outline-offset:2px}
+.q-field{background:rgba(255,193,7,.35) !important;box-shadow:0 0 0 2px #f59f00 inset}
+.q-picked{background:rgba(25,135,84,.35) !important;box-shadow:0 0 0 2px #198754 inset}
+"""
+
+
+def annotate_page(markup):
+    """Parse a page once and number its elements for click-to-pick.
+
+    The numbers are only stored on this parse, so selectors built from a click
+    are checked against exactly the tree the source runs on.
+    """
+    soup = BeautifulSoup(normalize_feed_markup(markup), "html.parser")
+    for index, element in enumerate(soup.find_all(True)):
+        element["data-q"] = str(index)
+    return soup
+
+
+def preview_html(soup):
+    """A copy of an annotated page that cannot run code or load anything."""
+    import copy
+
+    page = copy.copy(soup)
+    for element in page.find_all(_UNSAFE_TAGS):
+        element.decompose()
+    for element in page.find_all(True):
+        for attribute in list(element.attrs):
+            name = attribute.lower()
+            if (
+                name.startswith("on")
+                or name in _URL_ATTRIBUTES
+                or name in ("srcdoc", "target", "style", "id")
+            ):
+                del element[attribute]
+    body = page.body or page
+    styles = "".join(str(tag) for tag in page.find_all("style"))
+    content = "".join(str(child) for child in body.children if child.name != "style")
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        f'<meta http-equiv="Content-Security-Policy" content="{PREVIEW_CSP}">'
+        f"{styles}<style>{_PREVIEW_STYLE}</style></head><body>{content}</body></html>"
+    )
+
+
+def element_by_q(soup, q):
+    return soup.find(attrs={"data-q": str(q)})
+
+
+def q_of(element):
+    return element.get("data-q") if element is not None else None
+
+
+def _contains(container, element):
+    return container is element or any(
+        parent is container for parent in element.parents
+    )
+
+
+def pick_item(soup, q, page_url, hostname, min_items=1):
+    """The release container around a clicked element."""
+    element = element_by_q(soup, q)
+    if element is None:
+        return None
+    for candidate in suggest_items(soup, page_url, hostname, min_items):
+        try:
+            matches = soupsieve.select(candidate["selector"], soup)
+        except Exception:
+            continue
+        if any(_contains(match, element) for match in matches):
+            return {"selector": candidate["selector"], "count": len(matches)}
+    # no repeating container: use the clicked element's own stable selector
+    for node in [element, *element.parents]:
+        if not isinstance(node, Tag) or node.name in ("body", "html", "[document]"):
+            break
+        for selector in _container_selectors(node):
+            matches = soupsieve.select(selector, soup)
+            if len(matches) >= 2 and node in matches:
+                return {"selector": selector, "count": len(matches)}
+    return {"selector": build_selector(element, soup), "count": 1}
+
+
+def pick_field(soup, q, item_selector, field, page_url, hostname):
+    """A field selector, relative to its release, built from one click."""
+    element = element_by_q(soup, q)
+    if element is None:
+        return {"error": "The page changed. Load it again."}
+    try:
+        items = soupsieve.select(item_selector, soup)
+    except Exception:
+        return {"error": "The release block selector is not valid."}
+    container = next((item for item in items if _contains(item, element)), None)
+    if container is None:
+        return {"error": "Click inside one of the highlighted releases."}
+    target = element
+    spec = {}
+    if field in ("link", "source"):
+        target = element if element.name == "a" else element.find_parent("a")
+        if target is None or not _contains(container, target):
+            target = element.find("a", href=True) or None
+        if target is None:
+            return {"error": "That is not a link. Click the release name or its link."}
+        spec["attr"] = "href"
+    elif field == "date" and element.get("datetime"):
+        spec["attr"] = "datetime"
+    selector = build_selector(target, container)
+    if selector:
+        spec["selector"] = selector
+    result = _evaluate(items[:SAMPLE_ITEMS], spec, field, page_url, hostname)
+    return {"spec": spec, "result": result}
+
+
+def highlight(soup, item_selector, fields, page_url="", hostname=""):
+    """Element numbers a listing reads, to outline them in the preview.
+
+    A field only counts where its value also reads as that kind of value, so
+    a size picked on a date shows up as missing instead of as found.
+    """
+    from quasarr.search.sources.helpers.custom_source import _compile_field
+
+    try:
+        items = soupsieve.select(item_selector, soup) if item_selector else []
+    except Exception:
+        return {"error": "The release block selector is not valid."}
+    marked = {"items": [q_of(item) for item in items], "fields": {}}
+    for name, spec in (fields or {}).items():
+        try:
+            field = _compile_field(spec, name, "href" if name == "link" else "text")
+        except Exception as e:
+            marked["fields"][name] = {"error": str(e)}
+            continue
+        found = []
+        for item in items:
+            base = field["within"].closest(item) if field.get("within") else item
+            if base is None:
+                continue
+            element = field["selector"].select_one(base) if field["selector"] else base
+            if element is None or not q_of(element):
+                continue
+            if _reads(item, field, name, page_url, hostname):
+                found.append(q_of(element))
+        marked["fields"][name] = found
+    return marked
+
+
+def _reads(item, field, name, page_url, hostname):
+    raw = extract_field(item, field)
+    if not raw:
+        return False
+    if name == "size":
+        return parse_size(raw, field["unit"]) is not None
+    if name == "date":
+        return parse_date(raw, field["format"]) is not None
+    if name == "link":
+        return _resolve_link(page_url, raw, hostname) is not None
+    if name == "imdb":
+        return parse_imdb_id(raw) is not None
+    return True
+
+
+def _template_from_module(text):
+    """The TEMPLATE literal of an exported template module, read without running it."""
+    import ast
+
+    from quasarr.search.sources.helpers.custom_source import DefinitionError
+
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError) as e:
+        raise DefinitionError("Neither JSON nor a template file") from e
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            getattr(target, "id", None) == "TEMPLATE" for target in node.targets
+        ):
+            try:
+                return ast.literal_eval(node.value)
+            except (ValueError, TypeError, SyntaxError, RecursionError) as e:
+                raise DefinitionError("TEMPLATE must be plain data") from e
+    raise DefinitionError("The file has no TEMPLATE")
+
+
+def import_template(text):
+    """A definition from shared JSON or an exported template module.
+
+    Templates that link code ship with Quasarr only, so they are refused here.
+    """
+    import json
+
+    from quasarr.search.sources.helpers.custom_source import (
+        DefinitionError,
+        compile_definition,
+    )
+
+    text = str(text or "").strip()
+    if len(text) > 200_000:
+        raise DefinitionError("The template is too large")
+    try:
+        definition = json.loads(text)
+    except ValueError:
+        definition = None
+    if definition is None:
+        definition = _template_from_module(text)
+    if not isinstance(definition, dict):
+        raise DefinitionError("The template must be an object")
+    if definition.get("hooks"):
+        raise DefinitionError(
+            "This template needs Quasarr's own code and can only ship with Quasarr"
+        )
+    definition = {
+        k: v
+        for k, v in definition.items()
+        if k not in ("key", "hostname", "schema", "enabled")
+    }
+    # the placeholders only let the engine check everything else
+    compile_definition({**definition, "key": "c1", "hostname": "example.invalid"})
+    return definition

@@ -29,6 +29,7 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractSearchSource):
@@ -52,7 +53,7 @@ class Source(AbstractSearchSource):
         headers = {"User-Agent": shared_state.values["user_agent"]}
 
         for days in range(4):
-            url = f"https://{sj_host}/api/releases/latest/{days}"
+            url = site_url(shared_state, self.initials, "api_latest", days=days)
 
             try:
                 r = requests.get(
@@ -82,7 +83,9 @@ class Source(AbstractSearchSource):
                     if not slug:
                         continue
 
-                    series_url = f"https://{sj_host}/serie/{slug}"
+                    series_url = site_url(
+                        shared_state, self.initials, "series", slug=slug
+                    )
 
                     mb = 0
                     size = 0
@@ -159,7 +162,7 @@ class Source(AbstractSearchSource):
         )
 
         headers = {"User-Agent": shared_state.values["user_agent"]}
-        search_url = f"https://{sj_host}/serie/search"
+        search_url = site_url(shared_state, self.initials, "series_search")
         results = []
         for query_string in query_strings:
             try:
@@ -224,7 +227,9 @@ class Source(AbstractSearchSource):
                     continue
 
                 media_id = media_id_match.group(1)
-                api_url = f"https://{sj_host}/api/media/{media_id}/releases"
+                api_url = site_url(
+                    shared_state, self.initials, "api_media_releases", media_id=media_id
+                )
 
                 r = requests.get(
                     api_url,

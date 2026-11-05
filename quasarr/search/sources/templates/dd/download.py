@@ -10,6 +10,7 @@ from quasarr.providers.sessions.dd import (
     create_and_persist_session,
     retrieve_and_validate_session,
 )
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractDownloadSource):
@@ -54,7 +55,7 @@ class Source(AbstractDownloadSource):
                     params["cursor"] = cursor
 
                 r = dd_session.get(
-                    f"https://{dd}/api/releases/search",
+                    site_url(shared_state, Source.initials, "api_search"),
                     params=params,
                     headers=headers,
                     timeout=DOWNLOAD_REQUEST_TIMEOUT_SECONDS,

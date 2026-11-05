@@ -2,19 +2,22 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
-"""AT as a bundled template whose steps are the site code beside it.
+"""AT as a bundled template whose code steps live in the modules beside it.
 
 AT lists anime releases with per-episode packs and resolves several hosters on
 its own release pages.
 """
 
-from quasarr.search.sources.templates.at import download as _download
-from quasarr.search.sources.templates.at import search as _search
-
 TEMPLATE = {
     "name": "AT",
     "language": "en",
     "categories": [2000, 5000, 5070],
+    "urls": {
+        "feed": "https://{host}/",
+        "feed_files": "https://{host}/?disp=attachments",
+        "search": "https://{host}/search?q={query}",
+        "search_files": "https://{host}/search?q={query}&disp=attachments",
+    },
     "capabilities": {
         "supports_imdb": True,
         "supports_phrase": True,
@@ -25,30 +28,5 @@ TEMPLATE = {
         "invite_only": False,
         "requires_flaresolverr": False,
     },
-    "hooks": {"feed": "run_feed", "search": "run_search", "download": "run_download"},
+    "hooks": {"feed": "search", "search": "search", "download": "download"},
 }
-
-
-def run_feed(site, shared_state, start_time, search_category):
-    return _search.Source().feed(shared_state, start_time, search_category)
-
-
-def run_search(
-    site,
-    shared_state,
-    start_time,
-    search_category,
-    search_string,
-    season,
-    episode,
-    episode_date=None,
-):
-    return _search.Source().search(
-        shared_state, start_time, search_category, search_string, season, episode
-    )
-
-
-def run_download(site, shared_state, url, mirrors, title, password):
-    return _download.Source().get_download_links(
-        shared_state, url, mirrors, title, password
-    )

@@ -44,6 +44,7 @@ from quasarr.providers.sessions.al import (
 )
 from quasarr.providers.statistics import StatsHelper
 from quasarr.providers.utils import is_flaresolverr_available
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractDownloadSource):
@@ -115,7 +116,7 @@ class Source(AbstractDownloadSource):
             )
             b64 = base64.b64encode(raw_request.encode("ascii")).decode("ascii")
 
-            post_url = f"https://www.{al}/ajax/captcha"
+            post_url = site_url(shared_state, Source.initials, "captcha")
             ajax_headers = _build_ajax_headers()
             captcha_headers = _build_captcha_headers(al, url)
             payload = {"enc": b64, "response": "nocaptcha"}

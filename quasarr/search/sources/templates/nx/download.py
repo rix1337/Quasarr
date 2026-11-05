@@ -14,6 +14,7 @@ from quasarr.downloads.sources.helpers.abstract_source import AbstractDownloadSo
 from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import info
 from quasarr.providers.sessions.nx import retrieve_and_validate_session
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractDownloadSource):
@@ -52,7 +53,7 @@ class Source(AbstractDownloadSource):
 
         try:
             r = nx_session.get(
-                f"https://{nx}/api/releases/{slug}",
+                site_url(shared_state, Source.initials, "api_release", slug=slug),
                 headers=headers,
                 timeout=DOWNLOAD_REQUEST_TIMEOUT_SECONDS,
             )

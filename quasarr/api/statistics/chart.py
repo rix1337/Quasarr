@@ -210,8 +210,8 @@ def render_history_charts(history):
     )
     issues = _chart(
         "iss",
-        "Daily hostname availability, last 30 days",
-        "No hostname data recorded yet.",
+        "Daily site availability, last 30 days",
+        "No site data recorded yet.",
         history["days"],
         {
             "hosts": history["hosts"],
@@ -219,10 +219,10 @@ def render_history_charts(history):
             "timeouts": history["timeouts"],
         },
         [
-            ["hosts", "Configured hostnames", "#22c55e"],
-            ["issues", "Hostnames with errors", "#ef4444"],
-            ["timeouts", "Hostnames with timeouts", "#f59e0b"],
+            ["hosts", "Sites added", "#22c55e"],
+            ["issues", "Sites with errors", "#ef4444"],
+            ["timeouts", "Sites with timeouts", "#f59e0b"],
         ],
         {"issues": history["issue_hosts"], "timeouts": history["timeout_hosts"]},
     )
-    return f"{_STYLE}<h3>📦 Downloads</h3>{downloads}<h3>🧩 CAPTCHAs</h3>{captchas}<h3>🌐 Hostnames</h3>{issues}"
+    return f"{_STYLE}<h3>📦 Downloads</h3>{downloads}<h3>🧩 CAPTCHAs</h3>{captchas}<h3>🌐 Sites</h3>{issues}"

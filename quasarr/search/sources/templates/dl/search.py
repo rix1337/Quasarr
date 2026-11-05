@@ -44,6 +44,7 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractSearchSource):
@@ -73,13 +74,13 @@ class Source(AbstractSearchSource):
         base_search_category = get_base_search_category_id(search_category)
 
         if base_search_category == SEARCH_CAT_BOOKS:
-            forum = "magazine-zeitschriften.72"
+            forum = "forum_books"
         elif base_search_category == SEARCH_CAT_MOVIES:
-            forum = "hd.8"
+            forum = "forum_movies"
         elif base_search_category == SEARCH_CAT_SHOWS:
-            forum = "hd.14"
+            forum = "forum_shows"
         elif base_search_category == SEARCH_CAT_MUSIC:
-            forum = "alben.42"
+            forum = "forum_music"
         else:
             warn(f"Unknown search category: {search_category}")
             return releases
@@ -94,9 +95,7 @@ class Source(AbstractSearchSource):
                 warn(f"Could not retrieve valid session for {host}")
                 return releases
 
-            forum_url = (
-                f"https://www.{host}/forums/{forum}/?order=post_date&direction=desc"
-            )
+            forum_url = site_url(shared_state, self.initials, forum)
             r = sess.get(forum_url, timeout=FEED_REQUEST_TIMEOUT_SECONDS)
             r.raise_for_status()
 
@@ -210,13 +209,15 @@ class Source(AbstractSearchSource):
         try:
             if page_num == 1:
                 search_params = {"keywords": query_string, "c[title_only]": 1}
-                search_url = f"https://www.{host}/search/search"
+                search_url = site_url(shared_state, Source.initials, "search")
             else:
                 if not search_id:
                     return page_releases, None, ()
 
                 search_params = {"page": page_num, "q": query_string, "o": "relevance"}
-                search_url = f"https://www.{host}/search/{search_id}/"
+                search_url = site_url(
+                    shared_state, Source.initials, "search_results", search_id=search_id
+                )
 
             search_response = fetch_via_requests_session(
                 shared_state,

@@ -7,7 +7,7 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 from itertools import pairwise
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -33,6 +33,7 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 from quasarr.search.sources.templates.rm.download import (
     _build_release_page_url,
     _get_base_url,
@@ -77,7 +78,11 @@ class Source(AbstractSearchSource):
 
         try:
             items = _parse_feed(
-                _get_markup(shared_state, "/", FEED_REQUEST_TIMEOUT_SECONDS)
+                _get_markup(
+                    shared_state,
+                    _site_path(shared_state, "home"),
+                    FEED_REQUEST_TIMEOUT_SECONDS,
+                )
             )
             # single odd posts are skipped; only a feed without any release is broken
             if not items:
@@ -154,6 +159,12 @@ def _require_layout(soup, selector):
     if not soup.select_one(selector):
         raise ValueError(f"Unexpected page layout (missing {selector})")
     return soup
+
+
+def _site_path(shared_state, name, **values):
+    """The path of a template address; RM requests it on its normalized host."""
+    parts = urlsplit(site_url(shared_state, Source.initials, name, **values))
+    return parts.path + (f"?{parts.query}" if parts.query else "")
 
 
 def _title_fits_category(base_category, title):
@@ -318,7 +329,11 @@ def _parse_release_results(soup):
 
 def _search_by_imdb(shared_state, imdb_id):
     soup = _require_layout(
-        _get_page(shared_state, f"/search/{imdb_id}", SEARCH_REQUEST_TIMEOUT_SECONDS),
+        _get_page(
+            shared_state,
+            _site_path(shared_state, "search_imdb", imdb_id=imdb_id),
+            SEARCH_REQUEST_TIMEOUT_SECONDS,
+        ),
         "div.lists-list",
     )
 
@@ -356,9 +371,11 @@ def _search_by_phrase(shared_state, search_string, season, episode):
     items = []
 
     for page in range(1, SEARCH_RESULT_PAGES + 1):
-        path = f"/search/{query}/releases/query"
-        if page > 1:
-            path += f"/b/{page}"
+        path = (
+            _site_path(shared_state, "search_page", query=query, page=page)
+            if page > 1
+            else _site_path(shared_state, "search", query=query)
+        )
         page_items = _parse_release_results(
             _require_layout(
                 _get_page(shared_state, path, SEARCH_REQUEST_TIMEOUT_SECONDS),

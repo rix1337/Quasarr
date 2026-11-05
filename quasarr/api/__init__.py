@@ -131,23 +131,19 @@ def get_api(shared_state_dict, shared_state_lock):
         if total_count == 0:
             hostname_status_class = "error"
             hostname_status_emoji = "⚫️"
-            hostname_status_text = "No hostnames configured"
+            hostname_status_text = "No sites added"
         elif working_count == 0:
             hostname_status_class = "error"
             hostname_status_emoji = "🔴"
-            hostname_status_text = f"0/{total_count} hostnames operational"
+            hostname_status_text = f"0/{total_count} sites working"
         elif working_count < total_count:
             hostname_status_class = "warning"
             hostname_status_emoji = "🟡"
-            hostname_status_text = (
-                f"{working_count}/{total_count} hostnames operational"
-            )
+            hostname_status_text = f"{working_count}/{total_count} sites working"
         else:
             hostname_status_class = "success"
             hostname_status_emoji = "🟢"
-            hostname_status_text = (
-                f"{working_count}/{total_count} hostnames operational"
-            )
+            hostname_status_text = f"{working_count}/{total_count} sites working"
 
         # CAPTCHA banner
         captcha_hint = ""
@@ -174,7 +170,7 @@ def get_api(shared_state_dict, shared_state_lock):
                     {jd_status["status_text"]}
                 </span>
                 <span class="status-pill {hostname_status_class}"
-                      title="Hostnames Status">
+                      title="Sites status">
                     {hostname_status_emoji} {hostname_status_text}
                 </span>
             </div>
@@ -355,7 +351,7 @@ def get_api(shared_state_dict, shared_state_lock):
             </a>
             <a href="/hostnames" class="action-card">
                 <span class="action-icon">🌐</span>
-                <span class="action-label">Hostnames</span>
+                <span class="action-label">Sites</span>
             </a>
             <a href="/categories" class="action-card">
                 <span class="action-icon">📁</span>

@@ -9,6 +9,7 @@ from urllib import parse
 
 import quasarr
 from quasarr.constants import (
+    LINK_PROTECTION_NAMES,
     SHARE_HOSTERS_LOWERCASE,
 )
 from quasarr.providers.log import debug, error, info, warn
@@ -73,6 +74,14 @@ def extract_valid_hostname(url, shorthand):
 
         if domain.startswith(".") or domain.endswith(".") or "." not in domain[1:-1]:
             message = f'Error: "{domain}" must contain a "." somewhere in the middle – you need to provide a full domain name!'
+            domain = None
+
+        elif any(name in parts for name in LINK_PROTECTION_NAMES):
+            offending = next(part for part in parts if part in LINK_PROTECTION_NAMES)
+            message = (
+                f'Error: "{domain}" is a link protection service ({LINK_PROTECTION_NAMES[offending]}) '
+                "and cannot be used as a hostname. Provide the site that links to it instead."
+            )
             domain = None
 
         elif any(hoster in parts for hoster in SHARE_HOSTERS_LOWERCASE):

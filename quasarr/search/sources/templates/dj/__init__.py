@@ -2,18 +2,21 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
-"""DJ as a bundled template whose steps are the site code beside it.
+"""DJ as a bundled template whose code steps live in the modules beside it.
 
 DJ shares the Junkies login and protected links with its sibling site.
 """
-
-from quasarr.search.sources.templates.dj import download as _download
-from quasarr.search.sources.templates.dj import search as _search
 
 TEMPLATE = {
     "name": "DJ",
     "language": "de",
     "categories": [5000],
+    "urls": {
+        "api_latest": "https://{host}/api/releases/latest/{days}",
+        "series": "https://{host}/serie/{slug}",
+        "series_search": "https://{host}/serie/search",
+        "api_media_releases": "https://{host}/api/media/{media_id}/releases",
+    },
     "capabilities": {
         "supports_imdb": True,
         "supports_phrase": False,
@@ -24,30 +27,5 @@ TEMPLATE = {
         "invite_only": False,
         "requires_flaresolverr": False,
     },
-    "hooks": {"feed": "run_feed", "search": "run_search", "download": "run_download"},
+    "hooks": {"feed": "search", "search": "search", "download": "download"},
 }
-
-
-def run_feed(site, shared_state, start_time, search_category):
-    return _search.Source().feed(shared_state, start_time, search_category)
-
-
-def run_search(
-    site,
-    shared_state,
-    start_time,
-    search_category,
-    search_string,
-    season,
-    episode,
-    episode_date=None,
-):
-    return _search.Source().search(
-        shared_state, start_time, search_category, search_string, season, episode
-    )
-
-
-def run_download(site, shared_state, url, mirrors, title, password):
-    return _download.Source().get_download_links(
-        shared_state, url, mirrors, title, password
-    )

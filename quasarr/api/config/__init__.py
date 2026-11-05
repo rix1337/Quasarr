@@ -41,20 +41,16 @@ from quasarr.storage.categories import (
 )
 from quasarr.storage.setup import (
     check_credentials,
-    clear_skip_login,
     delete_skip_flaresolverr_preference,
     get_crypter_settings_data,
     get_flaresolverr_status_data,
     get_notification_settings_data,
     get_radarr_settings_data,
-    get_skip_login,
     get_sonarr_settings_data,
     get_timeout_slow_mode_settings_data,
-    hostname_form_html,
     import_hostnames_from_url,
     save_crypter_settings,
     save_flaresolverr_url,
-    save_hostnames,
     save_jdownloader_settings,
     save_notification_settings,
     save_radarr_settings,
@@ -63,10 +59,13 @@ from quasarr.storage.setup import (
     send_notification_test,
     verify_jdownloader_credentials,
 )
+from quasarr.storage.setup.custom_sources import setup_custom_source_pages
+from quasarr.storage.setup.sites import setup_site_routes, sites_page
 
 
 def setup_config(app, shared_state):
     setup_custom_source_routes(app, shared_state)
+    setup_custom_source_pages(app)
 
     @app.get("/api/hostname-issues")
     @require_api_key
@@ -76,28 +75,11 @@ def setup_config(app, shared_state):
 
         return {"issues": get_all_hostname_issues()}
 
-    @app.get("/hostnames")
-    def hostnames_ui():
-        message = """<p>
-            Use status buttons to change credentials and check for errors.
-        </p>"""
-        back_button = f"""<p>
-                        {render_button("Back", "secondary", {"onclick": "location.href='/'"})}
-                    </p>"""
-        return render_form(
-            "Hostnames",
-            hostname_form_html(
-                shared_state,
-                message,
-                show_skip_management=True,
-            )
-            + back_button,
-        )
+    setup_site_routes(app, shared_state)
 
-    @app.post("/api/hostnames")
-    @require_api_key
-    def hostnames_api():
-        return save_hostnames(shared_state, timeout=1, first_run=False)
+    @app.get("/hostnames")
+    def sites_ui():
+        return sites_page(shared_state)
 
     @app.post("/api/hostnames/check-credentials/<shorthand>")
     @require_api_key
@@ -108,16 +90,6 @@ def setup_config(app, shared_state):
     @require_api_key
     def import_hostnames_route():
         return import_hostnames_from_url()
-
-    @app.get("/api/skip-login")
-    @require_api_key
-    def get_skip_login_route():
-        return get_skip_login()
-
-    @app.delete("/api/skip-login/<shorthand>")
-    @require_api_key
-    def clear_skip_login_route(shorthand):
-        return clear_skip_login(shorthand)
 
     @app.post("/api/flaresolverr")
     @require_api_key

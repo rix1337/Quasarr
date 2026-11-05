@@ -37,6 +37,7 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractSearchSource):
@@ -61,19 +62,19 @@ class Source(AbstractSearchSource):
         base_search_category = get_base_search_category_id(search_category)
 
         if base_search_category == SEARCH_CAT_BOOKS:
-            feed_type = "?cat=71"
+            feed_type = "feed_books"
         elif base_search_category == SEARCH_CAT_MOVIES:
-            feed_type = "?cat=1"
+            feed_type = "feed_movies"
         elif base_search_category == SEARCH_CAT_SHOWS:
-            feed_type = "?cat=2"
+            feed_type = "feed_shows"
         elif base_search_category == SEARCH_CAT_MUSIC:
-            feed_type = "?cat=35"
+            feed_type = "feed_music"
         else:
             warn(f"Invalid search category: {search_category}")
             return []
 
         base_url = f"https://{by}"
-        url = f"{base_url}/{feed_type}"
+        url = site_url(shared_state, self.initials, feed_type)
         headers = {"User-Agent": shared_state.values["user_agent"]}
         try:
             r = requests.get(url, headers=headers, timeout=FEED_REQUEST_TIMEOUT_SECONDS)
@@ -134,7 +135,11 @@ class Source(AbstractSearchSource):
             releases = []
             seen_links = set()
             for query in search_strings:
-                pending = [f"{base_url}/?q={quote_plus(query)}"]
+                pending = [
+                    site_url(
+                        shared_state, self.initials, "search", query=quote_plus(query)
+                    )
+                ]
                 visited = set()
                 while pending and len(visited) < 30:
                     url = pending.pop(0)

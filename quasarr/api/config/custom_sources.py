@@ -2,6 +2,8 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+import secrets
+import threading
 import time
 from urllib.parse import urlparse
 
@@ -16,23 +18,30 @@ from quasarr.search.sources.helpers.custom_source import (
     CustomSource,
     DefinitionError,
     _compile_listing,
-    _is_on_host,
-    _normalize_hostname,
     describe_report,
     fetch_markup,
+    is_on_host,
+    normalize_hostname,
 )
 from quasarr.search.sources.helpers.custom_suggest import (
     MIN_ITEMS,
+    _search_request,
+    annotate_page,
     builtin_matches,
     detect_templates,
     discover_search,
     export_template,
+    highlight,
+    import_template,
+    is_feed_markup,
     listing_from_suggestion,
+    pick_field,
+    pick_item,
+    preview_html,
     search_quality,
     suggest_download,
     suggest_listing,
 )
-from quasarr.search.sources.templates import get_template_definitions
 from quasarr.storage.custom_sources import (
     delete_definition,
     load_definitions,
@@ -41,6 +50,70 @@ from quasarr.storage.custom_sources import (
 
 # Drafts are previewed before they own a key; nothing is stored under it.
 _PREVIEW_KEY = "c1"
+
+# pages loaded in the wizard, so clicks can be turned into selectors
+_PAGE_TTL_SECONDS = 20 * 60
+_PAGE_LIMIT = 12
+_pages = {}
+_pages_lock = threading.Lock()
+
+
+def _store_page(page):
+    token = secrets.token_urlsafe(16)
+    now = time.time()
+    with _pages_lock:
+        for old in [t for t, p in _pages.items() if p["expires"] < now]:
+            del _pages[old]
+        while len(_pages) >= _PAGE_LIMIT:
+            del _pages[min(_pages, key=lambda t: _pages[t]["expires"])]
+        _pages[token] = {**page, "expires": now + _PAGE_TTL_SECONDS}
+    return token
+
+
+def _page(token):
+    with _pages_lock:
+        page = _pages.get(str(token or ""))
+        if page and page["expires"] >= time.time():
+            return page
+    return None
+
+
+def _search_page_request(hostname, search, query):
+    """URL and form data of one search, checked like a saved definition."""
+    if not isinstance(search, dict):
+        raise DefinitionError("search: must be an object")
+    query = str(query or "").strip()
+    if not query:
+        raise DefinitionError("Enter something to search for")
+    url = str(search.get("url") or "")
+    if url.startswith("/"):
+        url = "https://{host}" + url
+    candidate = {
+        "url": url,
+        "method": "post" if search.get("method") == "post" else "get",
+        "body": str(search.get("body") or ""),
+    }
+    if not url.startswith("https://{host}") and not url.startswith("http://{host}"):
+        raise DefinitionError("The search address must be on the site")
+    if candidate["method"] == "post" and "{q}" not in candidate["body"]:
+        raise DefinitionError("The form fields must contain {q}")
+    if candidate["method"] == "get" and "{q}" not in url:
+        raise DefinitionError("The search address must contain {q}")
+    request_url, form = _search_request(candidate, hostname, query)
+    if not is_on_host(request_url, hostname):
+        raise DefinitionError("The search address must be on the site")
+    return request_url, form
+
+
+def _site_url(data):
+    """The hostname and a page URL on it, from a wizard request."""
+    hostname = normalize_hostname(data.get("hostname"))
+    url = str(data.get("url") or "/").strip()
+    if url.startswith("/"):
+        url = f"https://{hostname}{url}"
+    if urlparse(url).scheme not in ("http", "https") or not is_on_host(url, hostname):
+        raise DefinitionError("The page must be on the site's hostname")
+    return hostname, url
 
 
 def _draft_source(definition):
@@ -73,29 +146,16 @@ def setup_custom_source_routes(app, shared_state):
         response.content_type = "application/json"
         return {"success": True, "sources": list(load_definitions().values())}
 
-    @app.get("/api/custom-sources/templates")
+    @app.post("/api/custom-sources/import")
     @require_api_key
-    def list_bundled_templates():
-        """Bundled templates to copy into a custom source; hooks do not copy."""
+    def import_shared_template():
+        """Check a shared template; the wizard then tests and saves it."""
         response.content_type = "application/json"
-        templates = []
-        for key, definition in get_template_definitions().items():
-            copyable = not definition.get("hooks")
-            templates.append(
-                {
-                    "key": key.upper(),
-                    "name": definition.get("name"),
-                    "copyable": copyable,
-                    "definition": {
-                        k: v
-                        for k, v in definition.items()
-                        if k not in ("key", "hooks", "capabilities", "categories")
-                    }
-                    if copyable
-                    else None,
-                }
-            )
-        return {"success": True, "templates": templates}
+        try:
+            definition = import_template((request.json or {}).get("text"))
+        except DefinitionError as e:
+            return _fail(str(e))
+        return {"success": True, "definition": definition}
 
     @app.post("/api/custom-sources")
     @require_api_key
@@ -143,11 +203,19 @@ def setup_custom_source_routes(app, shared_state):
             if not spec["search_url"]:
                 return _fail("Search is not enabled")
             category = int(data.get("category") or spec["search_categories"][0])
+            raw_query = str(data.get("query") or "").strip()
             query, _ = source._search_query(
-                shared_state, time.time(), category, str(data.get("query") or "")
+                shared_state, time.time(), category, raw_query
             )
+            if not query and spec["search_mode"] == "title":
+                # a typed title stands in for the one Quasarr looks up by IMDb ID
+                query = raw_query
             if not query:
-                return _fail("No search term for this query")
+                return _fail(
+                    "This search only takes IMDb IDs such as tt0111161"
+                    if spec["search_mode"] == "imdb"
+                    else "Quasarr could not find a title for this IMDb ID"
+                )
             url, form = source.search_request(query)
             listing = spec["search_list"]
             timeout = SEARCH_REQUEST_TIMEOUT_SECONDS
@@ -191,13 +259,13 @@ def setup_custom_source_routes(app, shared_state):
         response.content_type = "application/json"
         data = request.json or {}
         try:
-            hostname = _normalize_hostname(data.get("hostname"))
+            hostname = normalize_hostname(data.get("hostname"))
         except DefinitionError as e:
             return _fail(str(e))
         url = str(data.get("url") or "/").strip()
         if url.startswith("/"):
             url = f"https://{hostname}{url}"
-        if urlparse(url).scheme not in ("http", "https") or not _is_on_host(
+        if urlparse(url).scheme not in ("http", "https") or not is_on_host(
             url, hostname
         ):
             return _fail("The page must be on the site's hostname")
@@ -235,6 +303,126 @@ def setup_custom_source_routes(app, shared_state):
         )
         return {**result, "success": True, **suggestion, "listing": listing}
 
+    @app.post("/api/custom-sources/page")
+    @require_api_key
+    def load_custom_source_page():
+        """Load one page for the wizard: a safe preview plus suggestions.
+
+        ``purpose`` is ``listing`` (feed), ``search`` (one search result page)
+        or ``download`` (a release page).
+        """
+        response.content_type = "application/json"
+        data = request.json or {}
+        form = None
+        try:
+            hostname, url = _site_url(data)
+            search = data.get("search")
+            if search:
+                # a results page, requested the way the source will request it
+                url, form = _search_page_request(hostname, search, data.get("query"))
+        except DefinitionError as e:
+            return _fail(str(e))
+        purpose = data.get("purpose", "listing")
+        use_flaresolverr = bool(data.get("flaresolverr"))
+        fetched = fetch_markup(
+            shared_state, url, FEED_REQUEST_TIMEOUT_SECONDS, use_flaresolverr, form
+        )
+        result = {
+            "url": url,
+            "builtin": builtin_matches(hostname),
+            "suggest_flaresolverr": fetched.blocked and not use_flaresolverr,
+        }
+        if fetched.error:
+            return {**result, "success": False, "error": fetched.error}
+
+        soup = annotate_page(fetched.markup)
+        token = _store_page({"soup": soup, "url": url, "hostname": hostname})
+        feed = is_feed_markup(fetched.markup)
+        result.update(
+            {
+                "success": True,
+                "token": token,
+                "is_feed": feed,
+                # RSS needs no picking; its fields are fixed
+                "preview": None if feed else preview_html(soup),
+            }
+        )
+        if purpose == "download":
+            result["download"] = suggest_download(fetched.markup, url, hostname)
+            return result
+        suggestion = suggest_listing(
+            fetched.markup,
+            url,
+            hostname,
+            min_items=1 if purpose == "search" else MIN_ITEMS,
+        )
+        result.update(suggestion)
+        result["listing"] = (
+            listing_from_suggestion(suggestion["best"]) if suggestion["best"] else None
+        )
+        if purpose == "listing":
+            result["templates"] = detect_templates(
+                shared_state, fetched.markup, url, hostname
+            )
+        return result
+
+    @app.post("/api/custom-sources/pick")
+    @require_api_key
+    def pick_custom_source_element():
+        """Turn a click in the preview into a selector."""
+        response.content_type = "application/json"
+        data = request.json or {}
+        page = _page(data.get("token"))
+        if page is None:
+            return _fail("The page expired. Load it again.", 410)
+        try:
+            q = int(data.get("q"))
+        except (TypeError, ValueError):
+            return _fail("No element was clicked")
+        if data.get("kind") == "item":
+            picked = pick_item(page["soup"], q, page["url"], page["hostname"])
+            if picked is None:
+                return _fail("The page changed. Load it again.")
+            marked = highlight(page["soup"], picked["selector"], {})
+            return {"success": True, **picked, "marked": marked}
+        field = str(data.get("field") or "")
+        if field not in ("title", "link", "size", "date", "imdb", "source"):
+            return _fail("Unknown field")
+        picked = pick_field(
+            page["soup"],
+            q,
+            str(data.get("item_selector") or ""),
+            field,
+            page["url"],
+            page["hostname"],
+        )
+        if picked.get("error"):
+            return _fail(picked["error"])
+        return {"success": True, **picked}
+
+    @app.post("/api/custom-sources/highlight")
+    @require_api_key
+    def highlight_custom_source_page():
+        """Element numbers that selectors match, for outlining the preview."""
+        response.content_type = "application/json"
+        data = request.json or {}
+        page = _page(data.get("token"))
+        if page is None:
+            return _fail("The page expired. Load it again.", 410)
+        fields = data.get("fields") or {}
+        if not isinstance(fields, dict):
+            return _fail("Fields must be an object")
+        marked = highlight(
+            page["soup"],
+            str(data.get("item_selector") or ""),
+            fields,
+            page["url"],
+            page["hostname"],
+        )
+        if marked.get("error"):
+            return _fail(marked["error"])
+        return {"success": True, **marked}
+
     @app.post("/api/custom-sources/suggest-search")
     @require_api_key
     def suggest_custom_source_search():
@@ -242,14 +430,14 @@ def setup_custom_source_routes(app, shared_state):
         response.content_type = "application/json"
         data = request.json or {}
         try:
-            hostname = _normalize_hostname(data.get("hostname"))
+            hostname = normalize_hostname(data.get("hostname"))
             _compile_listing(data.get("list"), "list")
         except DefinitionError as e:
             return _fail(str(e))
         feed_url = str(data.get("feed_url") or "/").strip()
         if feed_url.startswith("/"):
             feed_url = f"https://{hostname}{feed_url}"
-        if not _is_on_host(feed_url, hostname):
+        if not is_on_host(feed_url, hostname):
             return _fail("The feed must be on the site's hostname")
         return discover_search(shared_state, hostname, feed_url, data["list"])
 

@@ -30,6 +30,7 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates import site_url
 
 
 class Source(AbstractSearchSource):
@@ -56,14 +57,12 @@ class Source(AbstractSearchSource):
         episode_date=None,
     ) -> list[SearchRelease]:
         releases = []
-        host = shared_state.values["config"]("Hostnames").get(self.initials)
-
         base_search_category = get_base_search_category_id(search_category)
 
         if base_search_category == SEARCH_CAT_MOVIES:
-            tag = "movies"
+            listing = "listing_movies"
         elif base_search_category == SEARCH_CAT_SHOWS:
-            tag = "tv-shows"
+            listing = "listing_shows"
         else:
             warn(f"Unknown search category: {search_category}")
             return releases
@@ -107,7 +106,7 @@ class Source(AbstractSearchSource):
             if episode:
                 source_search += f"E{int(episode):02d}"
 
-        url = f"https://{host}/tag/{tag}/"
+        url = site_url(shared_state, self.initials, listing)
 
         headers = {"User-Agent": shared_state.values["user_agent"]}
         params = {"s": source_search}
