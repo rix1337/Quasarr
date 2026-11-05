@@ -64,16 +64,17 @@ ALL_CATEGORIES = {
 }
 SEARCH_MODES = ("imdb", "title", "off")
 SEARCH_MATCHES = ("imdb", "query")
-IMDB_IDENTITIES = ("strict", "fill", "none")
+IMDB_IDENTITIES = ("strict", "strict_fill", "fill", "none")
 MIRROR_FILTERS = ("none", "mirror", "url")
-TITLE_CLEANUPS = ("scene", "none")
+# scene also drops listing dates and sizes around the name, sanitize does not
+TITLE_CLEANUPS = ("scene", "sanitize", "none")
 DATE_FALLBACKS = ("now", "hour_ago")
 # release checks a search applies on top of the shared title matching
 SEARCH_FILTERS = ("require_quality", "no_spaces", "skip_xxx")
 SEARCH_METHODS = ("get", "post")
 DOWNLOAD_FILTERS = ("known", "all")
-PASSWORD_MODES = ("hostname", "none")
-LIST_FIELDS = ("title", "link", "size", "date", "imdb")
+PASSWORD_MODES = ("hostname", "site_name", "none")
+LIST_FIELDS = ("title", "link", "size", "date", "imdb", "source")
 REQUIRED_LIST_FIELDS = ("title", "link")
 MAX_BODY_BYTES = 5 * 1024 * 1024
 # ponytail: per-field text cap bounds parser work on hostile pages
@@ -84,6 +85,8 @@ MAX_SIZE_MB = 2 * 1024 * 1024
 SKIP_SHARE_WARNING = 0.5
 # every redirect costs requests inside the grab
 MAX_REDIRECT_LINKS = 10
+# every followed result page costs a request inside the search budget
+MAX_FOLLOWED_PAGES = 5
 BLOCKED_ERROR = "Security check detected - configure FlareSolverr"
 _LABEL_SEPARATORS = " \t\r\n:|-\u00a0"
 
@@ -275,6 +278,14 @@ def _compile_selector(value, name, required):
 def _compile_field(spec, name, default_attr):
     if spec is None:
         return None
+    if isinstance(spec, list):
+        # several ways to read one value: the first that finds it wins
+        if not spec:
+            raise DefinitionError(f"{name}: needs at least one way to read it")
+        compiled = [
+            _compile_field(s, f"{name}[{i}]", default_attr) for i, s in enumerate(spec)
+        ]
+        return {**compiled[0], "fallbacks": compiled[1:]}
     if not isinstance(spec, dict):
         raise DefinitionError(f"{name}: must be an object")
     attr = str(spec.get("attr") or default_attr).strip()
@@ -296,6 +307,12 @@ def _compile_field(spec, name, default_attr):
         "unit": str(spec.get("unit") or "").strip().upper() or None,
         # skip the release instead of falling back when the value is missing
         "required": _require_bool(spec.get("required", False), f"{name}.required"),
+        # read from the closest enclosing element, as in a post holding releases
+        "within": _compile_selector(spec.get("within"), f"{name}.within", False),
+        "pick": _require_choice(
+            spec.get("pick", "first"), ("first", "last"), f"{name}.pick"
+        ),
+        "fallbacks": [],
     }
 
 
@@ -304,7 +321,7 @@ def _compile_listing(spec, name):
         raise DefinitionError(f"{name}: must be an object")
     listing = {"item": _compile_selector(spec.get("item"), f"{name}.item", True)}
     for field in LIST_FIELDS:
-        default_attr = "href" if field == "link" else "text"
+        default_attr = "href" if field in ("link", "source") else "text"
         listing[field] = _compile_field(
             spec.get(field), f"{name}.{field}", default_attr
         )
@@ -318,6 +335,10 @@ def _compile_listing(spec, name):
         spec.get("title_cleanup", "scene"), TITLE_CLEANUPS, f"{name}.title_cleanup"
     )
     listing["dedupe"] = _require_bool(spec.get("dedupe", True), f"{name}.dedupe")
+    # releases point back to the page they were found on
+    listing["source_is_page"] = _require_bool(
+        spec.get("source_is_page", False), f"{name}.source_is_page"
+    )
     # look for IMDb links in items without an imdb field
     listing["find_imdb"] = _require_bool(
         spec.get("find_imdb", True), f"{name}.find_imdb"
@@ -424,6 +445,20 @@ def compile_definition(definition, bundled=False):
     search_match = _require_choice(
         search.get("match", "imdb"), SEARCH_MATCHES, "search.match"
     )
+    # result pages that hold the releases, opened from the search page
+    follow = search.get("follow") or None
+    if follow is not None:
+        if not isinstance(follow, dict) or not follow.get("selector"):
+            raise DefinitionError("search.follow: a selector is required")
+        limit = follow.get("limit", 1)
+        if not isinstance(limit, int) or not 1 <= limit <= MAX_FOLLOWED_PAGES:
+            raise DefinitionError(
+                f"search.follow.limit: 1 to {MAX_FOLLOWED_PAGES} pages"
+            )
+        follow = {
+            "selector": _compile_selector(follow["selector"], "search.follow", True),
+            "limit": limit,
+        }
     # a category can search several sections of the site at once
     raw_urls = search.get("urls") or {}
     if not isinstance(raw_urls, dict):
@@ -537,6 +572,7 @@ def compile_definition(definition, bundled=False):
         "search_filters": search_filters,
         "imdb_identity": imdb_identity,
         "search_match": search_match,
+        "search_follow": follow,
         "search_urls": search_urls,
         # Magazarr reads magazine dates only in a few spellings
         "magazine_titles": _require_bool(
@@ -719,7 +755,27 @@ def _text_after_label(element, label):
 
 def extract_field(item, field):
     """Read one field from an item; None when the element or value is missing."""
-    element = field["selector"].select_one(item) if field["selector"] else item
+    value = _extract_one(item, field)
+    for fallback in field.get("fallbacks") or []:
+        if value:
+            break
+        value = _extract_one(item, fallback)
+    return value
+
+
+def _extract_one(item, field):
+    base = item
+    if field.get("within"):
+        base = field["within"].closest(item)
+        if base is None:
+            return None
+    if not field["selector"]:
+        element = base
+    elif field.get("pick") == "last":
+        matches = field["selector"].select(base)
+        element = matches[-1] if matches else None
+    else:
+        element = field["selector"].select_one(base)
     if element is None:
         return None
     if field["attr"] == "text":
@@ -755,12 +811,24 @@ def _resolve_link(page_url, href, hostname):
     return link
 
 
+def _typed_value(item, field, parse):
+    """The first of a field's ways to read it whose value also parses."""
+    for way in [field, *(field.get("fallbacks") or [])]:
+        raw = _extract_one(item, way)
+        value = parse(raw, way) if raw else None
+        if value is not None:
+            return value
+    return None
+
+
 def _parse_item(item, page_url, listing, hostname, now):
     title = extract_field(item, listing["title"])
     if not title:
         return None, "title not found"
     if listing["title_cleanup"] == "scene":
         title = sanitize_title(_LEADING_DATE.sub("", _TRAILING_SIZE.sub("", title)))
+    elif listing["title_cleanup"] == "sanitize":
+        title = sanitize_title(title)
     if not title:
         return None, "title not found"
     if len(title) > MAX_TITLE_CHARS:
@@ -776,8 +844,9 @@ def _parse_item(item, page_url, listing, hostname, now):
     warnings = []
     size_mb = 0
     if listing["size"]:
-        raw = extract_field(item, listing["size"])
-        parsed = parse_size(raw, listing["size"]["unit"]) if raw else None
+        parsed = _typed_value(
+            item, listing["size"], lambda raw, f: parse_size(raw, f["unit"])
+        )
         if parsed is None:
             if listing["size"]["required"]:
                 return None, "size not found"
@@ -787,8 +856,9 @@ def _parse_item(item, page_url, listing, hostname, now):
 
     date = None
     if listing["date"]:
-        raw = extract_field(item, listing["date"])
-        date = parse_date(raw, listing["date"]["format"], now) if raw else None
+        date = _typed_value(
+            item, listing["date"], lambda raw, f: parse_date(raw, f["format"], now)
+        )
         if date is None:
             if listing["date"]["required"]:
                 return None, "date not found"
@@ -796,7 +866,7 @@ def _parse_item(item, page_url, listing, hostname, now):
 
     imdb_id = None
     if listing["imdb"]:
-        imdb_id = parse_imdb_id(extract_field(item, listing["imdb"]))
+        imdb_id = _typed_value(item, listing["imdb"], lambda raw, f: parse_imdb_id(raw))
     elif listing["find_imdb"]:
         for anchor in item.find_all("a", href=True):
             imdb_id = parse_imdb_id(anchor["href"])
@@ -806,9 +876,17 @@ def _parse_item(item, page_url, listing, hostname, now):
             match = IMDB_REGEX.search(item.get_text()[: MAX_FIELD_CHARS * 10])
             imdb_id = match.group(1) if match else None
 
+    # the page a release is shown on, when its link is a crypter or hoster
+    source = page_url if listing["source_is_page"] else link
+    if listing["source"]:
+        source = (
+            _resolve_link(page_url, extract_field(item, listing["source"]), hostname)
+            or link
+        )
     return {
         "title": title,
         "link": link,
+        "source": source,
         "size_mb": size_mb,
         "date": date
         or format_datetime(
@@ -1108,7 +1186,12 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
         )
 
     def _password(self):
-        return self.hostname if self.spec["download"]["password"] == "hostname" else ""
+        mode = self.spec["download"]["password"]
+        if mode == "hostname":
+            return self.hostname
+        if mode == "site_name":
+            return (self.hostname or "").split(".")[0]
+        return ""
 
     def _releases(self, shared_state, rows):
         from quasarr.providers.utils import generate_download_link
@@ -1133,7 +1216,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                         ),
                         "size": row["size_mb"] * 1024 * 1024,
                         "date": row["date"],
-                        "source": row["link"],
+                        "source": row.get("source") or row["link"],
                     },
                     "type": "protected",
                 }
@@ -1153,6 +1236,30 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
         if templates:
             return [(self._url(t, query), None) for t in templates]
         return [self.search_request(query)]
+
+    def _followed_pages(self, shared_state, requests_):
+        """Result pages linked from the search pages, as GET requests."""
+        follow = self.spec["search_follow"]
+        pages = []
+        for url, data in requests_:
+            fetched = fetch_markup(
+                shared_state,
+                url,
+                SEARCH_REQUEST_TIMEOUT_SECONDS,
+                self.spec["flaresolverr"],
+                data,
+            )
+            if fetched.error:
+                mark_hostname_issue(self.initials, "search", fetched.error)
+                continue
+            soup = BeautifulSoup(fetched.markup, "html.parser")
+            for anchor in follow["selector"].select(soup):
+                target = urljoin(url, anchor.get("href") or "")
+                if _is_on_host(target, self.hostname) and (target, None) not in pages:
+                    pages.append((target, None))
+                if len(pages) >= follow["limit"]:
+                    return pages
+        return pages
 
     def _magazine(self, title, category):
         from quasarr.constants import SEARCH_CAT_BOOKS
@@ -1281,6 +1388,10 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             )
 
             requests_ = self.search_requests(request_query, category)
+            if self.spec["search_follow"]:
+                requests_ = self._followed_pages(shared_state, requests_)
+                if not requests_:
+                    return []
             with ThreadPoolExecutor(max_workers=len(requests_)) as pool:
                 pages = list(
                     pool.map(
@@ -1312,7 +1423,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 if len(pages) > 1 and row["link"] in seen:
                     continue
                 if (
-                    identity == "strict"
+                    identity in ("strict", "strict_fill")
                     and imdb_id
                     and row["imdb_id"]
                     and row["imdb_id"] != imdb_id
@@ -1334,7 +1445,8 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 seen.add(row["link"])
                 row = {**row, "title": self._magazine(row["title"], category)}
                 if imdb_id and (
-                    identity == "fill" or (identity == "strict" and not row["imdb_id"])
+                    identity in ("fill", "strict_fill")
+                    or (identity == "strict" and not row["imdb_id"])
                 ):
                     row["imdb_id"] = imdb_id
                 rows.append(row)
