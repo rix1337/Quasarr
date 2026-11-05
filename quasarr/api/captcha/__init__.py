@@ -383,7 +383,7 @@ def setup_captcha_routes(app):
                             <p style="font-size: 0.9em;">
                                 If the userscript doesn't work, you can manually paste the links below:
                             </p>
-                            <form id="bypass-form" action="/captcha/bypass-submit" method="post" enctype="multipart/form-data" onsubmit="if(typeof incrementCaptchaAttempts==='function')incrementCaptchaAttempts();">
+                            <form id="bypass-form" action="/captcha/bypass-submit" method="post" enctype="multipart/form-data" onsubmit="if(this.dataset.sent){{return false;}}this.dataset.sent='1';this.querySelector('button[type=submit]').disabled=true;if(typeof incrementCaptchaAttempts==='function')incrementCaptchaAttempts();">
                                 <input type="hidden" name="package_id" value="{package_id}" />
                                 <input type="hidden" name="title" value="{title}" />
                                 <input type="hidden" name="password" value="{password}" />
@@ -1321,6 +1321,9 @@ def setup_captcha_routes(app):
                     {render_button("Back", "secondary", {"onclick": "location.href='/'"})}
                 </p>''')
 
+        except HTTPResponse:
+            # a package solved meanwhile, as by a second click, answers with its own page
+            raise
         except Exception as e:
             info(f"Bypass submission error: {e}")
             return render_centered_html(f'''<h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
