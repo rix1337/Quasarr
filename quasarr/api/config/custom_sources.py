@@ -344,7 +344,7 @@ def setup_custom_source_routes(app, shared_state):
                 "token": token,
                 "is_feed": feed,
                 # RSS needs no picking; its fields are fixed
-                "preview": None if feed else preview_html(soup),
+                "preview": None if feed else preview_html(soup, url),
             }
         )
         if purpose == "download":

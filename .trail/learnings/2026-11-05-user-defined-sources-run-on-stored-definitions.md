@@ -38,7 +38,7 @@ In Quasarr 6 every site is a template; module discovery is gone. Sites whose beh
 
 A custom source can be exported as a template module for a pull request only after its live feed and search work, and only with its hostname replaced by `{host}`.
 
-The wizard turns clicks into selectors on the server: a fetched page is parsed once, every element gets a number, and the browser only shows a sanitized copy in a sandboxed frame without scripts, links, forms or external resources. Selectors are built and counted on that same parse, so a browser that repairs markup differently cannot produce a selector the source will not match. Site and user text reaches the page only as text. Field counts only include values that read as their kind (a size, a date, a link), so a wrong pick shows as missing.
+The wizard turns clicks into selectors on the server: a fetched page is parsed once, every element gets a number, and the browser only shows a sanitized copy in a sandboxed frame without site scripts, links or forms. It keeps the site's images and stylesheets so the preview looks like the page. Selectors are built and counted on that same parse, so a browser that repairs markup differently cannot produce a selector the source will not match. Site and user text reaches the page only as text. Field counts only include values that read as their kind (a size, a date, a link), so a wrong pick shows as missing.
 
 Search result pages often differ from the newest-releases page. The wizard loads a real results page and checks whether the newest-releases fields read it; when they do not, the search gets its own fields.
 
@@ -62,6 +62,8 @@ Grouping repeated elements by their full class list missed real lists. Rows alte
 Judging noise by class names (menu, sidebar, widget) hid a whole content area wrapped in a "sidebar" class. Only nav, footer, aside and menu elements count as noise now; the one-link-per-container rule filters the rest.
 
 ## Watch out
+
+The picker runs as Quasarr's own script inside the preview: the frame allows scripts but not same-origin, popups, forms or top navigation, a per-render nonce in the frame's CSP lets only that script run, and it talks to the wizard by postMessage. Picking through listeners attached from the parent page, or an overlay that reads the frame with elementFromPoint, failed in Safari, which does not run event handlers in a frame with scripts disabled. Chromium does, so test the picker in WebKit as well.
 
 A release link may point straight at a crypter or hoster (several releases per post). Grabs then fall through the shared crypter detection, so such definitions need no download step. On-site hoster buttons that redirect use the shared `resolve_crypter_redirect` when the download step sets `redirects`.
 

@@ -9,7 +9,9 @@ same extraction code the source runs, so a suggestion's coverage is exactly
 what the saved definition will achieve.
 """
 
+import html
 import re
+import secrets
 from collections import Counter
 from urllib.parse import urljoin, urlparse
 
@@ -1125,7 +1127,7 @@ def export_template(shared_state, definition):
 
 # --- Page picker ------------------------------------------------------------------
 
-# elements that run code, load resources or submit data: never shown in a preview
+# elements that run code, embed other pages or submit data: never shown in a preview
 _UNSAFE_TAGS = (
     "script",
     "noscript",
@@ -1137,7 +1139,6 @@ _UNSAFE_TAGS = (
     "applet",
     "base",
     "meta",
-    "link",
     "form",
     "input",
     "button",
@@ -1172,15 +1173,66 @@ _URL_ATTRIBUTES = (
     "lowsrc",
     "dynsrc",
 )
+# Only the wizard's own script runs; images, stylesheets and fonts still load
 PREVIEW_CSP = (
-    "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'"
+    "default-src 'none'; script-src 'nonce-{nonce}'; style-src http: https: 'unsafe-inline'; "
+    "img-src http: https: data:; font-src http: https: data:; form-action 'none'"
 )
 _PREVIEW_STYLE = """
-[data-q]{cursor:crosshair}
+.q-picking [data-q]{cursor:crosshair}
 .q-hover{outline:2px dashed #f59f00 !important;outline-offset:1px}
 .q-item{outline:2px solid #0d6efd !important;outline-offset:2px}
 .q-field{background:rgba(255,193,7,.35) !important;box-shadow:0 0 0 2px #f59f00 inset}
 .q-picked{background:rgba(25,135,84,.35) !important;box-shadow:0 0 0 2px #198754 inset}
+"""
+
+# Runs inside the sandboxed preview, which has no access to the wizard page.
+# It never follows links and only reports which numbered element was clicked.
+_PREVIEW_SCRIPT = """
+(function() {
+  var picking = false, hovered = null;
+  function post(message) { parent.postMessage(message, '*'); }
+  function numbered(node) { return node && node.closest ? node.closest('[data-q]') : null; }
+  function hover(node) {
+    if (hovered) hovered.classList.remove('q-hover');
+    hovered = node;
+    if (node) node.classList.add('q-hover');
+  }
+  function mark(name, list) {
+    document.querySelectorAll('.' + name).forEach(function(node) { node.classList.remove(name); });
+    (list || []).forEach(function(q) {
+      var node = document.querySelector('[data-q="' + Number(q) + '"]');
+      if (node) node.classList.add(name);
+    });
+  }
+  addEventListener('message', function(event) {
+    if (event.source !== parent) return;
+    var message = event.data || {};
+    if (message.type === 'mark') {
+      mark('q-item', message.items);
+      mark('q-field', message.field);
+      var first = message.scroll && document.querySelector('.q-item');
+      if (first) first.scrollIntoView({block: 'center'});
+    } else if (message.type === 'picking') {
+      picking = !!message.on;
+      document.documentElement.classList.toggle('q-picking', picking);
+      if (!picking) hover(null);
+    }
+  });
+  document.addEventListener('mouseover', function(event) {
+    if (picking) hover(numbered(event.target));
+  }, true);
+  document.addEventListener('click', function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var node = picking && numbered(event.target);
+    if (node) post({type: 'pick', q: Number(node.getAttribute('data-q'))});
+  }, true);
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') post({type: 'cancel'});
+  });
+  post({type: 'ready'});
+})();
 """
 
 
@@ -1196,29 +1248,57 @@ def annotate_page(markup):
     return soup
 
 
-def preview_html(soup):
-    """A copy of an annotated page that cannot run code or load anything."""
+def _is_stylesheet(element):
+    rel = element.get("rel") or []
+    rel = rel.split() if isinstance(rel, str) else rel
+    return "stylesheet" in [value.lower() for value in rel]
+
+
+def _web_address(value):
+    return urlparse(str(value).strip()).scheme.lower() in ("", "http", "https")
+
+
+def preview_html(soup, page_url):
+    """A copy of an annotated page that runs only the wizard's picker script.
+
+    Site code, forms and embedded pages are removed. Images, stylesheets and
+    fonts load from the site so the preview looks like the page.
+    """
     import copy
 
     page = copy.copy(soup)
     for element in page.find_all(_UNSAFE_TAGS):
         element.decompose()
+    for element in page.find_all("link"):
+        if not (_is_stylesheet(element) and _web_address(element.get("href", ""))):
+            element.decompose()
     for element in page.find_all(True):
+        # what an element may load from the site
+        keep = {"img": ("src", "srcset"), "link": ("href",)}.get(element.name, ())
         for attribute in list(element.attrs):
             name = attribute.lower()
+            if name in keep and _web_address(element[attribute]):
+                continue
             if (
                 name.startswith("on")
                 or name in _URL_ATTRIBUTES
-                or name in ("srcdoc", "target", "style", "id")
+                or name in ("srcdoc", "target")
             ):
                 del element[attribute]
     body = page.body or page
-    styles = "".join(str(tag) for tag in page.find_all("style"))
-    content = "".join(str(child) for child in body.children if child.name != "style")
+    head = "".join(str(tag) for tag in page.find_all(["link", "style"]))
+    content = "".join(
+        str(child) for child in body.children if child.name not in ("link", "style")
+    )
+    nonce = secrets.token_urlsafe(16)
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
-        f'<meta http-equiv="Content-Security-Policy" content="{PREVIEW_CSP}">'
-        f"{styles}<style>{_PREVIEW_STYLE}</style></head><body>{content}</body></html>"
+        '<meta name="referrer" content="no-referrer">'
+        f'<meta http-equiv="Content-Security-Policy" '
+        f'content="{PREVIEW_CSP.format(nonce=nonce)}">'
+        f'<base href="{html.escape(page_url)}">'
+        f"{head}<style>{_PREVIEW_STYLE}</style></head><body>{content}"
+        f'<script nonce="{nonce}">{_PREVIEW_SCRIPT}</script></body></html>'
     )
 
 

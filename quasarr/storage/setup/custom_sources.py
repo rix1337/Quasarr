@@ -5,8 +5,8 @@
 """The site wizard: users add sites Quasarr does not ship a template for.
 
 Everything a site returns is untrusted. The page shows it only through
-``textContent`` and element properties, and the site preview renders in a
-sandboxed frame without scripts, links or external resources.
+``textContent`` and element properties. The site preview renders in a
+sandboxed frame that runs only Quasarr's picker script and follows no links.
 """
 
 import html
@@ -505,7 +505,8 @@ _WIZARD_SCRIPT = r"""
     itemInput.addEventListener('input', function() { edited(); });
     itemPick.onclick = function() { startPicking('item', itemPick); };
     var bar = el('div', {className: 'preview-bar', text: 'Preview of the loaded page'});
-    var frame = el('iframe', {sandbox: 'allow-same-origin', referrerpolicy: 'no-referrer', title: title + ' preview'});
+    // scripts without same-origin: the picker script in the preview cannot reach this page
+    var frame = el('iframe', {sandbox: 'allow-scripts', referrerpolicy: 'no-referrer', title: title + ' preview'});
     var box = el('div', {className: 'picker-box', hidden: 'hidden'}, [
       el('h4', {text: title}),
       el('p', {className: 'hint', text: hint}),
@@ -586,6 +587,8 @@ _WIZARD_SCRIPT = r"""
       picker.page = page;
       box.hidden = false;
       picker.setItems(page.items || []);
+      picker.ready = false;
+      picker.scrolled = false;
       frame.srcdoc = page.preview || '<!doctype html><p>No preview</p>';
     };
     picker.hide = function() { box.hidden = true; picker.page = null; };
@@ -623,47 +626,32 @@ _WIZARD_SCRIPT = r"""
         });
     }
     picker.refresh = refresh;
-    function doc() { return frame.contentDocument; }
+    function tell(message) {
+      if (picker.ready) frame.contentWindow.postMessage(message, '*');
+    }
     function paint() {
-      var d = doc();
-      if (!d || !d.body) return;
-      d.querySelectorAll('.q-item, .q-field').forEach(function(node) { node.classList.remove('q-item', 'q-field'); });
-      (picker.marked.items || []).forEach(function(q) {
-        var node = d.querySelector('[data-q="' + Number(q) + '"]');
-        if (node) node.classList.add('q-item');
-      });
-      ((picker.marked.fields || {})[picker.activeField] || []).forEach(function(q) {
-        var node = d.querySelector('[data-q="' + Number(q) + '"]');
-        if (node) node.classList.add('q-field');
-      });
-      if (!picker.scrolled) {
-        var first = d.querySelector('.q-item');
-        if (first) { first.scrollIntoView({block: 'center'}); picker.scrolled = true; }
-      }
+      var items = picker.marked.items || [];
+      tell({type: 'mark', items: items, field: (picker.marked.fields || {})[picker.activeField] || [],
+        scroll: !picker.scrolled});
+      if (picker.ready && items.length) picker.scrolled = true;
     }
     function focusField(name) {
       picker.activeField = name;
       Object.keys(rows).forEach(function(key) { rows[key].row.classList.toggle('active', key === name); });
       paint();
     }
-    frame.addEventListener('load', function() {
-      picker.scrolled = false;
-      var d = doc();
-      if (!d) return;
-      d.addEventListener('click', function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        var target = event.target.closest('[data-q]');
-        if (picker.picking && target) choose(Number(target.getAttribute('data-q')));
-      }, true);
-      d.addEventListener('mouseover', function(event) {
-        if (!picker.picking) return;
-        d.querySelectorAll('.q-hover').forEach(function(node) { node.classList.remove('q-hover'); });
-        var target = event.target.closest('[data-q]');
-        if (target) target.classList.add('q-hover');
-      });
-      d.addEventListener('keydown', function(event) { if (event.key === 'Escape') picker.stopPicking(); });
-      paint();
+    window.addEventListener('message', function(event) {
+      if (event.source !== frame.contentWindow) return;
+      var message = event.data || {};
+      if (message.type === 'ready') {
+        picker.ready = true;
+        tell({type: 'picking', on: !!picker.picking});
+        paint();
+      } else if (message.type === 'pick' && picker.picking) {
+        choose(Number(message.q));
+      } else if (message.type === 'cancel') {
+        picker.stopPicking();
+      }
     });
     function startPicking(name, button) {
       if (picker.picking === name) { picker.stopPicking(); return; }
@@ -675,6 +663,7 @@ _WIZARD_SCRIPT = r"""
       }
       picker.picking = name;
       picker.pickButton = button;
+      tell({type: 'picking', on: true});
       button.classList.add('picking');
       button.textContent = 'Cancel';
       bar.classList.add('picking');
@@ -688,12 +677,11 @@ _WIZARD_SCRIPT = r"""
     picker.stopPicking = function() {
       if (!picker.picking) return;
       picker.picking = null;
+      tell({type: 'picking', on: false});
       picker.pickButton.classList.remove('picking');
       picker.pickButton.textContent = 'Pick';
       bar.classList.remove('picking');
       bar.textContent = 'Preview of the loaded page';
-      var d = doc();
-      if (d) d.querySelectorAll('.q-hover').forEach(function(node) { node.classList.remove('q-hover'); });
     };
     document.addEventListener('keydown', function(event) { if (event.key === 'Escape') picker.stopPicking(); });
     function choose(q) {
@@ -776,7 +764,7 @@ _WIZARD_SCRIPT = r"""
         done();
         if (data.builtin && data.builtin.length) {
           note('site-notes', 'warn', ['Quasarr already reads this hostname as ' + data.builtin.join(', ') +
-            '. Adding it again would list every release twice. See the ', el('a', {href: config.sites_url, text: 'your sites'}), '.']);
+            '. Adding it again would list every release twice. See ', el('a', {href: config.sites_url, text: 'your sites'}), '.']);
         }
         if (data.templates && data.templates.length) {
           clear('site-matches');

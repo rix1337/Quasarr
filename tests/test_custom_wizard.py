@@ -27,26 +27,32 @@ HOSTILE = (
 
 
 class PreviewSafetyTests(unittest.TestCase):
-    def test_preview_has_no_code_links_or_external_resources(self):
-        page = preview_html(annotate_page(HOSTILE)).lower()
+    def test_preview_runs_only_the_picker_and_keeps_images_and_styles(self):
+        page = preview_html(
+            annotate_page(HOSTILE), "https://source.invalid/list/"
+        ).lower()
+        # the picker script is the only one, and only it may run
+        self.assertEqual(1, page.count("<script"))
+        nonce = page.split('<script nonce="', 1)[1].split('"', 1)[0]
+        self.assertIn(f"script-src 'nonce-{nonce}'", page)
         for needle in (
-            "<script",
+            "alert(",
             "onload",
             "onclick",
             "onerror",
             "javascript:",
             "<iframe",
             "<form",
-            "<base",
-            'http-equiv="refresh',
-            "<link",
+            "<input",
+            "refresh",
             "<svg",
-            "evil.invalid",
         ):
-            self.assertNotIn(
-                needle, page.replace('http-equiv="content-security-policy"', "")
-            )
-        self.assertIn("default-src 'none'", page)
+            self.assertNotIn(needle, page)
+        # the page's own base is replaced, so links resolve against the page
+        self.assertEqual(1, page.count("<base"))
+        self.assertIn('<base href="https://source.invalid/list/">', page)
+        self.assertIn('href="https://evil.invalid/x.css"', page)
+        self.assertIn('src="https://evil.invalid/1.png"', page)
         self.assertIn("data-q=", page)
 
     def test_clicks_become_selectors_on_the_same_parse(self):
