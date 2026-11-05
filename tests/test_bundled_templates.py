@@ -119,7 +119,8 @@ class RegistryTests(unittest.TestCase):
         ):
             sources = search_sources.get_sources()
         self.assertIs(template, sources["mb"])
-        self.assertIn("rm", sources)
+        for module_name in search_sources.get_source_module_names():
+            self.assertIn(module_name, sources)
 
 
 class DetectionTests(unittest.TestCase):

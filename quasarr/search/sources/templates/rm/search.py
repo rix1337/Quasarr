@@ -20,12 +20,6 @@ from quasarr.constants import (
     SEARCH_REQUEST_TIMEOUT_SECONDS,
     SEASON_EP_REGEX,
 )
-from quasarr.downloads.sources.rm import (
-    _build_release_page_url,
-    _get_base_url,
-    _get_markup,
-    _get_page,
-)
 from quasarr.providers import shared_state
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.log import debug, warn
@@ -39,6 +33,12 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates.rm.download import (
+    _build_release_page_url,
+    _get_base_url,
+    _get_markup,
+    _get_page,
+)
 
 _LEADING_TAG_REGEX = re.compile(r"^(?:\[[^\]]+\]\s*)+")
 _TRAILING_SIZE_REGEX = re.compile(r"\s*\(\s*\d+(?:\.\d+)?\s*[KMGT]B\s*\)\s*$", re.I)
