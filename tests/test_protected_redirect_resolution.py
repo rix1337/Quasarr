@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 from quasarr.downloads import download
 from quasarr.downloads.sources.by import Source as BySource
 from quasarr.downloads.sources.sf import Source as SfSource
-from quasarr.downloads.sources.wd import Source as WdSource
 from quasarr.search.sources import templates
 from quasarr.search.sources.helpers import custom_source
 
@@ -41,6 +40,24 @@ def _build_shared_state(hostnames):
         "external_address": "http://localhost:5678",
     }
     return shared_state
+
+
+class _BundledSource:
+    """A bundled template that reads its hostname from the shared state it gets."""
+
+    custom_hostname = None
+
+    def __init__(self, key):
+        self.initials = key
+
+    def get_package_identity(self, url):
+        return None
+
+    def get_download_links(self, shared_state, *args):
+        with patch("quasarr.providers.shared_state.values", shared_state.values):
+            return templates._load(self.initials).get_download_links(
+                shared_state, *args
+            )
 
 
 class ProtectedRedirectSourceTests(unittest.TestCase):
@@ -446,17 +463,19 @@ class ProtectedRedirectSourceTests(unittest.TestCase):
                 raise AssertionError(f"Unexpected URL requested: {url}")
 
         with (
-            patch("quasarr.downloads.sources.wd.requests.get", side_effect=fake_get),
             patch(
-                "quasarr.downloads.sources.wd.requests.Session",
+                "quasarr.search.sources.templates.wd.requests.get", side_effect=fake_get
+            ),
+            patch(
+                "quasarr.search.sources.templates.wd.requests.Session",
                 return_value=FakeSession(),
             ),
             patch(
-                "quasarr.downloads.sources.wd.detect_crypter_type",
+                "quasarr.search.sources.templates.wd.detect_crypter_type",
                 side_effect=lambda url: "filecrypt" if url == protected_url else None,
             ),
         ):
-            result = WdSource().get_download_links(
+            result = _BundledSource("wd").get_download_links(
                 _build_shared_state({"wd": "host-wd.invalid"}),
                 release_url,
                 ["ddownload"],
@@ -511,17 +530,19 @@ class ProtectedRedirectSourceTests(unittest.TestCase):
                 raise AssertionError(f"Unexpected URL requested: {url}")
 
         with (
-            patch("quasarr.downloads.sources.wd.requests.get", side_effect=fake_get),
             patch(
-                "quasarr.downloads.sources.wd.requests.Session",
+                "quasarr.search.sources.templates.wd.requests.get", side_effect=fake_get
+            ),
+            patch(
+                "quasarr.search.sources.templates.wd.requests.Session",
                 return_value=FakeSession(),
             ),
             patch(
-                "quasarr.downloads.sources.wd.detect_crypter_type",
+                "quasarr.search.sources.templates.wd.detect_crypter_type",
                 return_value=None,
             ),
         ):
-            result = WdSource().get_download_links(
+            result = _BundledSource("wd").get_download_links(
                 _build_shared_state({"wd": "host-wd.invalid"}),
                 release_url,
                 ["ddownload"],
@@ -857,21 +878,22 @@ class ProtectedRedirectDownloadTests(unittest.TestCase):
 
         links = self._assert_download_stores_protected(
             source_key="wd",
-            source_obj=WdSource(),
+            source_obj=_BundledSource("wd"),
             request_from="Sonarr/4.0.0",
             title="Example.Release.S01.1080p-GRP",
             release_url=release_url,
             hostnames={"wd": "host-wd.invalid"},
             patchers=[
                 patch(
-                    "quasarr.downloads.sources.wd.requests.get", side_effect=fake_get
+                    "quasarr.search.sources.templates.wd.requests.get",
+                    side_effect=fake_get,
                 ),
                 patch(
-                    "quasarr.downloads.sources.wd.requests.Session",
+                    "quasarr.search.sources.templates.wd.requests.Session",
                     return_value=FakeSession(),
                 ),
                 patch(
-                    "quasarr.downloads.sources.wd.detect_crypter_type",
+                    "quasarr.search.sources.templates.wd.detect_crypter_type",
                     side_effect=lambda url: (
                         "filecrypt" if url == protected_url else None
                     ),

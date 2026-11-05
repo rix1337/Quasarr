@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime, parsedate_to_datetime
 from typing import NamedTuple
-from urllib.parse import parse_qsl, quote_plus, urljoin, urlparse
+from urllib.parse import parse_qsl, quote, quote_plus, urljoin, urlparse
 
 import requests
 import soupsieve
@@ -81,8 +81,6 @@ MAX_BODY_BYTES = 5 * 1024 * 1024
 # ponytail: per-field text cap bounds parser work on hostile pages
 MAX_FIELD_CHARS = 2000
 MAX_TITLE_CHARS = 300
-# a size above this is a parse error, not a release
-MAX_SIZE_MB = 2 * 1024 * 1024
 SKIP_SHARE_WARNING = 0.5
 # every redirect costs requests inside the grab
 MAX_REDIRECT_LINKS = 10
@@ -154,8 +152,9 @@ def parse_size(text, unit=None):
     if factor is None:
         return None
     size_mb = int(_normalize_number(number) * factor)
-    # files below one MB report 0, as they always have
-    if size_mb < 0 or size_mb > MAX_SIZE_MB:
+    # files below one MB report 0, as they always have; implausible sizes are
+    # passed on as the site states them, so no release goes missing
+    if size_mb < 0:
         return None
     return size_mb
 
@@ -363,6 +362,10 @@ def _compile_field(spec, name, default_attr):
         # read from the closest enclosing element, as in a post holding releases
         "within": _compile_selector(spec.get("within"), f"{name}.within", False),
         "adjacent": _require_bool(spec.get("adjacent", False), f"{name}.adjacent"),
+        # nested elements whose text is not part of the value
+        "without": _compile_selector(spec.get("without"), f"{name}.without", False),
+        # percent-encode the address, for links with spaces or umlauts
+        "quote": _require_bool(spec.get("quote", False), f"{name}.quote"),
         # several elements whose texts form the value, as a calendar block of
         # month, day, year and clock; the first part must exist
         "parts": [
@@ -509,6 +512,12 @@ def compile_definition(definition, bundled=False):
         raise DefinitionError(
             f"search.filters: supported are {', '.join(SEARCH_FILTERS)}"
         )
+    # categories the release filters do not apply to, as books without tags
+    filters_except = search.get("filters_except") or []
+    if not isinstance(filters_except, list) or any(
+        c not in CUSTOM_CATEGORIES for c in filters_except
+    ):
+        raise DefinitionError("search.filters_except: unsupported category")
     # strict drops results of another title and fills in the searched IMDb ID,
     # fill always stamps the searched ID, none keeps what the page shows
     identity = search.get("imdb_identity", "strict")
@@ -669,6 +678,7 @@ def compile_definition(definition, bundled=False):
         "search_body": search_body,
         "search_categories": search_categories,
         "search_filters": search_filters,
+        "search_filters_except": filters_except,
         "imdb_identity": imdb_identity,
         "search_match": search_match,
         "search_follow": follow,
@@ -680,9 +690,15 @@ def compile_definition(definition, bundled=False):
             definition.get("feed_validate", False), "feed_validate"
         ),
         "search_urls": search_urls,
-        # Magazarr reads magazine dates only in a few spellings
-        "magazine_titles": _require_bool(
-            definition.get("magazine_titles", False), "magazine_titles"
+        # Magazarr reads magazine dates only in a few spellings; "search"
+        # rewrites search results only, true the feed as well
+        "magazine_titles": _require_choice(
+            {True: "all", False: "none"}.get(
+                definition.get("magazine_titles", False),
+                definition.get("magazine_titles"),
+            ),
+            ("none", "search", "all"),
+            "magazine_titles",
         ),
         "list": listing,
         "search_list": search_listing,
@@ -847,7 +863,7 @@ def _text_after_label(element, label, adjacent=False):
     value stays empty instead of picking up the next text on the page.
     """
     wanted = label.casefold()
-    strings = [str(node) for node in element.find_all(string=True)]
+    strings = [str(node) for node in element.strings]
     for index, text in enumerate(strings):
         position = text.casefold().find(wanted)
         if position == -1:
@@ -906,7 +922,15 @@ def _extract_single(item, field):
     if element is None:
         return None
     if field["attr"] == "text":
-        if field["labels"]:
+        if field.get("without"):
+            excluded = set(map(id, field["without"].select(element)))
+            # .strings skips script and style text, as get_text does
+            value = "".join(
+                str(text).strip()
+                for text in element.strings
+                if not any(id(parent) in excluded for parent in text.parents)
+            )
+        elif field["labels"]:
             value = next(
                 (
                     found
@@ -981,6 +1005,8 @@ def _parse_item(item, page_url, listing, hostname, now):
     href = extract_field(item, listing["link"])
     if not href:
         return None, "link not found"
+    if listing["link"].get("quote"):
+        href = quote(href, safe="/?:=&")
     link = _resolve_link(page_url, href, hostname)
     if not link:
         return None, "link is not an http(s) link on this site"
@@ -1460,11 +1486,13 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                     return pages
         return pages
 
-    def _magazine(self, title, category):
+    def _magazine(self, title, category, operation="search"):
         from quasarr.constants import SEARCH_CAT_BOOKS
         from quasarr.providers.utils import normalize_magazine_title
 
-        if self.spec["magazine_titles"] and int(category) == SEARCH_CAT_BOOKS:
+        mode = self.spec["magazine_titles"]
+        applies = mode == "all" or (mode == "search" and operation == "search")
+        if applies and int(category) == SEARCH_CAT_BOOKS:
             return normalize_magazine_title(title)
         return title
 
@@ -1511,7 +1539,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             self._log_report("Feed", report)
             clear_hostname_issue(self.initials)
             rows = [
-                {**row, "title": self._magazine(row["title"], category)}
+                {**row, "title": self._magazine(row["title"], category, "feed")}
                 for row in report["rows"]
                 if not self.spec["feed_validate"]
                 or is_valid_release(row["title"], search_category, "", None, None)
@@ -1524,7 +1552,13 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             debug(f"Time taken: {time.time() - start_time:.2f}s")
 
     def _search_query(
-        self, shared_state, start_time, search_category, search_string, season=None
+        self,
+        shared_state,
+        start_time,
+        search_category,
+        search_string,
+        season=None,
+        episode_date=None,
     ):
         from quasarr.providers.imdb_metadata import get_localized_title
         from quasarr.providers.utils import is_imdb_id
@@ -1542,7 +1576,12 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 search_category,
                 deadline=start_time + SEARCH_REQUEST_TIMEOUT_SECONDS,
             )
-            if title and self.spec["search_append_year"] and not season:
+            if (
+                title
+                and self.spec["search_append_year"]
+                and not season
+                and episode_date is None
+            ):
                 from quasarr.providers.imdb_metadata import get_year
 
                 year = get_year(imdb_id)
@@ -1582,13 +1621,18 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             category = get_base_search_category_id(search_category) or search_category
             if int(category) not in self.spec["search_categories"]:
                 return []
+            if episode_date is not None and not self.supports_date_numbering:
+                episode_date = None
             query, imdb_id = self._search_query(
-                shared_state, start_time, search_category, search_string, season
+                shared_state,
+                start_time,
+                search_category,
+                search_string,
+                season,
+                episode_date,
             )
             if not query:
                 return []
-            if episode_date is not None and not self.supports_date_numbering:
-                episode_date = None
             request_query = (
                 date_numbering_title_search_strings(query)[0] if episode_date else query
             )
@@ -1651,7 +1695,9 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                     episode_date,
                 ):
                     continue
-                if not passes_search_filters(
+                if int(category) not in self.spec[
+                    "search_filters_except"
+                ] and not passes_search_filters(
                     row["title"], self.spec["search_filters"], search_string
                 ):
                     continue

@@ -81,7 +81,6 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(2048, parse_size("2", unit="GB"))
         self.assertIsNone(parse_size("no size here"))
         self.assertEqual(0, parse_size("350 KB"))
-        self.assertIsNone(parse_size("9999 TB"))
 
     def test_dates_in_common_notations(self):
         self.assertEqual(

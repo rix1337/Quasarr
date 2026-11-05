@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from quasarr.constants import SEARCH_CAT_SHOWS
-from quasarr.search.sources import by, dd, dl, he, sj, templates, wd
+from quasarr.search.sources import by, dd, dl, he, sj, templates
 from quasarr.search.sources.helpers import custom_source
 
 
@@ -451,18 +451,25 @@ class DateSourceQueryTests(unittest.TestCase):
 
     def test_wd_date_search_does_not_include_premiere_year(self):
         urls = []
+        state = shared_state_for("wd")
 
-        def get(url, **_kwargs):
+        def fetch(_state, url, *_args, **_kwargs):
             urls.append(url)
-            return EmptyResponse()
+            return custom_source.FetchResult("", None, 200)
 
         with (
-            patch.object(wd, "get_localized_title", return_value="Synthetic Show"),
-            patch.object(wd, "get_year", return_value=1999),
-            patch.object(wd.requests, "get", side_effect=get),
+            patch("quasarr.providers.shared_state.values", state.values),
+            patch(
+                "quasarr.providers.imdb_metadata.get_localized_title",
+                return_value="Synthetic Show",
+            ),
+            patch("quasarr.providers.imdb_metadata.get_year", return_value=1999),
+            patch.object(custom_source, "fetch_markup", side_effect=fetch),
+            patch.object(custom_source, "mark_hostname_issue"),
+            patch.object(custom_source, "clear_hostname_issue"),
         ):
-            releases = wd.Source().search(
-                shared_state_for("wd"),
+            releases = templates._load("wd").search(
+                state,
                 time.time(),
                 SEARCH_CAT_SHOWS,
                 "tt0000001",
