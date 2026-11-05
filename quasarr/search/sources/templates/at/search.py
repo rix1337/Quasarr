@@ -17,16 +17,6 @@ from quasarr.constants import (
     SEARCH_CAT_SHOWS_ANIME,
     SEARCH_REQUEST_TIMEOUT_SECONDS,
 )
-from quasarr.downloads.sources.at import (
-    _build_release_info_from_title,
-    _extract_direct_links_from_anchors,
-    _extract_season_hint_from_title,
-    _extract_series_title_from_listing_entry,
-    _extract_series_title_from_raw_title,
-    _extract_subtitle_langs_from_links,
-    _parse_listing_datetime,
-    _resolve_title_context,
-)
 from quasarr.downloads.sources.helpers.anime_title import guess_release_title
 from quasarr.providers import shared_state
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
@@ -43,6 +33,16 @@ from quasarr.providers.utils import (
 from quasarr.providers.xem_metadata import get_season_name
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates.at.download import (
+    _build_release_info_from_title,
+    _extract_direct_links_from_anchors,
+    _extract_season_hint_from_title,
+    _extract_series_title_from_listing_entry,
+    _extract_series_title_from_raw_title,
+    _extract_subtitle_langs_from_links,
+    _parse_listing_datetime,
+    _resolve_title_context,
+)
 
 _SEASON_DASH_EP_REGEX = re.compile(
     r"\bS(?:eason)?\s*0*(\d{1,3})\s*-\s*0*(\d{1,4})(?:\s*[-+]\s*0*(\d{1,4}))?",
