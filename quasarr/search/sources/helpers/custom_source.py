@@ -68,7 +68,7 @@ IMDB_IDENTITIES = ("strict", "strict_fill", "fill", "none")
 # exact compares bare hoster names, as "rapidgator" against "RG"
 MIRROR_FILTERS = ("none", "mirror", "url", "exact")
 # scene also drops listing dates and sizes around the name, sanitize does not
-TITLE_CLEANUPS = ("scene", "sanitize", "none")
+TITLE_CLEANUPS = ("scene", "sanitize", "dots", "none")
 DATE_FALLBACKS = ("now", "hour_ago")
 # release checks a search applies on top of the shared title matching
 SEARCH_FILTERS = ("require_quality", "no_spaces", "skip_xxx")
@@ -203,16 +203,51 @@ def _parse_datetime(text, fmt=None):
     return None
 
 
-def parse_date(text, fmt=None, now=None):
-    """Return an RFC 2822 date for text in common site formats; None if unknown."""
+def _parse_timed_datetime(text):
+    """The first date in the text that also names its time."""
+    text = (text or "")[: MAX_FIELD_CHARS * 10]
+    candidates = []
+    for regex, order in (
+        (_ISO_DATE_REGEX, "ymd"),
+        (_NUMERIC_DATE_REGEX, "dmy"),
+        (_NAMED_DATE_REGEX, "dMy"),
+        (_NAMED_DATE_US_REGEX, "Mdy"),
+    ):
+        for match in regex.finditer(text):
+            if match.group(4) is not None:
+                candidates.append((match.start(), order, match.groups()))
+                break
+    for _, order, groups in sorted(candidates):
+        a, b, c, hour, minute = groups
+        try:
+            if order == "ymd":
+                return _build_datetime(a, b, c, hour, minute)
+            if order == "dmy":
+                return _build_datetime(c, b, a, hour, minute)
+            month = _month_number(b if order == "dMy" else a)
+            if month:
+                day = a if order == "dMy" else b
+                return _build_datetime(c, month, day, hour, minute)
+        except ValueError:
+            continue
+    return None
+
+
+def parse_date(text, fmt=None, now=None, utc_offset=0, require_time=False):
+    """Return an RFC 2822 date for text in common site formats; None if unknown.
+
+    Dates without a zone are read in ``utc_offset`` hours east of UTC.
+    """
     try:
-        parsed = _parse_datetime(text, fmt)
+        parsed = (
+            _parse_timed_datetime(text) if require_time else _parse_datetime(text, fmt)
+        )
     except (OverflowError, ValueError):
         return None
     if parsed is None:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=timezone(timedelta(hours=utc_offset)))
     now = now or datetime.now(timezone.utc)
     if parsed > now + timedelta(days=1):
         parsed = now
@@ -240,6 +275,12 @@ def _normalize_hostname(value):
     if any(part in SHARE_HOSTERS_LOWERCASE for part in domain.split(".")):
         raise DefinitionError("hostname: a file hoster cannot be a source")
     return domain
+
+
+def _require_offset(value, name):
+    if not isinstance(value, (int, float)) or not -14 <= value <= 14:
+        raise DefinitionError(f"{name}: hours between -14 and 14")
+    return value
 
 
 def _string_list(value, name):
@@ -322,6 +363,18 @@ def _compile_field(spec, name, default_attr):
         # read from the closest enclosing element, as in a post holding releases
         "within": _compile_selector(spec.get("within"), f"{name}.within", False),
         "adjacent": _require_bool(spec.get("adjacent", False), f"{name}.adjacent"),
+        # several elements whose texts form the value, as a calendar block of
+        # month, day, year and clock; the first part must exist
+        "parts": [
+            _compile_selector(part, f"{name}.parts", True)
+            for part in _string_list(spec.get("parts"), f"{name}.parts")
+        ],
+        # only a date that names its time counts, as "29.10.2026 07:47"
+        "require_time": _require_bool(
+            spec.get("require_time", False), f"{name}.require_time"
+        ),
+        # hours east of UTC for dates the site shows without a zone
+        "utc_offset": _require_offset(spec.get("utc_offset", 0), f"{name}.utc_offset"),
         "pick": _require_choice(
             spec.get("pick", "first"), ("first", "last"), f"{name}.pick"
         ),
@@ -557,9 +610,18 @@ def compile_definition(definition, bundled=False):
             "download.redirect_targets",
         ),
         # URLs written as text, when no link qualifies
-        "text_urls": _require_bool(
-            download.get("text_urls", False), "download.text_urls"
+        # anchors scans the link markup, container the page text
+        "text_urls": _require_choice(
+            {True: "anchors", False: "none"}.get(
+                download.get("text_urls"), download.get("text_urls", "none")
+            ),
+            ("none", "anchors", "container"),
+            "download.text_urls",
         ),
+        # link addresses holding any of these are not download links
+        "exclude": [
+            x.lower() for x in _string_list(download.get("exclude"), "download.exclude")
+        ],
         # read the IMDb ID from the release page
         "imdb": _require_bool(download.get("imdb", False), "download.imdb"),
         # a page without matching links marks the site as broken
@@ -812,6 +874,23 @@ def extract_field(item, field):
 
 
 def _extract_one(item, field):
+    if not field.get("parts"):
+        return _extract_single(item, field)
+    base = field["within"].closest(item) if field.get("within") else item
+    if base is None:
+        return None
+    texts = []
+    for index, part in enumerate(field["parts"]):
+        element = part.select_one(base)
+        if element is None:
+            if index == 0:
+                return None
+            continue
+        texts.append(element.get_text(" ", strip=True))
+    return " ".join(texts)[:MAX_FIELD_CHARS] or None
+
+
+def _extract_single(item, field):
     base = item
     if field.get("within"):
         base = field["within"].closest(item)
@@ -884,6 +963,14 @@ def _parse_item(item, page_url, listing, hostname, now):
         title = sanitize_title(_LEADING_DATE.sub("", _TRAILING_SIZE.sub("", title)))
     elif listing["title_cleanup"] == "sanitize":
         title = sanitize_title(title)
+    elif listing["title_cleanup"] == "dots":
+        # "Name - Group (2026)" -> "Name-Group.2026"
+        title = (
+            title.replace(" - ", "-")
+            .replace(" ", ".")
+            .replace("(", "")
+            .replace(")", "")
+        )
     if not title:
         return None, "title not found"
     if len(title) > MAX_TITLE_CHARS:
@@ -912,7 +999,11 @@ def _parse_item(item, page_url, listing, hostname, now):
     date = None
     if listing["date"]:
         date = _typed_value(
-            item, listing["date"], lambda raw, f: parse_date(raw, f["format"], now)
+            item,
+            listing["date"],
+            lambda raw, f: parse_date(
+                raw, f["format"], now, f["utc_offset"], f["require_time"]
+            ),
         )
         if date is None:
             if listing["date"]["required"]:
@@ -1086,6 +1177,10 @@ def _mirror_name(element, url, mode):
             mirror = (urlparse(mirror).hostname or "").removeprefix("www.")
     elif mode == "href_host":
         mirror = host.removeprefix("www.")
+    elif mode == "domain":
+        # the name before the top-level domain, as "rapidgator" in rapidgator.net
+        parts = host.removeprefix("www.").split(".")
+        mirror = parts[-2] if len(parts) >= 2 else host
     elif mode == "host_label":
         mirror = host.split(".")[0] if host else "unknown"
     elif mode == "hoster_name":
@@ -1111,6 +1206,8 @@ def parse_download_links(markup, page_url, download, hostname=None):
     def accept(url, element):
         if not url or urlparse(url).scheme not in ("http", "https") or url in seen:
             return
+        if any(pattern in url.lower() for pattern in download["exclude"]):
+            return
         mirror = _mirror_name(element, url, download["mirror"])
         if download["mirror_names"] and mirror not in download["mirror_names"]:
             return
@@ -1131,8 +1228,12 @@ def parse_download_links(markup, page_url, download, hostname=None):
             accept(urljoin(page_url, href) if href else None, element)
         except Exception as e:
             debug(f"Skipping download link: {e}")
-    if not links and download["text_urls"]:
-        text = "".join(str(anchor) for anchor in anchors)
+    if not links and download["text_urls"] != "none":
+        if download["text_urls"] == "container" and download["container"]:
+            container = download["container"].select_one(soup)
+            text = container.get_text(separator="\n") if container else ""
+        else:
+            text = "".join(str(anchor) for anchor in anchors)
         for url in _TEXT_URL.findall(text):
             accept(url.strip(), None)
     return links

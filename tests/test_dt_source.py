@@ -6,9 +6,23 @@ from unittest.mock import MagicMock, patch
 from bs4 import BeautifulSoup
 
 from quasarr.constants import SEARCH_CAT_BOOKS
-from quasarr.downloads.sources import dt
-from quasarr.search.sources.dt import Source as DtSearchSource
-from quasarr.search.sources.dt import _parse_published_datetime
+from quasarr.search.sources import templates
+from quasarr.search.sources.helpers import custom_source
+
+
+def _template():
+    return templates._load("dt")
+
+
+def _parse_published_datetime(article):
+    listing = _template().spec["list"]
+    return custom_source._typed_value(
+        article,
+        listing["date"],
+        lambda raw, f: custom_source.parse_date(
+            raw, f["format"], None, f["utc_offset"], f["require_time"]
+        ),
+    )
 
 
 def _response(html):
@@ -20,15 +34,21 @@ def _response(html):
 class DtDownloadLinksTests(unittest.TestCase):
     def _get_links(self, html):
         shared_state = MagicMock()
-        shared_state.values = {"user_agent": "test-agent"}
-        session = MagicMock()
-        session.get.return_value = _response(html)
+        shared_state.values = {
+            "user_agent": "test-agent",
+            "config": lambda _section: {"dt": "source.invalid"},
+        }
         with (
-            patch.object(dt.requests, "Session", return_value=session),
-            patch.object(dt, "clear_hostname_issue"),
-            patch.object(dt, "mark_hostname_issue"),
+            patch("quasarr.providers.shared_state.values", shared_state.values),
+            patch.object(
+                custom_source,
+                "fetch_markup",
+                return_value=custom_source.FetchResult(html, None, 200),
+            ),
+            patch.object(custom_source, "clear_hostname_issue"),
+            patch.object(custom_source, "mark_hostname_issue"),
         ):
-            return dt.Source().get_download_links(
+            return _template().get_download_links(
                 shared_state,
                 "https://source.invalid/post.html",
                 None,
@@ -74,7 +94,7 @@ class DtPublishedDateTests(unittest.TestCase):
 
     def test_parses_feed_listing_date(self):
         self.assertEqual(
-            "2026-10-29T07:47:00+01:00",
+            "Thu, 29 Oct 2026 06:47:00 +0000",
             self._parse(
                 """
                 <article>
@@ -87,7 +107,7 @@ class DtPublishedDateTests(unittest.TestCase):
 
     def test_parses_feed_listing_date_without_zero_padding(self):
         self.assertEqual(
-            "2026-11-02T12:49:00+01:00",
+            "Mon, 02 Nov 2026 11:49:00 +0000",
             self._parse(
                 """
                 <article>
@@ -103,7 +123,7 @@ class DtPublishedDateTests(unittest.TestCase):
 
     def test_parses_search_calendar_block(self):
         self.assertEqual(
-            "2026-10-24T14:39:00+01:00",
+            "Sat, 24 Oct 2026 13:39:00 +0000",
             self._parse(
                 """
                 <article>
@@ -120,16 +140,11 @@ class DtPublishedDateTests(unittest.TestCase):
 class DtBooksSearchTests(unittest.TestCase):
     def test_books_search_queries_subcategories_and_skips_rules_article(self):
         shared_state = MagicMock()
-        config = MagicMock()
-        config.get.return_value = "source.invalid"
         shared_state.values = {
-            "config": MagicMock(return_value=config),
+            "config": lambda _section: {"dt": "source.invalid"},
             "user_agent": "test-agent",
-            "internal_address": "http://127.0.0.1:8080",
-            "api_key": "secret",
         }
-        response = MagicMock()
-        response.content = b"""
+        page = """
         <article>
             <h1 class="font-weight-bold"><a href="https://source.invalid/rules.html">Article Posting Rules</a></h1>
             <div class="static-content-body">Pinned rules</div>
@@ -141,21 +156,24 @@ class DtBooksSearchTests(unittest.TestCase):
         </article>
         """
         with (
-            patch(
-                "quasarr.search.sources.dt.requests.get", return_value=response
+            patch("quasarr.providers.shared_state.values", shared_state.values),
+            patch.object(
+                custom_source,
+                "fetch_markup",
+                return_value=custom_source.FetchResult(page, None, 200),
             ) as get_mock,
             patch(
-                "quasarr.search.sources.dt.generate_download_link",
+                "quasarr.providers.utils.generate_download_link",
                 return_value="http://127.0.0.1:8080/download/?payload=stub",
             ),
-            patch("quasarr.search.sources.dt.clear_hostname_issue"),
-            patch("quasarr.search.sources.dt.mark_hostname_issue") as mark_mock,
+            patch.object(custom_source, "clear_hostname_issue"),
+            patch.object(custom_source, "mark_hostname_issue") as mark_mock,
         ):
-            releases = DtSearchSource().search(
+            releases = _template().search(
                 shared_state, 0.0, SEARCH_CAT_BOOKS, "Example Magazine"
             )
 
-        called_url = get_mock.call_args[0][0]
+        called_url = get_mock.call_args[0][1]
         for cid in ("100", "4", "35", "109"):
             self.assertIn(f"catlist%5B%5D={cid}", called_url)
         mark_mock.assert_not_called()
@@ -163,6 +181,44 @@ class DtBooksSearchTests(unittest.TestCase):
         self.assertEqual(
             "https://source.invalid/book1.html", releases[0]["details"]["source"]
         )
+
+
+class DtFeedTests(unittest.TestCase):
+    def test_feed_titles_sizes_and_imdb(self):
+        page = """
+        <article><div class="h1 dt-flexible-title"><a href="https://source.invalid/a.html">Course - Name (2026)</a></div>
+            <div class="dt-text-clamp">Video: 1080p | Size: 1,40 GB <a href="https://www.imdb.com/title/tt1234567/">x</a></div>
+            <span><i class="bi bi-clock"></i> 5.11.2026 11:01</span></article>
+        <article><div class="h1">LinkSnappy promo</div></article>
+        """
+        shared_state = MagicMock()
+        shared_state.values = {
+            "config": lambda _section: {"dt": "source.invalid"},
+            "user_agent": "test-agent",
+        }
+        with (
+            patch("quasarr.providers.shared_state.values", shared_state.values),
+            patch.object(
+                custom_source,
+                "fetch_markup",
+                return_value=custom_source.FetchResult(page, None, 200),
+            ) as get_mock,
+            patch("quasarr.providers.utils.generate_download_link", return_value="x"),
+            patch.object(custom_source, "clear_hostname_issue"),
+            patch.object(custom_source, "mark_hostname_issue"),
+        ):
+            releases = _template().feed(shared_state, 0.0, 2000)
+
+        self.assertEqual(
+            "https://source.invalid/media/videos/", get_mock.call_args[0][1]
+        )
+        details = releases[0]["details"]
+        self.assertEqual("Course-Name.2026", details["title"])
+        # "1,40 GB" is 1.4 GB, not 40 GB
+        self.assertEqual(1433 * 1024 * 1024, details["size"])
+        self.assertEqual("tt1234567", details["imdb_id"])
+        self.assertEqual("Thu, 05 Nov 2026 10:01:00 +0000", details["date"])
+        self.assertEqual(1, len(releases))
 
 
 if __name__ == "__main__":
