@@ -5,8 +5,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from quasarr.constants import SEARCH_CAT_SHOWS
-from quasarr.search.sources import by, dd, dl, he, sj, templates
+from quasarr.search.sources import dd, dl, he, sj, templates
 from quasarr.search.sources.helpers import custom_source
+from quasarr.search.sources.templates.by import search as by
 
 
 class EmptyResponse:

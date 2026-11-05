@@ -27,6 +27,7 @@ from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostnam
 from quasarr.providers.imdb_metadata import get_localized_title, get_year
 from quasarr.providers.log import debug, error, info, warn
 from quasarr.providers.utils import (
+    convert_to_mb,
     date_numbering_title_search_strings,
     generate_download_link,
     get_base_search_category_id,
@@ -301,7 +302,11 @@ class Source(AbstractSearchSource):
                         if size_str
                         else {"size": "0", "sizeunit": "MB"}
                     )
-                    mb = float(size_info["size"])
+                    # the number alone ignored the unit: "4,59 GB" became 4.59 MB
+                    try:
+                        mb = convert_to_mb(size_info)
+                    except ValueError:
+                        mb = float(size_info["size"])
                     size_bytes = int(mb * 1024 * 1024)
                     imdb_id = None
                 else:

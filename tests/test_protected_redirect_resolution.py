@@ -5,10 +5,10 @@ from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
 from quasarr.downloads import download
-from quasarr.downloads.sources.by import Source as BySource
 from quasarr.downloads.sources.sf import Source as SfSource
 from quasarr.search.sources import templates
 from quasarr.search.sources.helpers import custom_source
+from quasarr.search.sources.templates.by.download import Source as BySource
 
 
 class FakeResponse:
@@ -105,13 +105,16 @@ class ProtectedRedirectSourceTests(unittest.TestCase):
                 raise AssertionError(f"Unexpected URL requested: {url}")
 
         with (
-            patch("quasarr.downloads.sources.by.requests.get", side_effect=fake_get),
             patch(
-                "quasarr.downloads.sources.by.requests.Session",
+                "quasarr.search.sources.templates.by.download.requests.get",
+                side_effect=fake_get,
+            ),
+            patch(
+                "quasarr.search.sources.templates.by.download.requests.Session",
                 return_value=FakeSession(),
             ),
             patch(
-                "quasarr.downloads.sources.by.detect_crypter_type",
+                "quasarr.search.sources.templates.by.download.detect_crypter_type",
                 side_effect=lambda url: "filecrypt" if url == protected_url else None,
             ),
         ):
@@ -175,13 +178,16 @@ class ProtectedRedirectSourceTests(unittest.TestCase):
                 raise AssertionError(f"Unexpected URL requested: {url}")
 
         with (
-            patch("quasarr.downloads.sources.by.requests.get", side_effect=fake_get),
             patch(
-                "quasarr.downloads.sources.by.requests.Session",
+                "quasarr.search.sources.templates.by.download.requests.get",
+                side_effect=fake_get,
+            ),
+            patch(
+                "quasarr.search.sources.templates.by.download.requests.Session",
                 return_value=FakeSession(),
             ),
             patch(
-                "quasarr.downloads.sources.by.detect_crypter_type",
+                "quasarr.search.sources.templates.by.download.detect_crypter_type",
                 side_effect=lambda url: "filecrypt" if url == protected_url else None,
             ),
         ):
@@ -233,13 +239,16 @@ class ProtectedRedirectSourceTests(unittest.TestCase):
                 raise AssertionError(f"Unexpected URL requested: {url}")
 
         with (
-            patch("quasarr.downloads.sources.by.requests.get", side_effect=fake_get),
             patch(
-                "quasarr.downloads.sources.by.requests.Session",
+                "quasarr.search.sources.templates.by.download.requests.get",
+                side_effect=fake_get,
+            ),
+            patch(
+                "quasarr.search.sources.templates.by.download.requests.Session",
                 return_value=FakeSession(),
             ),
             patch(
-                "quasarr.downloads.sources.by.detect_crypter_type",
+                "quasarr.search.sources.templates.by.download.detect_crypter_type",
                 return_value=None,
             ),
         ):
@@ -689,14 +698,15 @@ class ProtectedRedirectDownloadTests(unittest.TestCase):
             hostnames={"by": "host-by.invalid"},
             patchers=[
                 patch(
-                    "quasarr.downloads.sources.by.requests.get", side_effect=fake_get
+                    "quasarr.search.sources.templates.by.download.requests.get",
+                    side_effect=fake_get,
                 ),
                 patch(
-                    "quasarr.downloads.sources.by.requests.Session",
+                    "quasarr.search.sources.templates.by.download.requests.Session",
                     return_value=FakeSession(),
                 ),
                 patch(
-                    "quasarr.downloads.sources.by.detect_crypter_type",
+                    "quasarr.search.sources.templates.by.download.detect_crypter_type",
                     side_effect=lambda url: (
                         "filecrypt" if url == protected_url else None
                     ),
