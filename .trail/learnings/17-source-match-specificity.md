@@ -3,7 +3,7 @@ title: Match releases by authoritative identity and pinned location
 date: 2026-10-19
 author: Quasarr
 touches:
-  - quasarr/search/sources/mx.py
+  - quasarr/search/sources/templates/mx/search.py
   - quasarr/search/sources/templates/wx/search.py
   - quasarr/downloads/sources/dl.py
 ---

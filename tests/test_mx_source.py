@@ -6,14 +6,14 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from quasarr.constants import SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS
-from quasarr.downloads.sources.mx import Source as DownloadSource
-from quasarr.search.sources.mx import (
+from quasarr.search.sources.templates.mx.download import Source as DownloadSource
+from quasarr.search.sources.templates.mx.search import (
     FeedBudgetSpent,
     _normalize_quality,
     _remaining_feed_timeout,
     _sanitize,
 )
-from quasarr.search.sources.mx import (
+from quasarr.search.sources.templates.mx.search import (
     Source as SearchSource,
 )
 
@@ -148,8 +148,12 @@ def wanted_returning(items):
 
 def patch_issue_tracking(stack):
     """Silence the DB-backed hostname-issue helpers for hermetic tests."""
-    stack.enter_context(patch("quasarr.search.sources.mx.clear_hostname_issue"))
-    stack.enter_context(patch("quasarr.search.sources.mx.mark_hostname_issue"))
+    stack.enter_context(
+        patch("quasarr.search.sources.templates.mx.search.clear_hostname_issue")
+    )
+    stack.enter_context(
+        patch("quasarr.search.sources.templates.mx.search.mark_hostname_issue")
+    )
 
 
 class MxSearchTests(unittest.TestCase):
@@ -172,17 +176,22 @@ class MxSearchTests(unittest.TestCase):
         with ExitStack() as stack:
             fake_get = build_fake_get(responses)
             stack.enter_context(
-                patch("quasarr.search.sources.mx.requests.get", fake_get)
+                patch(
+                    "quasarr.search.sources.templates.mx.search.requests.get", fake_get
+                )
             )
             patch_issue_tracking(stack)
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.get_localized_title",
+                    "quasarr.search.sources.templates.mx.search.get_localized_title",
                     return_value=title,
                 )
             )
             stack.enter_context(
-                patch("quasarr.search.sources.mx.generate_download_link", fake_gen_link)
+                patch(
+                    "quasarr.search.sources.templates.mx.search.generate_download_link",
+                    fake_gen_link,
+                )
             )
             releases = SearchSource().search(ss, 0.0, SEARCH_CAT_MOVIES, **kwargs)
         return releases, captured, fake_get
@@ -254,18 +263,20 @@ class MxSearchTests(unittest.TestCase):
         with ExitStack() as stack:
             fake_get = build_fake_get({"search": SHOW_RESULTS, "links": SHOW_LINKS})
             stack.enter_context(
-                patch("quasarr.search.sources.mx.requests.get", fake_get)
+                patch(
+                    "quasarr.search.sources.templates.mx.search.requests.get", fake_get
+                )
             )
             patch_issue_tracking(stack)
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.get_localized_title",
+                    "quasarr.search.sources.templates.mx.search.get_localized_title",
                     return_value="Some Show",
                 )
             )
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.generate_download_link",
+                    "quasarr.search.sources.templates.mx.search.generate_download_link",
                     lambda *a, **k: "http://dl",
                 )
             )
@@ -289,12 +300,14 @@ class MxSearchTests(unittest.TestCase):
         with ExitStack() as stack:
             fake_get = build_fake_get({"search": SHOW_RESULTS, "links": SHOW_LINKS})
             stack.enter_context(
-                patch("quasarr.search.sources.mx.requests.get", fake_get)
+                patch(
+                    "quasarr.search.sources.templates.mx.search.requests.get", fake_get
+                )
             )
             patch_issue_tracking(stack)
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.get_localized_title",
+                    "quasarr.search.sources.templates.mx.search.get_localized_title",
                     return_value="Some Show",
                 )
             )
@@ -312,24 +325,26 @@ class MxFeedTests(unittest.TestCase):
         with ExitStack() as stack:
             fake_get = build_fake_get({"search": MOVIE_RESULTS, "links": MOVIE_LINKS})
             stack.enter_context(
-                patch("quasarr.search.sources.mx.requests.get", fake_get)
+                patch(
+                    "quasarr.search.sources.templates.mx.search.requests.get", fake_get
+                )
             )
             patch_issue_tracking(stack)
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.get_localized_title",
+                    "quasarr.search.sources.templates.mx.search.get_localized_title",
                     return_value="Some Movie",
                 )
             )
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.generate_download_link",
+                    "quasarr.search.sources.templates.mx.search.generate_download_link",
                     lambda *a, **k: "http://dl",
                 )
             )
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.radarr_api.get_wanted_imdb_ids",
+                    "quasarr.search.sources.templates.mx.search.radarr_api.get_wanted_imdb_ids",
                     return_value=["tt0000001"],
                 )
             )
@@ -342,24 +357,26 @@ class MxFeedTests(unittest.TestCase):
         with ExitStack() as stack:
             fake_get = build_fake_get({"search": SHOW_RESULTS, "links": SHOW_LINKS})
             stack.enter_context(
-                patch("quasarr.search.sources.mx.requests.get", fake_get)
+                patch(
+                    "quasarr.search.sources.templates.mx.search.requests.get", fake_get
+                )
             )
             patch_issue_tracking(stack)
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.get_localized_title",
+                    "quasarr.search.sources.templates.mx.search.get_localized_title",
                     return_value="Some Show",
                 )
             )
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.generate_download_link",
+                    "quasarr.search.sources.templates.mx.search.generate_download_link",
                     lambda *a, **k: "http://dl",
                 )
             )
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.sonarr_api.get_wanted_episodes",
+                    "quasarr.search.sources.templates.mx.search.sonarr_api.get_wanted_episodes",
                     return_value=[{"imdb_id": "tt0000002", "season": 1, "episode": 1}],
                 )
             )
@@ -376,10 +393,16 @@ class MxFeedTests(unittest.TestCase):
         # nothing, without touching Sonarr or the source.
         ss = make_shared_state(radarr=True)  # Sonarr intentionally absent
         with ExitStack() as stack:
-            get = stack.enter_context(patch("quasarr.search.sources.mx.requests.get"))
-            warn = stack.enter_context(patch("quasarr.search.sources.mx.warn"))
+            get = stack.enter_context(
+                patch("quasarr.search.sources.templates.mx.search.requests.get")
+            )
+            warn = stack.enter_context(
+                patch("quasarr.search.sources.templates.mx.search.warn")
+            )
             episodes = stack.enter_context(
-                patch("quasarr.search.sources.mx.sonarr_api.get_wanted_episodes")
+                patch(
+                    "quasarr.search.sources.templates.mx.search.sonarr_api.get_wanted_episodes"
+                )
             )
             releases = SearchSource().feed(ss, time.time(), SEARCH_CAT_SHOWS)
         self.assertEqual(releases, [])
@@ -391,10 +414,16 @@ class MxFeedTests(unittest.TestCase):
         # TV-only setup (no Radarr client): movie feed warns and yields nothing.
         ss = make_shared_state(sonarr=True)  # Radarr intentionally absent
         with ExitStack() as stack:
-            get = stack.enter_context(patch("quasarr.search.sources.mx.requests.get"))
-            warn = stack.enter_context(patch("quasarr.search.sources.mx.warn"))
+            get = stack.enter_context(
+                patch("quasarr.search.sources.templates.mx.search.requests.get")
+            )
+            warn = stack.enter_context(
+                patch("quasarr.search.sources.templates.mx.search.warn")
+            )
             ids = stack.enter_context(
-                patch("quasarr.search.sources.mx.radarr_api.get_wanted_imdb_ids")
+                patch(
+                    "quasarr.search.sources.templates.mx.search.radarr_api.get_wanted_imdb_ids"
+                )
             )
             releases = SearchSource().feed(ss, time.time(), SEARCH_CAT_MOVIES)
         self.assertEqual(releases, [])
@@ -409,22 +438,24 @@ class MxFeedTests(unittest.TestCase):
             raise RuntimeError("mx down")
 
         with ExitStack() as stack:
-            stack.enter_context(patch("quasarr.search.sources.mx.requests.get", boom))
+            stack.enter_context(
+                patch("quasarr.search.sources.templates.mx.search.requests.get", boom)
+            )
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.get_localized_title",
+                    "quasarr.search.sources.templates.mx.search.get_localized_title",
                     return_value="Some Movie",
                 )
             )
             clear = stack.enter_context(
-                patch("quasarr.search.sources.mx.clear_hostname_issue")
+                patch("quasarr.search.sources.templates.mx.search.clear_hostname_issue")
             )
             mark = stack.enter_context(
-                patch("quasarr.search.sources.mx.mark_hostname_issue")
+                patch("quasarr.search.sources.templates.mx.search.mark_hostname_issue")
             )
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.radarr_api.get_wanted_imdb_ids",
+                    "quasarr.search.sources.templates.mx.search.radarr_api.get_wanted_imdb_ids",
                     return_value=["tt0000001"],
                 )
             )
@@ -440,23 +471,25 @@ class MxFeedTests(unittest.TestCase):
         with ExitStack() as stack:
             fake_get = build_fake_get({"search": {"results": []}})
             stack.enter_context(
-                patch("quasarr.search.sources.mx.requests.get", fake_get)
+                patch(
+                    "quasarr.search.sources.templates.mx.search.requests.get", fake_get
+                )
             )
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.get_localized_title",
+                    "quasarr.search.sources.templates.mx.search.get_localized_title",
                     return_value="Some Movie",
                 )
             )
             clear = stack.enter_context(
-                patch("quasarr.search.sources.mx.clear_hostname_issue")
+                patch("quasarr.search.sources.templates.mx.search.clear_hostname_issue")
             )
             mark = stack.enter_context(
-                patch("quasarr.search.sources.mx.mark_hostname_issue")
+                patch("quasarr.search.sources.templates.mx.search.mark_hostname_issue")
             )
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.radarr_api.get_wanted_imdb_ids",
+                    "quasarr.search.sources.templates.mx.search.radarr_api.get_wanted_imdb_ids",
                     return_value=["tt0000001"],
                 )
             )
@@ -486,17 +519,20 @@ class MxFeedTests(unittest.TestCase):
                 patch_issue_tracking(stack)
                 stack.enter_context(
                     patch(
-                        "quasarr.search.sources.mx.radarr_api.get_wanted_imdb_ids",
+                        "quasarr.search.sources.templates.mx.search.radarr_api.get_wanted_imdb_ids",
                         wanted_returning(wanted),
                     )
                 )
                 stack.enter_context(
-                    patch("quasarr.search.sources.mx.FEED_REQUEST_TIMEOUT_SECONDS", 30)
+                    patch(
+                        "quasarr.search.sources.templates.mx.search.FEED_REQUEST_TIMEOUT_SECONDS",
+                        30,
+                    )
                 )
                 # Two seeds fit in the budget, the third finds it spent.
                 stack.enter_context(
                     patch(
-                        "quasarr.search.sources.mx.time.time",
+                        "quasarr.search.sources.templates.mx.search.time.time",
                         side_effect=[0.0, 1.0, 31.0, 31.0],
                     )
                 )
@@ -527,14 +563,19 @@ class MxFeedTests(unittest.TestCase):
                     patch.object(SearchSource, "_releases_for_imdb", fake_lookup)
                 )
                 stack.enter_context(
-                    patch("quasarr.search.sources.mx.clear_hostname_issue")
-                )
-                stack.enter_context(
-                    patch("quasarr.search.sources.mx.mark_hostname_issue", mark)
+                    patch(
+                        "quasarr.search.sources.templates.mx.search.clear_hostname_issue"
+                    )
                 )
                 stack.enter_context(
                     patch(
-                        "quasarr.search.sources.mx.radarr_api.get_wanted_imdb_ids",
+                        "quasarr.search.sources.templates.mx.search.mark_hostname_issue",
+                        mark,
+                    )
+                )
+                stack.enter_context(
+                    patch(
+                        "quasarr.search.sources.templates.mx.search.radarr_api.get_wanted_imdb_ids",
                         return_value=["tt0000001", "tt0000002"],
                     )
                 )
@@ -565,7 +606,7 @@ class MxFeedTests(unittest.TestCase):
                 patch_issue_tracking(stack)
                 stack.enter_context(
                     patch(
-                        "quasarr.search.sources.mx.radarr_api.get_wanted_imdb_ids",
+                        "quasarr.search.sources.templates.mx.search.radarr_api.get_wanted_imdb_ids",
                         wanted_returning(wanted),
                     )
                 )
@@ -591,19 +632,19 @@ class MxFeedTests(unittest.TestCase):
             patch_issue_tracking(stack)
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.get_localized_title",
+                    "quasarr.search.sources.templates.mx.search.get_localized_title",
                     return_value=None,
                 )
             )
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.radarr_api.get_wanted_imdb_ids",
+                    "quasarr.search.sources.templates.mx.search.radarr_api.get_wanted_imdb_ids",
                     wanted_returning(["tt0000001", "tt0000002"]),
                 )
             )
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.time.time",
+                    "quasarr.search.sources.templates.mx.search.time.time",
                     side_effect=[0, 100, 100],
                 )
             )
@@ -623,7 +664,7 @@ class MxFeedTests(unittest.TestCase):
             patch_issue_tracking(stack)
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.radarr_api.get_wanted_imdb_ids",
+                    "quasarr.search.sources.templates.mx.search.radarr_api.get_wanted_imdb_ids",
                     return_value=[f"tt{i}" for i in range(10)],
                 )
             )
@@ -645,7 +686,7 @@ class MxFeedTests(unittest.TestCase):
             patch_issue_tracking(stack)
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.radarr_api.get_wanted_imdb_ids",
+                    "quasarr.search.sources.templates.mx.search.radarr_api.get_wanted_imdb_ids",
                     return_value=[],
                 )
             )
@@ -660,13 +701,22 @@ class MxFeedTests(unittest.TestCase):
         # come round again until the next full rotation.
         with ExitStack() as stack:
             stack.enter_context(
-                patch("quasarr.search.sources.mx.FEED_REQUEST_TIMEOUT_SECONDS", 90)
+                patch(
+                    "quasarr.search.sources.templates.mx.search.FEED_REQUEST_TIMEOUT_SECONDS",
+                    90,
+                )
             )
             stack.enter_context(
-                patch("quasarr.search.sources.mx.SEARCH_FANOUT_DEADLINE_SECONDS", 60)
+                patch(
+                    "quasarr.search.sources.templates.mx.search.SEARCH_FANOUT_DEADLINE_SECONDS",
+                    60,
+                )
             )
             stack.enter_context(
-                patch("quasarr.search.sources.mx.time.time", return_value=61.0)
+                patch(
+                    "quasarr.search.sources.templates.mx.search.time.time",
+                    return_value=61.0,
+                )
             )
             self.assertIsNone(_remaining_feed_timeout(0.0))
 
@@ -716,18 +766,20 @@ class MxSpecialsTests(unittest.TestCase):
         with ExitStack() as stack:
             fake_get = build_fake_get({"search": show_results, "links": show_links})
             stack.enter_context(
-                patch("quasarr.search.sources.mx.requests.get", fake_get)
+                patch(
+                    "quasarr.search.sources.templates.mx.search.requests.get", fake_get
+                )
             )
             patch_issue_tracking(stack)
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.get_localized_title",
+                    "quasarr.search.sources.templates.mx.search.get_localized_title",
                     return_value="Some Show",
                 )
             )
             stack.enter_context(
                 patch(
-                    "quasarr.search.sources.mx.generate_download_link",
+                    "quasarr.search.sources.templates.mx.search.generate_download_link",
                     lambda *a, **k: "http://dl",
                 )
             )
@@ -744,7 +796,7 @@ class MxSpecialsTests(unittest.TestCase):
 
 
 class MxDownloadTests(unittest.TestCase):
-    @patch("quasarr.downloads.sources.mx.clear_hostname_issue")
+    @patch("quasarr.search.sources.templates.mx.download.clear_hostname_issue")
     def test_returns_decoded_link_with_derived_mirror(self, _clear):
         ss = make_shared_state()
         result = DownloadSource().get_download_links(
@@ -784,30 +836,37 @@ class MxDownloadTests(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(
                 patch(
-                    "quasarr.downloads.sources.mx.is_flaresolverr_available",
+                    "quasarr.search.sources.templates.mx.download.is_flaresolverr_available",
                     return_value=True,
                 )
             )
             create = stack.enter_context(
                 patch(
-                    "quasarr.downloads.sources.mx.flaresolverr_create_session",
+                    "quasarr.search.sources.templates.mx.download.flaresolverr_create_session",
                     return_value="sid-1",
                 )
             )
             destroy = stack.enter_context(
-                patch("quasarr.downloads.sources.mx.flaresolverr_destroy_session")
+                patch(
+                    "quasarr.search.sources.templates.mx.download.flaresolverr_destroy_session"
+                )
             )
             fs_get = stack.enter_context(
                 patch(
-                    "quasarr.downloads.sources.mx.flaresolverr_get",
+                    "quasarr.search.sources.templates.mx.download.flaresolverr_get",
                     return_value=fs_response,
                 )
             )
             stack.enter_context(
-                patch("quasarr.downloads.sources.mx.requests.post", fake_post)
+                patch(
+                    "quasarr.search.sources.templates.mx.download.requests.post",
+                    fake_post,
+                )
             )
             clear = stack.enter_context(
-                patch("quasarr.downloads.sources.mx.clear_hostname_issue")
+                patch(
+                    "quasarr.search.sources.templates.mx.download.clear_hostname_issue"
+                )
             )
             result = DownloadSource().get_download_links(
                 ss, decode_url, ["1fichier"], "Some.Movie", None
@@ -830,7 +889,7 @@ class MxDownloadTests(unittest.TestCase):
         ss = make_shared_state()
         decode_url = "https://api.source.invalid/api/darkiworld/decode/900001?title_id=222&host=1Fichier"
         with patch(
-            "quasarr.downloads.sources.mx.flaresolverr_create_session"
+            "quasarr.search.sources.templates.mx.download.flaresolverr_create_session"
         ) as create:
             result = DownloadSource().get_download_links(
                 ss, decode_url, ["rapidgator"], "Some.Movie", None
@@ -844,27 +903,31 @@ class MxDownloadTests(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(
                 patch(
-                    "quasarr.downloads.sources.mx.is_flaresolverr_available",
+                    "quasarr.search.sources.templates.mx.download.is_flaresolverr_available",
                     return_value=True,
                 )
             )
             stack.enter_context(
                 patch(
-                    "quasarr.downloads.sources.mx.flaresolverr_create_session",
+                    "quasarr.search.sources.templates.mx.download.flaresolverr_create_session",
                     return_value="sid-err",
                 )
             )
             destroy = stack.enter_context(
-                patch("quasarr.downloads.sources.mx.flaresolverr_destroy_session")
+                patch(
+                    "quasarr.search.sources.templates.mx.download.flaresolverr_destroy_session"
+                )
             )
             stack.enter_context(
                 patch(
-                    "quasarr.downloads.sources.mx.flaresolverr_get",
+                    "quasarr.search.sources.templates.mx.download.flaresolverr_get",
                     side_effect=RuntimeError("browser crash"),
                 )
             )
             mark = stack.enter_context(
-                patch("quasarr.downloads.sources.mx.mark_hostname_issue")
+                patch(
+                    "quasarr.search.sources.templates.mx.download.mark_hostname_issue"
+                )
             )
             result = DownloadSource().get_download_links(
                 ss, decode_url, [], "Some.Movie", None
