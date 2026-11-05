@@ -5,8 +5,8 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 from quasarr.constants import SEARCH_CAT_SHOWS
-from quasarr.downloads.sources import wx as download_wx
-from quasarr.search.sources import wx as search_wx
+from quasarr.search.sources.templates.wx import download as download_wx
+from quasarr.search.sources.templates.wx import search as search_wx
 
 PACK_TITLE = "Synthetic.Show.S02.German.DL.1080p.WEB.H264-GRP"
 EPISODE_TITLE = "Synthetic.Show.S02E03.German.DL.1080p.WEB.H264-GRP"
@@ -53,13 +53,18 @@ class WxEpisodeSearchTests(unittest.TestCase):
             FakeResponse({"item": {"releases": releases}}),
         ]
         with (
-            patch("quasarr.search.sources.wx.requests.get", side_effect=responses),
             patch(
-                "quasarr.search.sources.wx.generate_download_link",
+                "quasarr.search.sources.templates.wx.search.requests.get",
+                side_effect=responses,
+            ),
+            patch(
+                "quasarr.search.sources.templates.wx.search.generate_download_link",
                 return_value="download",
             ) as generate_download_link,
-            patch("quasarr.search.sources.wx.clear_hostname_issue"),
-            patch("quasarr.search.sources.wx.get_year", return_value=None),
+            patch("quasarr.search.sources.templates.wx.search.clear_hostname_issue"),
+            patch(
+                "quasarr.search.sources.templates.wx.search.get_year", return_value=None
+            ),
         ):
             results = search_wx.Source().search(
                 shared_state(),
@@ -213,9 +218,11 @@ class WxEpisodeDownloadTests(unittest.TestCase):
         self, releases, selection="release=PACK-A&season=2&episode=3", mirrors=None
     ):
         with (
-            patch("quasarr.downloads.sources.wx.requests.Session") as session,
             patch(
-                "quasarr.downloads.sources.wx.check_links_online_status",
+                "quasarr.search.sources.templates.wx.download.requests.Session"
+            ) as session,
+            patch(
+                "quasarr.search.sources.templates.wx.download.check_links_online_status",
                 side_effect=lambda links, state: [
                     [url, hoster] for url, hoster, status in links
                 ],

@@ -5,7 +5,7 @@ author: Quasarr
 touches:
   - quasarr/providers/imdb_metadata.py
   - quasarr/search/sources/mx.py
-  - quasarr/search/sources/wx.py
+  - quasarr/search/sources/templates/wx/search.py
 ---
 
 ## Decided

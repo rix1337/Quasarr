@@ -20,7 +20,6 @@ from quasarr.constants import (
     SEARCH_CAT_SHOWS_ANIME,
     SEARCH_REQUEST_TIMEOUT_SECONDS,
 )
-from quasarr.downloads.sources.wx import HIDE_CX_MIRROR_USER_IDS
 from quasarr.providers import shared_state
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title, get_year
@@ -33,6 +32,7 @@ from quasarr.providers.utils import (
 )
 from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
+from quasarr.search.sources.templates.wx.download import HIDE_CX_MIRROR_USER_IDS
 
 warnings.filterwarnings(
     "ignore", category=XMLParsedAsHTMLWarning
