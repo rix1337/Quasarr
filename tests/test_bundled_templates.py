@@ -108,19 +108,29 @@ class BundledSourceTests(unittest.TestCase):
 
 
 class RegistryTests(unittest.TestCase):
-    def test_templates_replace_modules_of_the_same_key(self):
+    def test_sources_are_templates_and_custom_sources(self):
+        from quasarr.downloads.sources import get_sources as get_download_sources
         from quasarr.search import sources as search_sources
 
         template = CustomSource(bundled(key="mb"), bundled=True)
+        custom = CustomSource({**bundled(key="c1"), "hostname": HOST})
         with (
             patch.object(templates, "get_templates", return_value={"mb": template}),
-            patch.object(search_sources, "_sources", {}),
-            patch("quasarr.storage.custom_sources.get_custom_sources", return_value={}),
+            patch(
+                "quasarr.storage.custom_sources.get_custom_sources",
+                return_value={"c1": custom},
+            ),
         ):
-            sources = search_sources.get_sources()
-        self.assertIs(template, sources["mb"])
-        for module_name in search_sources.get_source_module_names():
-            self.assertIn(module_name, sources)
+            self.assertEqual(
+                {"mb": template, "c1": custom}, search_sources.get_sources()
+            )
+            self.assertEqual({"mb": template, "c1": custom}, get_download_sources())
+
+    def test_every_site_ships_as_a_template(self):
+        from quasarr.search.sources.helpers import get_hostnames
+
+        self.assertEqual(templates.get_template_keys(), get_hostnames())
+        self.assertEqual(22, len(get_hostnames()))
 
 
 class DetectionTests(unittest.TestCase):

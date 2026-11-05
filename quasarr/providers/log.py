@@ -98,7 +98,18 @@ def _contexts_to_str(contexts: list[str]) -> str:
     if len(contexts) == 0:
         return "", source
 
-    if contexts:
+    if "templates" in contexts:
+        # a template package module (templates.xy.search, templates.xy.download)
+        # logs like the site module it replaced
+        index = contexts.index("templates")
+        rest = contexts[index + 1 :]
+        contexts = contexts[:index]
+        if rest and len(rest[0]) == 2:
+            source = rest[0]
+            if rest[1:] == ["download"] and "search" in contexts:
+                contexts[contexts.index("search")] = "downloads"
+
+    if contexts and not source:
         if contexts[-1].__len__() == 2:
             source = contexts.pop()
         elif contexts[0] == "quasarr" and contexts.__len__() == 1:

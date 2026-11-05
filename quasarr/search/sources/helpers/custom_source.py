@@ -35,7 +35,7 @@ from quasarr.constants import (
 )
 from quasarr.downloads.sources.helpers.abstract_source import AbstractDownloadSource
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
-from quasarr.providers.log import debug, info, warn
+from quasarr.providers.log import debug, get_logger
 from quasarr.providers.utils import sanitize_title
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
 
@@ -1506,15 +1506,19 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
         report = parse_listing(fetched.markup, url, listing, self.hostname)
         return report, fetched
 
+    def _log(self, area):
+        """The logger a site module of this key had: its label names the site."""
+        return get_logger(f"quasarr.{area}.sources.{self.initials}")
+
     def _log_report(self, operation, report):
         skipped = sum(report["skipped"].values())
         if not skipped:
             return
         message = f"{operation}: skipped {skipped} of {report['items']} items {report['skipped']}"
         if skipped > report["items"] * SKIP_SHARE_WARNING:
-            warn(f"{self.initials.upper()} {message}")
+            self._log("search").warn(message)
         else:
-            debug(f"{self.initials.upper()} {message}")
+            self._log("search").debug(message)
 
     def feed(self, shared_state, start_time, search_category):
         if "feed" in self.hooks:
@@ -1549,7 +1553,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             mark_hostname_issue(self.initials, "feed", str(e))
             return []
         finally:
-            debug(f"Time taken: {time.time() - start_time:.2f}s")
+            self._log("search").debug(f"Time taken: {time.time() - start_time:.2f}s")
 
     def _search_query(
         self,
@@ -1714,7 +1718,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             mark_hostname_issue(self.initials, "search", str(e))
             return []
         finally:
-            debug(f"Time taken: {time.time() - start_time:.2f}s")
+            self._log("search").debug(f"Time taken: {time.time() - start_time:.2f}s")
 
     def load_download_links(self, shared_state, url):
         """Fetch one release page; returns (links, error, status, imdb_id)."""
@@ -1788,7 +1792,9 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 result["imdb_id"] = imdb_id
             if status == 404:
                 # a removed release, not a broken site
-                info(f"Release page for {title} no longer exists")
+                self._log("downloads").info(
+                    f"Release page for {title} no longer exists"
+                )
                 return result
             if link_error:
                 empty = link_error == "No download links matched"
@@ -1808,7 +1814,9 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                     if any(m.lower() in link[index].lower() for m in mirrors)
                 ]
                 if not links:
-                    info(f"No download links for {title} match the mirrors {mirrors}")
+                    self._log("downloads").info(
+                        f"No download links for {title} match the mirrors {mirrors}"
+                    )
                     return result
             clear_hostname_issue(self.initials)
             return {**result, "links": links}

@@ -28,6 +28,8 @@ Selectors are suggested, never guessed by the user alone. Every candidate is sco
 
 Built-in sites move to bundled templates, one module per two-letter key in the templates package: a `TEMPLATE` definition plus, only where selectors cannot express a step, hook functions in the same module (login sessions, JSON APIs, browser-only flows). Quirks that are data (paths, filters, query rules) extend the engine instead of becoming hooks. A template replaces the old module of the same key, so keys, hostname settings, credentials and grabbed payloads stay valid. Each site migrates in its own commit with full parity to the old module. Bundled templates are read-only; users copy one into a custom source, without its hooks. Templates are Python modules rather than JSON files because the standalone build only collects submodules.
 
+In Quasarr 6 every site is a template; module discovery is gone. Sites whose behavior is mostly code (logins, JSON APIs, solver sessions, episode selection) are template packages: `TEMPLATE` plus hook wrappers in the package, with the site code moved unchanged beside it as its search and download modules, so their parity holds by construction. Sites the engine expresses fully are single template modules; when a site needed something new, the engine gained a generic option instead of a hook.
+
 A custom source can be exported as a template module for a pull request only after its live feed and search work, and only with its hostname replaced by `{host}`.
 
 ## Tried and ruled out
