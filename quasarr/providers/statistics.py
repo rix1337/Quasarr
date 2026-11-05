@@ -156,6 +156,19 @@ class StatsHelper:
             "timeout_hosts": timeout_hosts,
         }
 
+    def manual_captcha_counts(self):
+        """CAPTCHAs solved by hand today and over the kept history of 30 days."""
+        db = self._get_db()
+        today = date.today()
+        counts = []
+        for offset in range(HISTORY_DAYS):
+            day = (today - timedelta(days=offset)).isoformat()
+            try:
+                counts.append(int(db.retrieve(f"day:{day}:manual") or 0))
+            except ValueError:
+                counts.append(0)
+        return counts[0], sum(counts)
+
     def increment_package_with_links(self, links):
         """Increment package downloaded for one package, or failed download if no links
 

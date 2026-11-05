@@ -361,6 +361,8 @@ We do not spend time on features that slow future development down. Most feature
 
 SponsorsHelper is a Docker image that solves CAPTCHAs and decrypts links for Quasarr.  
 The image is public, but requires a valid [active monthly GitHub sponsor](https://github.com/users/rix1337/sponsorship) check at runtime.
+Crypters change their CAPTCHAs all the time, so SponsorsHelper needs constant upkeep. The recurring monthly sponsorship
+pays for that upkeep, which is why the check looks for an active one rather than a one-time payment.
 
 [![Github Sponsorship](https://img.shields.io/badge/support-me-red.svg)](https://github.com/users/rix1337/sponsorship)
 

@@ -52,6 +52,12 @@ def check_package_exists(package_id):
         )
 
 
+# the SponsorsHelper hint appears for users above these manual CAPTCHA counts
+SPONSORS_HINT_DAY = 10
+SPONSORS_HINT_MONTH = 50
+SECONDS_PER_MANUAL_CAPTCHA = 30
+
+
 def setup_captcha_routes(app):
     def mark_manual_package_failed(package_id, title, reason):
         protected_release = None
@@ -519,6 +525,7 @@ def setup_captcha_routes(app):
         <html>
           <body>
             <h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
+            {render_sponsors_hint()}
             {package_selector}
             {failed_warning}
                 {render_userscript_section(url, package_id, title, password, "hide")}
@@ -565,6 +572,7 @@ def setup_captcha_routes(app):
         <html>
           <body>
             <h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
+            {render_sponsors_hint()}
             {package_selector}
             {failed_warning}
                 {render_userscript_section(url, package_id, title, password, "junkies")}
@@ -611,6 +619,7 @@ def setup_captcha_routes(app):
         <html>
           <body>
             <h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
+            {render_sponsors_hint()}
             {package_selector}
             {failed_warning}
                 {render_userscript_section(url, package_id, title, password, provider_type)}
@@ -667,6 +676,7 @@ def setup_captcha_routes(app):
         <html>
           <body>
             <h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
+            {render_sponsors_hint()}
             {package_selector}
             {failed_warning}
                 {render_userscript_section(url, package_id, title, password, "keeplinks")}
@@ -714,6 +724,7 @@ def setup_captcha_routes(app):
         <html>
           <body>
             <h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
+            {render_sponsors_hint()}
             {package_selector}
             {failed_warning}
                 {render_userscript_section(url, package_id, title, password, "tolink")}
@@ -761,6 +772,7 @@ def setup_captcha_routes(app):
         <html>
           <body>
             <h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
+            {render_sponsors_hint()}
             {package_selector}
             {failed_warning}
                 {render_userscript_section(url, package_id, title, password, "filecrypt")}
@@ -949,6 +961,34 @@ def setup_captcha_routes(app):
                     const [captchaType, encodedData] = this.value.split('|');
                     window.location.href = '/captcha/' + captchaType + '?data=' + encodedData;
                 }});
+            </script>
+        """
+
+    def render_sponsors_hint():
+        """A quiet pointer to SponsorsHelper for users who solve many CAPTCHAs by hand."""
+        if shared_state.values.get("helper_active"):
+            return ""
+        try:
+            today, month = StatsHelper(shared_state).manual_captcha_counts()
+        except Exception:
+            return ""
+        if today <= SPONSORS_HINT_DAY and month <= SPONSORS_HINT_MONTH:
+            return ""
+        minutes = max(1, round(month * SECONDS_PER_MANUAL_CAPTCHA / 60))
+        return f"""
+            <div id="sponsors-hint" style="display: none; text-align: left; font-size: 0.875rem; margin-bottom: 16px;
+                padding: 10px 12px; border: 1px solid rgba(128,128,128,0.3); border-radius: 8px; background: rgba(128,128,128,0.08);">
+                💖 You solved {today} CAPTCHA{"s" if today != 1 else ""} by hand today and {month} in the last 30 days,
+                roughly {minutes} minute{"s" if minutes != 1 else ""} of clicking.
+                <a href="https://github.com/rix1337/Quasarr?tab=readme-ov-file#sponsorshelper" target="_blank" rel="noopener noreferrer">SponsorsHelper</a>
+                solves them for you. It runs while you have an active monthly GitHub sponsorship: crypters change their
+                CAPTCHAs all the time, and the recurring sponsorship pays for keeping it working.
+                <button type="button" class="btn-subtle" style="margin-left: 4px;" onclick="localStorage.setItem('sponsorsHintHidden', new Date().toDateString()); document.getElementById('sponsors-hint').remove();">Hide for today</button>
+            </div>
+            <script>
+              if (localStorage.getItem('sponsorsHintHidden') !== new Date().toDateString()) {{
+                document.getElementById('sponsors-hint').style.display = 'block';
+              }}
             </script>
         """
 
