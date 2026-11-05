@@ -4,10 +4,12 @@
 
 """User-defined sources built from a stored definition instead of a module."""
 
+import html
 import re
 import threading
 import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime, parsedate_to_datetime
 from typing import NamedTuple
@@ -27,6 +29,7 @@ from quasarr.constants import (
     SEARCH_CAT_MUSIC,
     SEARCH_CAT_SHOWS,
     SEARCH_CAT_XXX,
+    SEARCH_CATEGORY_DEFINITIONS,
     SEARCH_REQUEST_TIMEOUT_SECONDS,
     SHARE_HOSTERS_LOWERCASE,
 )
@@ -56,7 +59,13 @@ CUSTOM_CATEGORIES = (
     SEARCH_CAT_BOOKS,
     SEARCH_CAT_XXX,
 )
+ALL_CATEGORIES = {
+    definition["id"] for definition in SEARCH_CATEGORY_DEFINITIONS.values()
+}
 SEARCH_MODES = ("imdb", "title", "off")
+SEARCH_MATCHES = ("imdb", "query")
+IMDB_IDENTITIES = ("strict", "fill", "none")
+MIRROR_FILTERS = ("none", "mirror", "url")
 TITLE_CLEANUPS = ("scene", "none")
 DATE_FALLBACKS = ("now", "hour_ago")
 # release checks a search applies on top of the shared title matching
@@ -78,6 +87,7 @@ MAX_REDIRECT_LINKS = 10
 BLOCKED_ERROR = "Security check detected - configure FlareSolverr"
 _LABEL_SEPARATORS = " \t\r\n:|-\u00a0"
 
+_TEXT_URL = re.compile(r"https?://[^\s<>'\"]+")
 _XML_DECLARATION = re.compile(r"^\s*<\?xml[^>]*\?>", re.I)
 _RSS_LINK_OPEN = re.compile(r"<link>", re.I)
 _RSS_LINK_CLOSE = re.compile(r"</link>", re.I)
@@ -136,7 +146,8 @@ def parse_size(text, unit=None):
     if factor is None:
         return None
     size_mb = int(_normalize_number(number) * factor)
-    if size_mb <= 0 or size_mb > MAX_SIZE_MB:
+    # files below one MB report 0, as they always have
+    if size_mb < 0 or size_mb > MAX_SIZE_MB:
         return None
     return size_mb
 
@@ -283,6 +294,8 @@ def _compile_field(spec, name, default_attr):
         "labels": labels,
         "format": str(spec.get("format") or "").strip() or None,
         "unit": str(spec.get("unit") or "").strip().upper() or None,
+        # skip the release instead of falling back when the value is missing
+        "required": _require_bool(spec.get("required", False), f"{name}.required"),
     }
 
 
@@ -305,6 +318,10 @@ def _compile_listing(spec, name):
         spec.get("title_cleanup", "scene"), TITLE_CLEANUPS, f"{name}.title_cleanup"
     )
     listing["dedupe"] = _require_bool(spec.get("dedupe", True), f"{name}.dedupe")
+    # look for IMDb links in items without an imdb field
+    listing["find_imdb"] = _require_bool(
+        spec.get("find_imdb", True), f"{name}.find_imdb"
+    )
     listing["date_fallback"] = _require_choice(
         spec.get("date_fallback", "now"), DATE_FALLBACKS, f"{name}.date_fallback"
     )
@@ -340,7 +357,7 @@ def compile_definition(definition, bundled=False):
         raise DefinitionError(f"capabilities: true/false for {', '.join(CAPABILITIES)}")
     declared_categories = definition.get("categories") or []
     if not isinstance(declared_categories, list) or any(
-        c not in CUSTOM_CATEGORIES for c in declared_categories
+        c not in ALL_CATEGORIES for c in declared_categories
     ):
         raise DefinitionError("categories: unsupported category")
     name = str(definition.get("name") or "").strip()
@@ -381,7 +398,7 @@ def compile_definition(definition, bundled=False):
         search.get("method", "get"), SEARCH_METHODS, "search.method"
     )
     search_body = None
-    if mode != "off" or phrase:
+    if (mode != "off" or phrase) and not search.get("urls"):
         # a POST form carries the query in its body instead of the URL
         is_post = search_method == "post"
         search_url = _require_template(search.get("url"), "search.url", not is_post)
@@ -398,13 +415,33 @@ def compile_definition(definition, bundled=False):
         raise DefinitionError(
             f"search.filters: supported are {', '.join(SEARCH_FILTERS)}"
         )
-    # drop results of another title and fill in the searched IMDb ID
-    imdb_identity = _require_bool(
-        search.get("imdb_identity", True), "search.imdb_identity"
+    # strict drops results of another title and fills in the searched IMDb ID,
+    # fill always stamps the searched ID, none keeps what the page shows
+    identity = search.get("imdb_identity", "strict")
+    identity = {True: "strict", False: "none"}.get(identity, identity)
+    imdb_identity = _require_choice(identity, IMDB_IDENTITIES, "search.imdb_identity")
+    # imdb matches results against the searched ID, query against the title
+    search_match = _require_choice(
+        search.get("match", "imdb"), SEARCH_MATCHES, "search.match"
     )
+    # a category can search several sections of the site at once
+    raw_urls = search.get("urls") or {}
+    if not isinstance(raw_urls, dict):
+        raise DefinitionError("search.urls: must map categories to URLs")
+    search_urls = {}
+    for category, templates in raw_urls.items():
+        if str(category) not in {str(c) for c in CUSTOM_CATEGORIES} or not isinstance(
+            templates, list
+        ):
+            raise DefinitionError("search.urls: unsupported category")
+        search_urls[int(category)] = [
+            _require_template(t, f"search.urls[{category}]", True) for t in templates
+        ]
 
     hooked = {"feed", "search"} & set(hooks)
-    if not compiled_feeds and not search_url and not hooked:
+    if search.get("urls") and not search_categories:
+        raise DefinitionError("search.categories: pick at least one")
+    if not compiled_feeds and not search_url and not search.get("urls") and not hooked:
         raise DefinitionError("feeds: add a feed or enable search")
 
     # a template whose feed and search are both hooks needs no selectors
@@ -425,9 +462,37 @@ def compile_definition(definition, bundled=False):
     links = download.get("links") or {}
     if not isinstance(links, dict):
         raise DefinitionError("download.links: must be an object")
+    section = download.get("section") or None
+    if section is not None and not (
+        isinstance(section, dict) and section.get("heading") and section.get("contains")
+    ):
+        raise DefinitionError("download.section: heading and contains are required")
+    hosts = download.get("hosts") or []
+    if not isinstance(hosts, list) or not all(isinstance(h, str) for h in hosts):
+        raise DefinitionError("download.hosts: must be a list of hoster names")
+    mirror_filter = download.get("filter_mirrors", "none")
+    mirror_filter = {True: "mirror", False: "none"}.get(mirror_filter, mirror_filter)
     compiled_download = {
         "selector": _compile_selector(
             links.get("selector"), "download.links.selector", False
+        ),
+        # the release text lives in this element; missing means a changed layout
+        "container": _compile_selector(
+            download.get("container"), "download.container", False
+        ),
+        # only links between this heading and the next one of the same kind
+        "section": section,
+        # hoster names a link host must start with, as in "ddownload."
+        "hosts": [h.lower().strip(".") for h in hosts],
+        # URLs written as text, when no link qualifies
+        "text_urls": _require_bool(
+            download.get("text_urls", False), "download.text_urls"
+        ),
+        # read the IMDb ID from the release page
+        "imdb": _require_bool(download.get("imdb", False), "download.imdb"),
+        # a page without matching links marks the site as broken
+        "empty_is_issue": _require_bool(
+            download.get("empty_is_issue", True), "download.empty_is_issue"
         ),
         "mirror": str(links.get("mirror") or "text").strip(),
         "filter": _require_choice(
@@ -436,9 +501,10 @@ def compile_definition(definition, bundled=False):
         "password": _require_choice(
             download.get("password", "hostname"), PASSWORD_MODES, "download.password"
         ),
-        # keep only links whose mirror name contains a wanted mirror
-        "filter_mirrors": _require_bool(
-            download.get("filter_mirrors", False), "download.filter_mirrors"
+        # mirror keeps links whose mirror name holds a wanted mirror, url
+        # those whose address does
+        "filter_mirrors": _require_choice(
+            mirror_filter, MIRROR_FILTERS, "download.filter_mirrors"
         ),
         # on-site links that redirect to a crypter or hoster
         "redirects": _require_bool(
@@ -470,6 +536,12 @@ def compile_definition(definition, bundled=False):
         "search_categories": search_categories,
         "search_filters": search_filters,
         "imdb_identity": imdb_identity,
+        "search_match": search_match,
+        "search_urls": search_urls,
+        # Magazarr reads magazine dates only in a few spellings
+        "magazine_titles": _require_bool(
+            definition.get("magazine_titles", False), "magazine_titles"
+        ),
         "list": listing,
         "search_list": search_listing,
         "download": compiled_download,
@@ -707,6 +779,8 @@ def _parse_item(item, page_url, listing, hostname, now):
         raw = extract_field(item, listing["size"])
         parsed = parse_size(raw, listing["size"]["unit"]) if raw else None
         if parsed is None:
+            if listing["size"]["required"]:
+                return None, "size not found"
             warnings.append("size not parsed")
         else:
             size_mb = parsed
@@ -716,12 +790,14 @@ def _parse_item(item, page_url, listing, hostname, now):
         raw = extract_field(item, listing["date"])
         date = parse_date(raw, listing["date"]["format"], now) if raw else None
         if date is None:
+            if listing["date"]["required"]:
+                return None, "date not found"
             warnings.append("date not parsed")
 
     imdb_id = None
     if listing["imdb"]:
         imdb_id = parse_imdb_id(extract_field(item, listing["imdb"]))
-    else:
+    elif listing["find_imdb"]:
         for anchor in item.find_all("a", href=True):
             imdb_id = parse_imdb_id(anchor["href"])
             if imdb_id:
@@ -811,38 +887,104 @@ def _is_known_link(url):
     return any(part in SHARE_HOSTERS_LOWERCASE for part in host.split("."))
 
 
+def _download_anchors(soup, download):
+    """Links in the download area: a heading's section, else the container."""
+    root = soup
+    if download["container"]:
+        root = download["container"].select_one(soup)
+        if root is None:
+            return None
+    section = download["section"]
+    if section:
+        heading = root.find(
+            lambda t: (
+                t.name == section["heading"]
+                and section["contains"].lower() in t.get_text(strip=True).lower()
+            )
+        )
+        if heading is not None:
+            anchors = []
+            for sibling in heading.next_siblings:
+                if getattr(sibling, "name", None) == section["heading"]:
+                    break
+                if hasattr(sibling, "find_all"):
+                    anchors += sibling.find_all("a", href=True)
+            return anchors
+    if download["selector"]:
+        return download["selector"].select(root)
+    return root.find_all("a", href=True)
+
+
+def _host_allowed(url, download):
+    host = (urlparse(url).hostname or "").lower()
+    if download["hosts"]:
+        return any(host.startswith(f"{name}.") for name in download["hosts"])
+    return True
+
+
+def _mirror_name(element, url, mode):
+    host = (urlparse(url).hostname or "").lower()
+    if mode == "text":
+        mirror = element.get_text(" ", strip=True) if element is not None else ""
+        if mirror.startswith(("http://", "https://")):
+            mirror = (urlparse(mirror).hostname or "").removeprefix("www.")
+    elif mode == "href_host":
+        mirror = host.removeprefix("www.")
+    elif mode == "host_label":
+        mirror = host.split(".")[0] if host else "unknown"
+    else:
+        mirror = (element.get(mode) if element is not None else "") or ""
+    return str(mirror).strip()[:100].lower()
+
+
 def parse_download_links(markup, page_url, download, hostname=None):
-    """Return [[url, mirror]] for every link the definition selects."""
+    """Return [[url, mirror]] for every link the definition selects.
+
+    Returns None when the configured container is missing from the page.
+    """
     soup = BeautifulSoup(markup, "html.parser")
+    anchors = _download_anchors(soup, download)
+    if anchors is None:
+        return None
     links = []
     seen = set()
-    for element in download["selector"].select(soup):
+
+    def accept(url, element):
+        if not url or urlparse(url).scheme not in ("http", "https") or url in seen:
+            return
+        if download["hosts"]:
+            if not _host_allowed(url, download):
+                return
+        elif download["filter"] == "known" and not (
+            _is_known_link(url)
+            or (download["redirects"] and hostname and _is_on_host(url, hostname))
+        ):
+            return
+        seen.add(url)
+        links.append([url, _mirror_name(element, url, download["mirror"])])
+
+    for element in anchors:
         try:
-            href = element.get("href")
-            url = urljoin(page_url, href) if href else None
-            if not url or urlparse(url).scheme not in ("http", "https"):
-                continue
-            if url in seen:
-                continue
-            if download["filter"] == "known" and not (
-                _is_known_link(url)
-                or (download["redirects"] and hostname and _is_on_host(url, hostname))
-            ):
-                continue
-            mirror_mode = download["mirror"]
-            if mirror_mode == "text":
-                mirror = element.get_text(" ", strip=True)
-                if mirror.startswith(("http://", "https://")):
-                    mirror = (urlparse(mirror).hostname or "").removeprefix("www.")
-            elif mirror_mode == "href_host":
-                mirror = (urlparse(url).hostname or "").removeprefix("www.")
-            else:
-                mirror = element.get(mirror_mode) or ""
-            seen.add(url)
-            links.append([url, str(mirror).strip()[:100].lower()])
+            href = (element.get("href") or "").strip()
+            accept(urljoin(page_url, href) if href else None, element)
         except Exception as e:
             debug(f"Skipping download link: {e}")
+    if not links and download["text_urls"]:
+        text = "".join(str(anchor) for anchor in anchors)
+        for url in _TEXT_URL.findall(text):
+            accept(url.strip(), None)
     return links
+
+
+def page_imdb_id(markup):
+    """The first IMDb title link of a release page."""
+    match = IMDB_REGEX.search(
+        " ".join(
+            a["href"]
+            for a in BeautifulSoup(markup, "html.parser").find_all("a", href=True)
+        )
+    )
+    return match.group(1) if match else None
 
 
 def passes_search_filters(title, filters, search_string=""):
@@ -1005,6 +1147,21 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
         body = self.spec["search_body"].replace("{q}", quote_plus(query))
         return self._url(self.spec["search_url"]), dict(parse_qsl(body))
 
+    def search_requests(self, query, category):
+        """Every request of one search: per-category sections, else the default."""
+        templates = self.spec["search_urls"].get(int(category))
+        if templates:
+            return [(self._url(t, query), None) for t in templates]
+        return [self.search_request(query)]
+
+    def _magazine(self, title, category):
+        from quasarr.constants import SEARCH_CAT_BOOKS
+        from quasarr.providers.utils import normalize_magazine_title
+
+        if self.spec["magazine_titles"] and int(category) == SEARCH_CAT_BOOKS:
+            return normalize_magazine_title(title)
+        return title
+
     def load_listing(self, shared_state, url, listing, timeout, data=None):
         """Fetch and parse one listing page; returns (report, fetch result)."""
         fetched = fetch_markup(
@@ -1047,7 +1204,11 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 return []
             self._log_report("Feed", report)
             clear_hostname_issue(self.initials)
-            return self._releases(shared_state, report["rows"])
+            rows = [
+                {**row, "title": self._magazine(row["title"], category)}
+                for row in report["rows"]
+            ]
+            return self._releases(shared_state, rows)
         except Exception as e:
             mark_hostname_issue(self.initials, "feed", str(e))
             return []
@@ -1071,7 +1232,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 search_category,
                 deadline=start_time + SEARCH_REQUEST_TIMEOUT_SECONDS,
             )
-            return title, imdb_id
+            return html.unescape(title) if title else None, imdb_id
         return None, imdb_id
 
     def search(
@@ -1082,7 +1243,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
         search_string="",
         season=None,
         episode=None,
-        **kwargs,
+        episode_date=None,
     ):
         if "search" in self.hooks:
             return self.hooks["search"](
@@ -1093,9 +1254,10 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 search_string,
                 season,
                 episode,
-                **kwargs,
+                episode_date=episode_date,
             )
         from quasarr.providers.utils import (
+            date_numbering_title_search_strings,
             get_base_search_category_id,
             is_valid_release,
         )
@@ -1109,40 +1271,72 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             )
             if not query:
                 return []
-            url, data = self.search_request(query)
-            report, fetched = self.load_listing(
-                shared_state,
-                url,
-                self.spec["search_list"],
-                SEARCH_REQUEST_TIMEOUT_SECONDS,
-                data,
+            if episode_date is not None and not self.supports_date_numbering:
+                episode_date = None
+            request_query = (
+                date_numbering_title_search_strings(query)[0] if episode_date else query
             )
-            if fetched.error:
-                mark_hostname_issue(self.initials, "search", fetched.error)
+            match_string = (
+                query if self.spec["search_match"] == "query" else search_string
+            )
+
+            requests_ = self.search_requests(request_query, category)
+            with ThreadPoolExecutor(max_workers=len(requests_)) as pool:
+                pages = list(
+                    pool.map(
+                        lambda request: self.load_listing(
+                            shared_state,
+                            request[0],
+                            self.spec["search_list"],
+                            SEARCH_REQUEST_TIMEOUT_SECONDS,
+                            request[1],
+                        ),
+                        requests_,
+                    )
+                )
+            found = []
+            for report, fetched in pages:
+                if fetched.error:
+                    mark_hostname_issue(self.initials, "search", fetched.error)
+                    continue
+                self._log_report("Search", report)
+                found += report["rows"]
+            if not any(fetched.error is None for _, fetched in pages):
                 return []
-            self._log_report("Search", report)
             clear_hostname_issue(self.initials)
 
             rows = []
+            seen = set()
             identity = self.spec["imdb_identity"]
-            for row in report["rows"]:
+            for row in found:
+                if len(pages) > 1 and row["link"] in seen:
+                    continue
                 if (
-                    identity
+                    identity == "strict"
                     and imdb_id
                     and row["imdb_id"]
                     and row["imdb_id"] != imdb_id
                 ):
                     continue
                 if not is_valid_release(
-                    row["title"], search_category, search_string, season, episode
+                    row["title"],
+                    search_category,
+                    match_string,
+                    season,
+                    episode,
+                    episode_date,
                 ):
                     continue
                 if not passes_search_filters(
                     row["title"], self.spec["search_filters"], search_string
                 ):
                     continue
-                if identity and imdb_id and not row["imdb_id"]:
-                    row = {**row, "imdb_id": imdb_id}
+                seen.add(row["link"])
+                row = {**row, "title": self._magazine(row["title"], category)}
+                if imdb_id and (
+                    identity == "fill" or (identity == "strict" and not row["imdb_id"])
+                ):
+                    row["imdb_id"] = imdb_id
                 rows.append(row)
             return self._releases(shared_state, rows)
         except Exception as e:
@@ -1152,11 +1346,12 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             debug(f"Time taken: {time.time() - start_time:.2f}s")
 
     def load_download_links(self, shared_state, url):
-        """Fetch one release page; returns (links, error, status)."""
+        """Fetch one release page; returns (links, error, status, imdb_id)."""
         if not _is_on_host(url, self.hostname):
-            return [], "Release page is not on this site", None
-        if not self.spec["download"]["selector"]:
-            return [], "No download links configured", None
+            return [], "Release page is not on this site", None, None
+        download = self.spec["download"]
+        if not (download["selector"] or download["container"] or download["section"]):
+            return [], "No download links configured", None, None
         fetched = fetch_markup(
             shared_state,
             url,
@@ -1164,13 +1359,19 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             self.spec["flaresolverr"],
         )
         if fetched.error:
-            return [], fetched.error, fetched.status
-        links = parse_download_links(
-            fetched.markup, url, self.spec["download"], self.hostname
-        )
+            return [], fetched.error, fetched.status, None
+        links = parse_download_links(fetched.markup, url, download, self.hostname)
+        if links is None:
+            return [], "Could not find main content section", fetched.status, None
+        imdb_id = page_imdb_id(fetched.markup) if download["imdb"] else None
         if self.spec["download"]["redirects"]:
             links = self._resolve_redirects(shared_state, links)
-        return links, None if links else "No download links matched", fetched.status
+        return (
+            links,
+            None if links else "No download links matched",
+            fetched.status,
+            imdb_id,
+        )
 
     def _resolve_redirects(self, shared_state, links):
         from quasarr.downloads.sources.helpers.redirect import (
@@ -1207,26 +1408,36 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 self, shared_state, url, mirrors, title, password
             )
         try:
-            links, link_error, status = self.load_download_links(shared_state, url)
+            links, link_error, status, imdb_id = self.load_download_links(
+                shared_state, url
+            )
+            download = self.spec["download"]
+            result = {"links": []}
+            if imdb_id:
+                result["imdb_id"] = imdb_id
             if status == 404:
                 # a removed release, not a broken site
                 info(f"Release page for {title} no longer exists")
-                return {"links": []}
+                return result
             if link_error:
-                if status is not None or "Request failed" in link_error:
+                empty = link_error == "No download links matched"
+                if (status is not None or "Request failed" in link_error) and (
+                    download["empty_is_issue"] or not empty
+                ):
                     mark_hostname_issue(self.initials, "download", link_error)
-                return {"links": []}
-            if mirrors and self.spec["download"]["filter_mirrors"]:
+                return result
+            if mirrors and download["filter_mirrors"] != "none":
+                index = 1 if download["filter_mirrors"] == "mirror" else 0
                 links = [
                     link
                     for link in links
-                    if any(m.lower() in link[1].lower() for m in mirrors)
+                    if any(m.lower() in link[index].lower() for m in mirrors)
                 ]
                 if not links:
                     info(f"No download links for {title} match the mirrors {mirrors}")
-                    return {"links": []}
+                    return result
             clear_hostname_issue(self.initials)
-            return {"links": links}
+            return {**result, "links": links}
         except Exception as e:
             mark_hostname_issue(self.initials, "download", str(e))
             return {"links": []}

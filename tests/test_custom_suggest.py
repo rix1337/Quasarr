@@ -332,7 +332,7 @@ class DownloadSuggestionTests(unittest.TestCase):
                 side_effect=lambda url, *a, **k: targets[url],
             ),
         ):
-            links, error, _ = source.load_download_links(
+            links, error, _, _ = source.load_download_links(
                 SimpleNamespace(values={"user_agent": "UA/1.0"}), f"https://{HOST}/r/"
             )
         self.assertIsNone(error)

@@ -266,7 +266,7 @@ def setup_custom_source_routes(app, shared_state):
         except DefinitionError as e:
             return _fail(str(e))
         url = str(data.get("url") or "")
-        links, link_error, _ = source.load_download_links(shared_state, url)
+        links, link_error, _, _ = source.load_download_links(shared_state, url)
         if link_error:
             return {"success": False, "error": link_error}
         return {"success": True, "links": links, "classified": classify_links(links)}
