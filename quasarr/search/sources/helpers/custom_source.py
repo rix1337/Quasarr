@@ -65,7 +65,8 @@ ALL_CATEGORIES = {
 SEARCH_MODES = ("imdb", "title", "off")
 SEARCH_MATCHES = ("imdb", "query")
 IMDB_IDENTITIES = ("strict", "strict_fill", "fill", "none")
-MIRROR_FILTERS = ("none", "mirror", "url")
+# exact compares bare hoster names, as "rapidgator" against "RG"
+MIRROR_FILTERS = ("none", "mirror", "url", "exact")
 # scene also drops listing dates and sizes around the name, sanitize does not
 TITLE_CLEANUPS = ("scene", "sanitize", "none")
 DATE_FALLBACKS = ("now", "hour_ago")
@@ -74,7 +75,7 @@ SEARCH_FILTERS = ("require_quality", "no_spaces", "skip_xxx")
 SEARCH_METHODS = ("get", "post")
 DOWNLOAD_FILTERS = ("known", "all")
 PASSWORD_MODES = ("hostname", "site_name", "none")
-LIST_FIELDS = ("title", "link", "size", "date", "imdb", "source")
+LIST_FIELDS = ("title", "link", "size", "date", "imdb", "source", "password")
 REQUIRED_LIST_FIELDS = ("title", "link")
 MAX_BODY_BYTES = 5 * 1024 * 1024
 # ponytail: per-field text cap bounds parser work on hostile pages
@@ -241,6 +242,13 @@ def _normalize_hostname(value):
     return domain
 
 
+def _string_list(value, name):
+    value = value or []
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        raise DefinitionError(f"{name}: must be a list of texts")
+    return value
+
+
 def _require_bool(value, name):
     if not isinstance(value, bool):
         raise DefinitionError(f"{name}: must be true or false")
@@ -313,6 +321,7 @@ def _compile_field(spec, name, default_attr):
         "required": _require_bool(spec.get("required", False), f"{name}.required"),
         # read from the closest enclosing element, as in a post holding releases
         "within": _compile_selector(spec.get("within"), f"{name}.within", False),
+        "adjacent": _require_bool(spec.get("adjacent", False), f"{name}.adjacent"),
         "pick": _require_choice(
             spec.get("pick", "first"), ("first", "last"), f"{name}.pick"
         ),
@@ -396,6 +405,7 @@ def compile_definition(definition, bundled=False):
     if not isinstance(feeds, list):
         raise DefinitionError("feeds: must be a list")
     compiled_feeds = {}
+    feed_bodies = {}
     for index, feed in enumerate(feeds):
         if not isinstance(feed, dict):
             raise DefinitionError(f"feeds[{index}]: must be an object")
@@ -407,6 +417,12 @@ def compile_definition(definition, bundled=False):
         compiled_feeds[category] = _require_template(
             feed.get("url"), f"feeds[{index}].url"
         )
+        # a feed can be a form submitted without search terms
+        method = _require_choice(
+            feed.get("method", "get"), SEARCH_METHODS, f"feeds[{index}].method"
+        )
+        if method == "post":
+            feed_bodies[category] = str(feed.get("body") or "")
 
     search = definition.get("search") or {"mode": "off"}
     if not isinstance(search, dict):
@@ -448,6 +464,12 @@ def compile_definition(definition, bundled=False):
     # imdb matches results against the searched ID, query against the title
     search_match = _require_choice(
         search.get("match", "imdb"), SEARCH_MATCHES, "search.match"
+    )
+    # the title query also names the release year, unless a season is searched
+    append_year = _require_bool(search.get("append_year", False), "search.append_year")
+    # the title query also names the season and episode, as in "Title S01E02"
+    episode_query = _require_bool(
+        search.get("episode_query", False), "search.episode_query"
     )
     # result pages that hold the releases, opened from the search page
     follow = search.get("follow") or None
@@ -523,6 +545,17 @@ def compile_definition(definition, bundled=False):
         "section": section,
         # hoster names a link host must start with, as in "ddownload."
         "hosts": [h.lower().strip(".") for h in hosts],
+        # mirror names a link must carry, as "rapidgator"
+        "mirror_names": [
+            normalize_hoster_name(n)
+            for n in _string_list(download.get("mirror_names"), "download.mirror_names")
+        ],
+        # crypter keeps only redirects that end at a crypter
+        "redirect_targets": _require_choice(
+            download.get("redirect_targets", "any"),
+            ("any", "crypter"),
+            "download.redirect_targets",
+        ),
         # URLs written as text, when no link qualifies
         "text_urls": _require_bool(
             download.get("text_urls", False), "download.text_urls"
@@ -577,6 +610,13 @@ def compile_definition(definition, bundled=False):
         "imdb_identity": imdb_identity,
         "search_match": search_match,
         "search_follow": follow,
+        "search_append_year": append_year,
+        "search_episode_query": episode_query,
+        "feed_bodies": feed_bodies,
+        # feed releases pass the same checks as search results without a query
+        "feed_validate": _require_bool(
+            definition.get("feed_validate", False), "feed_validate"
+        ),
         "search_urls": search_urls,
         # Magazarr reads magazine dates only in a few spellings
         "magazine_titles": _require_bool(
@@ -738,8 +778,12 @@ def fetch_markup(shared_state, url, timeout, use_flaresolverr, data=None):
 # --- Parsing ---------------------------------------------------------------
 
 
-def _text_after_label(element, label):
-    """Text after a label such as "Size:", in the same or the next text node."""
+def _text_after_label(element, label, adjacent=False):
+    """Text after a label such as "Size:", in the same or a following text node.
+
+    ``adjacent`` reads only the text node right after the label, so an empty
+    value stays empty instead of picking up the next text on the page.
+    """
     wanted = label.casefold()
     strings = [str(node) for node in element.find_all(string=True)]
     for index, text in enumerate(strings):
@@ -749,7 +793,7 @@ def _text_after_label(element, label):
         rest = text[position + len(label) :].strip(_LABEL_SEPARATORS)
         if rest:
             return rest
-        for following in strings[index + 1 :]:
+        for following in strings[index + 1 : index + 2 if adjacent else None]:
             value = following.strip(_LABEL_SEPARATORS)
             if value:
                 return value
@@ -788,7 +832,11 @@ def _extract_one(item, field):
                 (
                     found
                     for label in field["labels"]
-                    if (found := _text_after_label(element, label))
+                    if (
+                        found := _text_after_label(
+                            element, label, field.get("adjacent")
+                        )
+                    )
                 ),
                 None,
             )
@@ -883,6 +931,12 @@ def _parse_item(item, page_url, listing, hostname, now):
             match = IMDB_REGEX.search(item.get_text()[: MAX_FIELD_CHARS * 10])
             imdb_id = match.group(1) if match else None
 
+    # a release-specific archive password: the first word after its label
+    password = None
+    if listing["password"]:
+        raw = extract_field(item, listing["password"])
+        password = raw.split()[0] if raw else ""
+
     # the page a release is shown on, when its link is a crypter or hoster
     source = page_url if listing["source_is_page"] else link
     if listing["source"]:
@@ -894,6 +948,7 @@ def _parse_item(item, page_url, listing, hostname, now):
         "title": title,
         "link": link,
         "source": source,
+        "password": password,
         "size_mb": size_mb,
         "date": date
         or format_datetime(
@@ -1000,6 +1055,22 @@ def _download_anchors(soup, download):
     return root.find_all("a", href=True)
 
 
+_HOSTER_ALIASES = {"ddl": "ddownload", "ddlto": "ddownload", "rg": "rapidgator"}
+
+
+def normalize_hoster_name(name):
+    """A bare hoster name from a label, a domain or a URL: "RG" -> "rapidgator"."""
+    normalized = str(name or "").lower().strip()
+    if "://" in normalized:
+        parsed = urlparse(normalized)
+        normalized = parsed.netloc or parsed.path
+    normalized = normalized.removeprefix("www.").split("/", 1)[0].split(":", 1)[0]
+    if " " in normalized:
+        normalized = normalized.split()[-1]
+    normalized = normalized.split(".", 1)[0]
+    return _HOSTER_ALIASES.get(normalized, normalized)
+
+
 def _host_allowed(url, download):
     host = (urlparse(url).hostname or "").lower()
     if download["hosts"]:
@@ -1017,6 +1088,9 @@ def _mirror_name(element, url, mode):
         mirror = host.removeprefix("www.")
     elif mode == "host_label":
         mirror = host.split(".")[0] if host else "unknown"
+    elif mode == "hoster_name":
+        text = element.get_text(" ", strip=True) if element is not None else ""
+        mirror = normalize_hoster_name(text or host)
     else:
         mirror = (element.get(mode) if element is not None else "") or ""
     return str(mirror).strip()[:100].lower()
@@ -1037,6 +1111,9 @@ def parse_download_links(markup, page_url, download, hostname=None):
     def accept(url, element):
         if not url or urlparse(url).scheme not in ("http", "https") or url in seen:
             return
+        mirror = _mirror_name(element, url, download["mirror"])
+        if download["mirror_names"] and mirror not in download["mirror_names"]:
+            return
         if download["hosts"]:
             if not _host_allowed(url, download):
                 return
@@ -1046,7 +1123,7 @@ def parse_download_links(markup, page_url, download, hostname=None):
         ):
             return
         seen.add(url)
-        links.append([url, _mirror_name(element, url, download["mirror"])])
+        links.append([url, mirror])
 
     for element in anchors:
         try:
@@ -1204,8 +1281,9 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
         from quasarr.providers.utils import generate_download_link
 
         releases = []
-        password = self._password()
+        site_password = self._password()
         for row in rows:
+            password = site_password if row.get("password") is None else row["password"]
             releases.append(
                 {
                     "details": {
@@ -1235,7 +1313,18 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
         if self.spec["search_method"] != "post":
             return self._url(self.spec["search_url"], query), None
         body = self.spec["search_body"].replace("{q}", quote_plus(query))
-        return self._url(self.spec["search_url"]), dict(parse_qsl(body))
+        return self._url(self.spec["search_url"]), dict(
+            parse_qsl(body, keep_blank_values=True)
+        )
+
+    def feed_request(self, category):
+        """URL and form data of the feed of one category."""
+        template = self.spec["feeds"].get(int(category))
+        if not template:
+            return None, None
+        body = self.spec["feed_bodies"].get(int(category))
+        data = None if body is None else dict(parse_qsl(body, keep_blank_values=True))
+        return self._url(template), data
 
     def search_requests(self, query, category):
         """Every request of one search: per-category sections, else the default."""
@@ -1299,18 +1388,18 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
     def feed(self, shared_state, start_time, search_category):
         if "feed" in self.hooks:
             return self.hooks["feed"](self, shared_state, start_time, search_category)
-        from quasarr.providers.utils import get_base_search_category_id
+        from quasarr.providers.utils import (
+            get_base_search_category_id,
+            is_valid_release,
+        )
 
         try:
             category = get_base_search_category_id(search_category) or search_category
-            template = self.spec["feeds"].get(int(category))
-            if not template:
+            url, data = self.feed_request(category)
+            if not url:
                 return []
             report, fetched = self.load_listing(
-                shared_state,
-                self._url(template),
-                self.spec["list"],
-                FEED_REQUEST_TIMEOUT_SECONDS,
+                shared_state, url, self.spec["list"], FEED_REQUEST_TIMEOUT_SECONDS, data
             )
             issue = fetched.error or describe_report(report)
             if issue:
@@ -1321,6 +1410,8 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             rows = [
                 {**row, "title": self._magazine(row["title"], category)}
                 for row in report["rows"]
+                if not self.spec["feed_validate"]
+                or is_valid_release(row["title"], search_category, "", None, None)
             ]
             return self._releases(shared_state, rows)
         except Exception as e:
@@ -1329,7 +1420,9 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
         finally:
             debug(f"Time taken: {time.time() - start_time:.2f}s")
 
-    def _search_query(self, shared_state, start_time, search_category, search_string):
+    def _search_query(
+        self, shared_state, start_time, search_category, search_string, season=None
+    ):
         from quasarr.providers.imdb_metadata import get_localized_title
         from quasarr.providers.utils import is_imdb_id
 
@@ -1346,6 +1439,12 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 search_category,
                 deadline=start_time + SEARCH_REQUEST_TIMEOUT_SECONDS,
             )
+            if title and self.spec["search_append_year"] and not season:
+                from quasarr.providers.imdb_metadata import get_year
+
+                year = get_year(imdb_id)
+                if year:
+                    title += f" {year}"
             return html.unescape(title) if title else None, imdb_id
         return None, imdb_id
 
@@ -1381,7 +1480,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             if int(category) not in self.spec["search_categories"]:
                 return []
             query, imdb_id = self._search_query(
-                shared_state, start_time, search_category, search_string
+                shared_state, start_time, search_category, search_string, season
             )
             if not query:
                 return []
@@ -1390,6 +1489,10 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             request_query = (
                 date_numbering_title_search_strings(query)[0] if episode_date else query
             )
+            if self.spec["search_episode_query"] and season:
+                request_query += f" S{int(season):02d}"
+                if episode:
+                    request_query += f"E{int(episode):02d}"
             match_string = (
                 query if self.spec["search_match"] == "query" else search_string
             )
@@ -1513,7 +1616,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                     session,
                     self.initials,
                     host=self.hostname,
-                    accept_offsite=True,
+                    accept_offsite=self.spec["download"]["redirect_targets"] == "any",
                 )
                 if target and _is_known_link(target):
                     resolved.append([target, mirror])
@@ -1545,7 +1648,10 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 ):
                     mark_hostname_issue(self.initials, "download", link_error)
                 return result
-            if mirrors and download["filter_mirrors"] != "none":
+            if mirrors and download["filter_mirrors"] == "exact":
+                wanted = {normalize_hoster_name(m) for m in mirrors if m}
+                links = [link for link in links if link[1] in wanted]
+            elif mirrors and download["filter_mirrors"] != "none":
                 index = 1 if download["filter_mirrors"] == "mirror" else 0
                 links = [
                     link

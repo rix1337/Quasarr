@@ -1035,12 +1035,10 @@ def verify_definition(shared_state, source):
     feed_rows = []
     if not spec["feeds"]:
         problems.append("No feed is set up")
-    for category, template in spec["feeds"].items():
+    for category in spec["feeds"]:
+        url, data = source.feed_request(category)
         report, fetched = source.load_listing(
-            shared_state,
-            source._url(template),
-            spec["list"],
-            FEED_REQUEST_TIMEOUT_SECONDS,
+            shared_state, url, spec["list"], FEED_REQUEST_TIMEOUT_SECONDS, data
         )
         issue = fetched.error or describe_report(report)
         if issue:

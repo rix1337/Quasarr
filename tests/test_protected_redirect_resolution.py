@@ -6,9 +6,10 @@ from unittest.mock import MagicMock, patch
 
 from quasarr.downloads import download
 from quasarr.downloads.sources.by import Source as BySource
-from quasarr.downloads.sources.nk import Source as NkSource
 from quasarr.downloads.sources.sf import Source as SfSource
 from quasarr.downloads.sources.wd import Source as WdSource
+from quasarr.search.sources import templates
+from quasarr.search.sources.helpers import custom_source
 
 
 class FakeResponse:
@@ -248,8 +249,6 @@ class ProtectedRedirectSourceTests(unittest.TestCase):
         class FakeSession:
             def get(self, url, headers=None, timeout=None, allow_redirects=True):
                 requested_urls.append((url, allow_redirects))
-                if url == release_url:
-                    return FakeResponse(url=release_url, text=release_html)
                 if url == go_url:
                     return FakeResponse(
                         url=go_url,
@@ -258,18 +257,36 @@ class ProtectedRedirectSourceTests(unittest.TestCase):
                     )
                 raise AssertionError(f"Unexpected URL requested: {url}")
 
+        def fetch(_state, url, *_args, **_kwargs):
+            requested_urls.append((url, True))
+            return custom_source.FetchResult(release_html, None, 200)
+
+        def crypter(url):
+            return "filecrypt" if url == protected_url else None
+
+        shared_state = _build_shared_state({"nk": "host-nk.invalid"})
         with (
+            patch("quasarr.providers.shared_state.values", shared_state.values),
+            patch.object(custom_source, "fetch_markup", side_effect=fetch),
+            patch.object(custom_source, "clear_hostname_issue"),
             patch(
-                "quasarr.downloads.sources.nk.requests.Session",
+                "quasarr.downloads.sources.helpers.redirect.requests.Session",
                 return_value=FakeSession(),
             ),
             patch(
-                "quasarr.downloads.sources.nk.detect_crypter_type",
-                side_effect=lambda url: "filecrypt" if url == protected_url else None,
+                "quasarr.downloads.sources.helpers.redirect.detect_crypter_type",
+                side_effect=crypter,
+            ),
+            patch(
+                "quasarr.downloads.detect_crypter",
+                side_effect=lambda url: (
+                    crypter(url),
+                    "protected" if crypter(url) else None,
+                ),
             ),
         ):
-            result = NkSource().get_download_links(
-                _build_shared_state({"nk": "host-nk.invalid"}),
+            result = templates._load("nk").get_download_links(
+                shared_state,
                 release_url,
                 ["ddownload"],
                 "Example.Title",
@@ -277,13 +294,8 @@ class ProtectedRedirectSourceTests(unittest.TestCase):
             )
 
         self.assertEqual({"links": [[protected_url, "ddownload"]]}, result)
-        self.assertEqual(
-            [
-                (release_url, True),
-                (go_url, False),
-            ],
-            requested_urls,
-        )
+        # the container itself is never requested
+        self.assertEqual([(release_url, True), (go_url, False)], requested_urls)
 
     def test_sf_yields_protected_url_without_requesting_it(self):
         external_url = "https://host-sf.invalid/external/2/abc123"
@@ -702,20 +714,30 @@ class ProtectedRedirectDownloadTests(unittest.TestCase):
                     )
                 raise AssertionError(f"Unexpected URL requested: {url}")
 
+        def fetch(_state, url, *_args, **_kwargs):
+            return custom_source.FetchResult(FakeSession().get(url).text, None, 200)
+
+        hostnames = {"nk": "host-nk.invalid"}
         links = self._assert_download_stores_protected(
             source_key="nk",
-            source_obj=NkSource(),
+            source_obj=templates._load("nk"),
             request_from="Sonarr/4.0.0",
             title="Example.Release.S01.1080p-GRP",
             release_url=release_url,
-            hostnames={"nk": "host-nk.invalid"},
+            hostnames=hostnames,
             patchers=[
                 patch(
-                    "quasarr.downloads.sources.nk.requests.Session",
+                    "quasarr.providers.shared_state.values",
+                    {"config": lambda _s: hostnames, "user_agent": "UnitTestAgent/1.0"},
+                ),
+                patch.object(custom_source, "fetch_markup", side_effect=fetch),
+                patch.object(custom_source, "clear_hostname_issue"),
+                patch(
+                    "quasarr.downloads.sources.helpers.redirect.requests.Session",
                     return_value=FakeSession(),
                 ),
                 patch(
-                    "quasarr.downloads.sources.nk.detect_crypter_type",
+                    "quasarr.downloads.sources.helpers.redirect.detect_crypter_type",
                     side_effect=lambda url: (
                         "filecrypt" if url == protected_url else None
                     ),
