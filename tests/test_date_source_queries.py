@@ -5,10 +5,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from quasarr.constants import SEARCH_CAT_SHOWS
-from quasarr.search.sources import dl, he, templates
+from quasarr.search.sources import dl, templates
 from quasarr.search.sources.helpers import custom_source
 from quasarr.search.sources.templates.by import search as by
 from quasarr.search.sources.templates.dd import search as dd
+from quasarr.search.sources.templates.he import search as he
 from quasarr.search.sources.templates.sj import search as sj
 
 
