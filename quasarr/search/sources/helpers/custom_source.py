@@ -101,6 +101,7 @@ _LEADING_DATE = re.compile(
     r"^\s*\d{1,2}\.\d{1,2}\.\d{2,4}(?:\s*[-,]?\s*\d{1,2}:\d{2})?[\s|–—-]+"
 )
 _SIZE_REGEX = re.compile(r"(\d+(?:[.,]\d+)*)\s*([KMGT]i?B|B)\b", re.I)
+_UNIT_ONLY = re.compile(r"[KMGT]i?B", re.I)
 _NUMBER_REGEX = re.compile(r"\d+(?:[.,]\d+)*")
 _IMDB_ID_REGEX = re.compile(r"\b(tt\d{7,})\b")
 _NUMERIC_DATE_REGEX = re.compile(
@@ -141,6 +142,9 @@ def parse_size(text, unit=None):
         if not number_match:
             return None
         number, found_unit = number_match.group(0), unit
+    elif _UNIT_ONLY.fullmatch(text.strip()):
+        # a unit without its number: the site does not know the size
+        return 0
     else:
         return None
 
@@ -790,6 +794,9 @@ def _extract_one(item, field):
             )
         else:
             value = element.get_text(" ", strip=True)
+    elif field["attr"] == "html":
+        # the element's markup, for values hidden in attributes or comments
+        value = str(element)
     else:
         value = element.get(field["attr"])
         if isinstance(value, list):
