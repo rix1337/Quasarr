@@ -57,6 +57,10 @@ CUSTOM_CATEGORIES = (
     SEARCH_CAT_XXX,
 )
 SEARCH_MODES = ("imdb", "title", "off")
+TITLE_CLEANUPS = ("scene", "none")
+DATE_FALLBACKS = ("now", "hour_ago")
+# release checks a search applies on top of the shared title matching
+SEARCH_FILTERS = ("require_quality", "no_spaces", "skip_xxx")
 SEARCH_METHODS = ("get", "post")
 DOWNLOAD_FILTERS = ("known", "all")
 PASSWORD_MODES = ("hostname", "none")
@@ -265,13 +269,18 @@ def _compile_field(spec, name, default_attr):
     attr = str(spec.get("attr") or default_attr).strip()
     if not attr:
         raise DefinitionError(f"{name}: attribute is required")
-    label = str(spec.get("label") or "").strip() or None
-    if label and attr != "text":
+    raw_labels = spec.get("label") or []
+    raw_labels = [raw_labels] if isinstance(raw_labels, str) else raw_labels
+    if not isinstance(raw_labels, list):
+        raise DefinitionError(f"{name}: label must be text or a list of texts")
+    # several labels: the first that occurs in the item wins
+    labels = [str(label).strip() for label in raw_labels if str(label).strip()]
+    if labels and attr != "text":
         raise DefinitionError(f"{name}: a label only works with text")
     return {
         "selector": _compile_selector(spec.get("selector"), name, required=False),
         "attr": attr,
-        "label": label,
+        "labels": labels,
         "format": str(spec.get("format") or "").strip() or None,
         "unit": str(spec.get("unit") or "").strip().upper() or None,
     }
@@ -291,6 +300,14 @@ def _compile_listing(spec, name):
     size = listing["size"]
     if size and size["unit"] and size["unit"] not in ("B", "KB", "MB", "GB", "TB"):
         raise DefinitionError(f"{name}.size: unit must be B, KB, MB, GB or TB")
+    # "scene" turns names into dotted release names, "none" keeps the page text
+    listing["title_cleanup"] = _require_choice(
+        spec.get("title_cleanup", "scene"), TITLE_CLEANUPS, f"{name}.title_cleanup"
+    )
+    listing["dedupe"] = _require_bool(spec.get("dedupe", True), f"{name}.dedupe")
+    listing["date_fallback"] = _require_choice(
+        spec.get("date_fallback", "now"), DATE_FALLBACKS, f"{name}.date_fallback"
+    )
     return listing
 
 
@@ -374,6 +391,17 @@ def compile_definition(definition, bundled=False):
                 raise DefinitionError("search.body: must contain {q}")
         if not search_categories:
             raise DefinitionError("search.categories: pick at least one")
+    search_filters = search.get("filters") or []
+    if not isinstance(search_filters, list) or any(
+        f not in SEARCH_FILTERS for f in search_filters
+    ):
+        raise DefinitionError(
+            f"search.filters: supported are {', '.join(SEARCH_FILTERS)}"
+        )
+    # drop results of another title and fill in the searched IMDb ID
+    imdb_identity = _require_bool(
+        search.get("imdb_identity", True), "search.imdb_identity"
+    )
 
     hooked = {"feed", "search"} & set(hooks)
     if not compiled_feeds and not search_url and not hooked:
@@ -408,6 +436,10 @@ def compile_definition(definition, bundled=False):
         "password": _require_choice(
             download.get("password", "hostname"), PASSWORD_MODES, "download.password"
         ),
+        # keep only links whose mirror name contains a wanted mirror
+        "filter_mirrors": _require_bool(
+            download.get("filter_mirrors", False), "download.filter_mirrors"
+        ),
         # on-site links that redirect to a crypter or hoster
         "redirects": _require_bool(
             download.get("redirects", False), "download.redirects"
@@ -436,6 +468,8 @@ def compile_definition(definition, bundled=False):
         "search_method": search_method,
         "search_body": search_body,
         "search_categories": search_categories,
+        "search_filters": search_filters,
+        "imdb_identity": imdb_identity,
         "list": listing,
         "search_list": search_listing,
         "download": compiled_download,
@@ -617,8 +651,15 @@ def extract_field(item, field):
     if element is None:
         return None
     if field["attr"] == "text":
-        if field["label"]:
-            value = _text_after_label(element, field["label"])
+        if field["labels"]:
+            value = next(
+                (
+                    found
+                    for label in field["labels"]
+                    if (found := _text_after_label(element, label))
+                ),
+                None,
+            )
         else:
             value = element.get_text(" ", strip=True)
     else:
@@ -646,7 +687,8 @@ def _parse_item(item, page_url, listing, hostname, now):
     title = extract_field(item, listing["title"])
     if not title:
         return None, "title not found"
-    title = sanitize_title(_LEADING_DATE.sub("", _TRAILING_SIZE.sub("", title)))
+    if listing["title_cleanup"] == "scene":
+        title = sanitize_title(_LEADING_DATE.sub("", _TRAILING_SIZE.sub("", title)))
     if not title:
         return None, "title not found"
     if len(title) > MAX_TITLE_CHARS:
@@ -684,12 +726,18 @@ def _parse_item(item, page_url, listing, hostname, now):
             imdb_id = parse_imdb_id(anchor["href"])
             if imdb_id:
                 break
+        if not imdb_id:
+            match = IMDB_REGEX.search(item.get_text()[: MAX_FIELD_CHARS * 10])
+            imdb_id = match.group(1) if match else None
 
     return {
         "title": title,
         "link": link,
         "size_mb": size_mb,
-        "date": date or format_datetime(now),
+        "date": date
+        or format_datetime(
+            now - timedelta(hours=1) if listing["date_fallback"] == "hour_ago" else now
+        ),
         "imdb_id": imdb_id,
         "warnings": warnings,
     }, None
@@ -739,7 +787,7 @@ def parse_listing(markup, page_url, listing, hostname, now=None):
         if row is None:
             skipped[reason] += 1
             continue
-        if row["link"] in seen_links:
+        if listing["dedupe"] and row["link"] in seen_links:
             skipped["duplicate link"] += 1
             continue
         seen_links.add(row["link"])
@@ -795,6 +843,22 @@ def parse_download_links(markup, page_url, download, hostname=None):
         except Exception as e:
             debug(f"Skipping download link: {e}")
     return links
+
+
+def passes_search_filters(title, filters, search_string=""):
+    """Release checks a template adds to the shared title matching."""
+    from quasarr.constants import CODEC_REGEX, RESOLUTION_REGEX, XXX_REGEX
+
+    if "skip_xxx" in filters and XXX_REGEX.search(title):
+        if "xxx" not in (search_string or "").lower():
+            return False
+    if "require_quality" in filters and not (
+        RESOLUTION_REGEX.search(title) or CODEC_REGEX.search(title)
+    ):
+        return False
+    if "no_spaces" in filters and " " in title:
+        return False
+    return True
 
 
 def describe_report(report):
@@ -1060,14 +1124,24 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             clear_hostname_issue(self.initials)
 
             rows = []
+            identity = self.spec["imdb_identity"]
             for row in report["rows"]:
-                if imdb_id and row["imdb_id"] and row["imdb_id"] != imdb_id:
+                if (
+                    identity
+                    and imdb_id
+                    and row["imdb_id"]
+                    and row["imdb_id"] != imdb_id
+                ):
                     continue
                 if not is_valid_release(
                     row["title"], search_category, search_string, season, episode
                 ):
                     continue
-                if imdb_id and not row["imdb_id"]:
+                if not passes_search_filters(
+                    row["title"], self.spec["search_filters"], search_string
+                ):
+                    continue
+                if identity and imdb_id and not row["imdb_id"]:
                     row = {**row, "imdb_id": imdb_id}
                 rows.append(row)
             return self._releases(shared_state, rows)
@@ -1142,6 +1216,15 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 if status is not None or "Request failed" in link_error:
                     mark_hostname_issue(self.initials, "download", link_error)
                 return {"links": []}
+            if mirrors and self.spec["download"]["filter_mirrors"]:
+                links = [
+                    link
+                    for link in links
+                    if any(m.lower() in link[1].lower() for m in mirrors)
+                ]
+                if not links:
+                    info(f"No download links for {title} match the mirrors {mirrors}")
+                    return {"links": []}
             clear_hostname_issue(self.initials)
             return {"links": links}
         except Exception as e:
