@@ -5,7 +5,7 @@ author: Quasarr
 touches:
   - quasarr/search/sources/templates/mx/search.py
   - quasarr/search/sources/templates/wx/search.py
-  - quasarr/downloads/sources/dl.py
+  - quasarr/search/sources/templates/dl/download.py
 ---
 
 ## Decided
