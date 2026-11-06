@@ -246,7 +246,7 @@ def hostname_credentials_config(shared_state, shorthand, domain):
                 </p>
                 <form action="/api/flaresolverr_inline" method="post" onsubmit="return handleFlareSolverrSubmit(this)">
                     <div style="display:flex; gap:0.5rem;">
-                        <input type="text" name="url" placeholder="http://192.168.0.1:8191/v1" style="flex:1; margin-bottom:0;">
+                        <input type="text" name="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="http://192.168.0.1:8191/v1" style="flex:1; margin-bottom:0;">
                         <button type="submit" class="btn-secondary" id="fsSubmitBtn" style="margin-top:0;">Save URL</button>
                     </div>
                 </form>

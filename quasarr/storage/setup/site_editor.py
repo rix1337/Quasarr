@@ -230,7 +230,7 @@ _EDITOR_HTML = """
     <p class="hint">The parts Quasarr lets you change, as JSON, in the format of
       <a href="https://github.com/rix1337/Quasarr#sites-without-a-matching-template" target="_blank" rel="noopener noreferrer">sites you set up yourself</a>.</p>
     <label for="ed-json" class="visually-hidden">Template</label>
-    <textarea id="ed-json" rows="22" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+    <textarea id="ed-json" rows="22" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"></textarea>
     <div id="ed-json-error" aria-live="polite"></div>
     <div class="sites-row">
       <button type="button" class="btn-secondary" id="ed-format">Format</button>
@@ -249,13 +249,15 @@ _EDITOR_HTML = """
     </div>
     <div class="ed-test">
       <span class="ed-test-label">Search</span>
-      <input id="ed-query" type="text" spellcheck="false" placeholder="Title or tt1234567" aria-label="Search for">
+      <input id="ed-query" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="tt0499549" aria-label="Search for">
       <select id="ed-search-cat" aria-label="Kind of release for the search"></select>
+      <button type="button" class="btn-secondary" id="ed-imdb">Grab IMDb ID</button>
       <button type="button" class="btn-secondary" id="ed-search-test">Test</button>
     </div>
+    <p class="hint" id="ed-imdb-name" aria-live="polite"></p>
     <div class="ed-test">
       <span class="ed-test-label">Downloads</span>
-      <input id="ed-url" type="url" spellcheck="false" placeholder="Address of a release page" aria-label="Release page address">
+      <input id="ed-url" type="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Address of a release page" aria-label="Release page address">
       <button type="button" class="btn-secondary" id="ed-download-test">Test</button>
     </div>
     <div id="ed-results" aria-live="polite"></div>
@@ -344,6 +346,7 @@ _EDITOR_SCRIPT = r"""
       data.categories.forEach(function(category) { select.appendChild(el('option', {value: category.id, text: category.name})); });
       if (current) select.value = current;
     });
+    searchHint();
   }
   function load() {
     api('/api/sites/' + encodeURIComponent(key) + '/template').then(function(data) {
@@ -389,10 +392,49 @@ _EDITOR_SCRIPT = r"""
       .then(function(data) { done(); showResult(data, label); });
   }
   $('ed-feed-test').onclick = function() { runTest(this, 'feed', {category: $('ed-feed-cat').value}, 'Newest releases'); };
+  // movies and shows arrive as IMDb IDs from Radarr and Sonarr, so a typed title is looked up first
+  function videoKind() { var id = Number($('ed-search-cat').value); return id >= 2000 && id < 3000 ? 'movie' : id >= 5000 && id < 6000 ? 'tv' : ''; }
+  // a site searched by title gets the title; only IMDb sites need the ID
+  function byTitle() { var search = state && state.current && state.current.search; return !!search && search.mode === 'title'; }
+  function needsImdb() { return !!videoKind() && !byTitle(); }
+  function grabImdb(button, then) {
+    var term = $('ed-query').value.trim();
+    var kind = videoKind();
+    if (!term || !needsImdb() || /^tt\d{5,10}$/.test(term)) { if (then) then(); return; }
+    var done = busy(button, 'Grabbing…');
+    api('/api/custom-sources/imdb-lookup', {term: term, kind: kind}).then(function(data) {
+      done();
+      var hit = data.success && data.results[0];
+      if (!hit) {
+        $('ed-imdb-name').textContent = data.success ? 'No IMDb ID found for “' + term + '”; searching for the title as typed.' : data.error + '.';
+      } else {
+        $('ed-query').value = hit.imdb_id;
+        $('ed-imdb-name').textContent = hit.imdb_id + ' is ' + hit.title + (hit.year ? ' (' + hit.year + ')' : '') + '.';
+      }
+      if (then) then();
+    });
+  }
+  $('ed-imdb').onclick = function() {
+    if (!$('ed-query').value.trim()) { $('ed-query').focus(); return; }
+    grabImdb(this);
+  };
   $('ed-search-test').onclick = function() {
     if (!$('ed-query').value.trim()) { $('ed-query').focus(); return; }
-    runTest(this, 'search', {category: $('ed-search-cat').value, query: $('ed-query').value}, 'Search');
+    var button = this;
+    grabImdb(button, function() {
+      runTest(button, 'search', {category: $('ed-search-cat').value, query: $('ed-query').value}, 'Search');
+    });
   };
+  // Radarr and Sonarr search movies and shows by IMDb ID, music and books by name
+  function searchHint() {
+    var imdb = needsImdb();
+    $('ed-imdb').hidden = !imdb;
+    $('ed-query').placeholder = imdb ? 'tt0499549' : videoKind() ? 'Avatar' : 'Artist, album or book';
+    $('ed-imdb-name').textContent = imdb
+      ? 'This site is searched by IMDb ID. Type a title and press Grab IMDb ID to get one.'
+      : videoKind() ? 'This site is searched by the movie or show title.' : 'Lidarr and Magazarr search by name.';
+  }
+  $('ed-search-cat').addEventListener('change', searchHint);
   $('ed-download-test').onclick = function() {
     if (!$('ed-url').value.trim()) { $('ed-url').focus(); return; }
     runTest(this, 'download', {url: $('ed-url').value.trim()}, 'Downloads');

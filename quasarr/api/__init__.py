@@ -454,7 +454,7 @@ def get_api(shared_state_dict, shared_state_lock):
                         <div class="input-group">
                             <label for="fsUrl">URL</label>
                             <div class="input-row">
-                                <input type="text" id="fsUrl" name="url" placeholder="http://192.168.0.1:8191/v1" value="{flaresolverr_url}">
+                                <input type="text" id="fsUrl" autocapitalize="off" autocorrect="off" spellcheck="false" name="url" placeholder="http://192.168.0.1:8191/v1" value="{flaresolverr_url}">
                                 <button type="submit" id="fsSubmitBtn">Save</button>
                             </div>
                         </div>
@@ -477,7 +477,7 @@ def get_api(shared_state_dict, shared_state_lock):
                         <div class="input-group">
                             <label for="radarrUrl">URL</label>
                             <div class="input-row">
-                                <input type="text" id="radarrUrl" placeholder="http://192.168.0.1:7878" value="{radarr_url}">
+                                <input type="text" id="radarrUrl" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="http://192.168.0.1:7878" value="{radarr_url}">
                             </div>
                         </div>
                         <div class="input-group">
@@ -499,7 +499,7 @@ def get_api(shared_state_dict, shared_state_lock):
                         <div class="input-group">
                             <label for="sonarrUrl">URL</label>
                             <div class="input-row">
-                                <input type="text" id="sonarrUrl" placeholder="http://192.168.0.1:8989" value="{sonarr_url}">
+                                <input type="text" id="sonarrUrl" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="http://192.168.0.1:8989" value="{sonarr_url}">
                             </div>
                         </div>
                         <div class="input-group">
@@ -547,7 +547,7 @@ def get_api(shared_state_dict, shared_state_lock):
                         <div class="input-group">
                             <label for="notification-discord-webhook">Webhook URL</label>
                             <div class="input-row">
-                                <input type="text" id="notification-discord-webhook" placeholder="https://discord.com/api/webhooks/..." value="{discord_webhook}">
+                                <input type="text" id="notification-discord-webhook" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://discord.com/api/webhooks/..." value="{discord_webhook}">
                             </div>
                         </div>
                         <div class="notification-toggle-list">

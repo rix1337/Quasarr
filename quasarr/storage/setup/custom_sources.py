@@ -83,7 +83,7 @@ _WIZARD_HTML = """
     <p class="hint">A site you set up is yours to maintain, and issues about it are not supported.
       Sites that need a login cannot be set up here: they need Python code, contributed as a pull request.</p>
     <label for="w-hostname">Hostname</label>
-    <input id="w-hostname" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="example.org">
+    <input id="w-hostname" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="example.org">
     <p class="hint">The address you open in your browser, without https://.</p>
     <label for="w-name">Name</label>
     <input id="w-name" maxlength="60" autocomplete="off" placeholder="My site">
@@ -114,7 +114,7 @@ _WIZARD_HTML = """
     </div>
     <div id="import-box" hidden>
       <p class="hint">Paste the template as JSON or the template file a share produced. You test every step before you save.</p>
-      <textarea id="w-import" rows="10" spellcheck="false" autocomplete="off" aria-label="Template"
+      <textarea id="w-import" rows="10" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" aria-label="Template"
         placeholder="{&quot;name&quot;: …}"></textarea>
       <div class="wizard-notes" id="import-notes" aria-live="polite"></div>
     </div>
@@ -156,11 +156,11 @@ _WIZARD_HTML = """
       <label for="w-method">Request</label>
       <select id="w-method"><option value="get">GET</option><option value="post">POST form</option></select>
       <label for="w-search-url">Search address</label>
-      <input id="w-search-url" spellcheck="false" placeholder="/?s={q}">
+      <input id="w-search-url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="/?s={q}">
       <p class="hint">{q} is replaced by what Quasarr searches for.</p>
       <div id="w-body-wrap" hidden>
         <label for="w-search-body">Form fields</label>
-        <input id="w-search-body" spellcheck="false" placeholder="search={q}">
+        <input id="w-search-body" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="search={q}">
       </div>
     </details>
     <label>Search with</label>
@@ -1107,7 +1107,7 @@ _WIZARD_SCRIPT = r"""
     var wrap = $('feed-rows');
     wrap.textContent = '';
     selectedCategories().forEach(function(category) {
-      var input = el('input', {spellcheck: 'false', placeholder: '/', 'aria-label': category.name + ' page'});
+      var input = el('input', {autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', placeholder: '/', 'aria-label': category.name + ' page'});
       input.value = feedUrls[category.id] || '/';
       feedUrls[category.id] = input.value;
       input.oninput = function() { feedUrls[category.id] = input.value.trim() || '/'; setFeedTested(false); renderPageChoice(); };

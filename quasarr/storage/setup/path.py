@@ -30,7 +30,7 @@ def path_config(shared_state):
         config_form_html = f'''
             <form action="/api/config" method="post" onsubmit="return handleSubmit(this)">
                 <label for="config_path">Path</label>
-                <input type="text" id="config_path" name="config_path" placeholder="{current_path}"><br>
+                <input type="text" id="config_path" autocapitalize="off" autocorrect="off" spellcheck="false" name="config_path" placeholder="{current_path}"><br>
                 {render_button("Save", "primary", {"type": "submit", "id": "submitBtn"})}
             </form>
             <script>

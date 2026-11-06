@@ -211,7 +211,7 @@ def _radarr_setup_form_html(required_sites):
 
     <form action="/api/radarr/save" method="post" onsubmit="return handleSubmit(this)">
         <label for="url">Radarr URL</label>
-        <input type="text" id="url" name="url" placeholder="http://192.168.0.1:7878" value="{current_url}" required><br>
+        <input type="text" id="url" name="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="http://192.168.0.1:7878" value="{current_url}" required><br>
         <label for="api_key">Radarr API Key</label>
         <input type="password" id="api_key" name="api_key" placeholder="Radarr API key" value="{current_api_key}" required><br>
         <div class="button-row">

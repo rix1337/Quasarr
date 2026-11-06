@@ -435,7 +435,7 @@ _PAGE_HTML = """
     <p class="sites-lead">Paste the addresses of the sites you use, one per line. Quasarr checks which of them it
       already knows. Lines such as <code>xy = example.org</code> from community lists work too.</p>
     <label for="add-input" class="visually-hidden">Hostnames</label>
-    <textarea id="add-input" rows="3" spellcheck="false" autocomplete="off" autocapitalize="off"
+    <textarea id="add-input" rows="3" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"
       placeholder="example.org"></textarea>
     <div class="sites-row">
       <button type="button" class="btn-primary" id="add-check">Check</button>
@@ -444,7 +444,7 @@ _PAGE_HTML = """
     <div id="import-box" hidden>
       <label for="import-url">Address of a hostname list</label>
       <div class="sites-row">
-        <input id="import-url" type="url" spellcheck="false" placeholder="https://…">
+        <input id="import-url" type="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://…">
         <button type="button" class="btn-secondary" id="import-load">Load</button>
       </div>
     </div>
@@ -523,7 +523,10 @@ SITES_CSS = """
   .more-menu .hint { margin: .4rem 0 0; }
   .site-actions button, .check-actions button { padding: .3rem .7rem; font-size: .85rem; margin: 0; }
   .check-actions { display: flex; gap: .35rem; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
-  .check-actions select { width: auto; padding: .3rem; font-size: .85rem; }
+  .check-actions select { width: auto; padding: .3rem 1.8rem .3rem .5rem; background-position: right .5rem center;
+    font-size: .85rem; margin: 0; }
+  .check-actions label.check { display: inline-flex; align-items: center; gap: .3rem; margin: 0; white-space: nowrap; }
+  .check-actions label.check input { width: auto; margin: 0; }
   .inline-form { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .4rem; }
   .inline-form input { flex: 1 1 10rem; margin: 0; }
   .inline-form .form-note { flex: 1 1 100%; font-size: .85rem; }
@@ -693,7 +696,7 @@ _PAGE_SCRIPT = r"""
   }
   function addressForm(row, site) {
     closeForms(row);
-    var input = el('input', {type: 'text', spellcheck: 'false', 'aria-label': site.name + ' address'});
+    var input = el('input', {type: 'text', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', 'aria-label': site.name + ' address'});
     input.value = site.hostname;
     var save = el('button', {type: 'submit', className: 'btn-primary', text: 'Save'});
     var cancel = el('button', {type: 'button', className: 'btn-secondary', text: 'Cancel', onclick: function() { form.remove(); }});
@@ -796,9 +799,18 @@ _PAGE_SCRIPT = r"""
           if (!options.length) select.appendChild(el('option', {value: picked.key, text: picked.key}));
           select.value = picked.key;
           var include = el('input', {type: 'checkbox', 'aria-label': 'Add ' + result.hostname});
-          include.checked = true;
+          // a fit by name alone is weak evidence, so only a confirmed match starts selected
+          include.checked = choice.sure;
           actions.appendChild(el('label', {className: 'check'}, [include, ' Add as ']));
           actions.appendChild(select);
+          actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Set it up yourself',
+            onclick: function() { window.location.href = setupLink(result.hostname); }}));
+          actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Skip',
+            onclick: function() {
+              include.checked = false;
+              include.dispatchEvent(new Event('change'));
+              item.remove();
+            }}));
           addable.push({hostname: result.hostname, select: select, include: include, item: item});
           main.appendChild(chips(picked));
         } else {
