@@ -1681,7 +1681,8 @@ def _reads(item, field, name, page_url, hostname):
     if name == "size":
         return parse_size(raw, field["unit"])
     if name == "date":
-        return parse_date(raw, field["format"])
+        # shown as the page writes it; only the reading decides its zone
+        return " ".join(raw.split()) if parse_date(raw, field["format"]) else None
     if name == "link":
         return _resolve_link(page_url, raw, hostname)
     if name == "imdb":

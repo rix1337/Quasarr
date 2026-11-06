@@ -208,7 +208,15 @@ class ListingTests(unittest.TestCase):
     def test_label_reads_the_value_after_it(self):
         row = self.parse(page(post("Movie.2026.1080p.WEB.x264-GRP", "/m/")))["rows"][0]
         self.assertEqual(1433, row["size_mb"])
-        self.assertEqual("Sat, 10 Jan 2026 08:30:00 +0000", row["date"])
+        # a German site shows German time
+        self.assertEqual("Sat, 10 Jan 2026 07:30:00 +0000", row["date"])
+        from quasarr.search.sources.helpers.custom_source import SITE_ZONES, parse_date
+
+        # and summer time in summer
+        self.assertEqual(
+            "Fri, 10 Jul 2026 06:30:00 +0000",
+            parse_date("10.07.2026 08:30", zone=SITE_ZONES["de"]),
+        )
 
     def test_missing_optional_fields_fall_back(self):
         markup = page(

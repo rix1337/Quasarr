@@ -77,7 +77,8 @@ class ListingSuggestionTests(unittest.TestCase):
         self.assertEqual("Movie.Number1.2026.German.1080p.WEB.x264-GRP", row["title"])
         self.assertEqual(f"https://{HOST}/r/1/", row["link"])
         self.assertEqual(1536, row["size_mb"])
-        self.assertEqual("Thu, 01 Jan 2026 10:00:00 +0000", row["date"])
+        # read as German time, as the site is German
+        self.assertEqual("Thu, 01 Jan 2026 09:00:00 +0000", row["date"])
         self.assertEqual("tt1000001", row["imdb_id"])
 
     def test_labels_are_suggested_for_mixed_text(self):

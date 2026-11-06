@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime, parsedate_to_datetime
 from typing import NamedTuple
 from urllib.parse import parse_qsl, quote, quote_plus, urljoin, urlparse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 import soupsieve
@@ -239,10 +240,22 @@ def _parse_timed_datetime(text):
     return None
 
 
-def parse_date(text, fmt=None, now=None, utc_offset=0, require_time=False):
+def _site_zone(name, standard_offset):
+    # systems without time zone data, as plain Windows, fall back to standard time
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        return timezone(timedelta(hours=standard_offset))
+
+
+SITE_ZONES = {"de": _site_zone("Europe/Berlin", 1)}
+
+
+def parse_date(text, fmt=None, now=None, utc_offset=0, require_time=False, zone=None):
     """Return an RFC 2822 date for text in common site formats; None if unknown.
 
-    Dates without a zone are read in ``utc_offset`` hours east of UTC.
+    Dates without a zone are read in ``zone``, or else ``utc_offset`` hours
+    east of UTC.
     """
     try:
         parsed = (
@@ -253,7 +266,7 @@ def parse_date(text, fmt=None, now=None, utc_offset=0, require_time=False):
     if parsed is None:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone(timedelta(hours=utc_offset)))
+        parsed = parsed.replace(tzinfo=zone or timezone(timedelta(hours=utc_offset)))
     now = now or datetime.now(timezone.utc)
     if parsed > now + timedelta(days=1):
         parsed = now
@@ -424,6 +437,9 @@ def _compile_field(spec, name, default_attr):
         ),
         # hours east of UTC for dates the site shows without a zone
         "utc_offset": _require_offset(spec.get("utc_offset", 0), f"{name}.utc_offset"),
+        # the site's time zone when no offset is given; set from its language
+        "zone": None,
+        "has_offset": "utc_offset" in spec,
         "pick": _require_choice(
             spec.get("pick", "first"), ("first", "last"), f"{name}.pick"
         ),
@@ -624,6 +640,14 @@ def compile_definition(definition, bundled=False):
     search_listing = (
         _compile_listing(search_listing, "search_list") if search_listing else listing
     )
+    # German sites show German time, with daylight saving; bundled templates
+    # keep the offsets they always had
+    zone = SITE_ZONES.get(language) if not bundled else None
+    for compiled in (listing, search_listing):
+        date = compiled and compiled["date"]
+        for way in [date, *(date.get("fallbacks") or [])] if date else []:
+            if not way["has_offset"]:
+                way["zone"] = zone
 
     # Without download links, releases must link to a crypter or hoster.
     download = definition.get("download") or {}
@@ -1083,7 +1107,7 @@ def _parse_item(item, page_url, listing, hostname, now):
             item,
             listing["date"],
             lambda raw, f: parse_date(
-                raw, f["format"], now, f["utc_offset"], f["require_time"]
+                raw, f["format"], now, f["utc_offset"], f["require_time"], f["zone"]
             ),
         )
         if date is None:
