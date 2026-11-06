@@ -1,19 +1,8 @@
-import importlib.util
-import pkgutil
-
-
 def get_hostnames():
-    spec = importlib.util.find_spec("quasarr.search.sources")
-    if not spec or not spec.submodule_search_locations:
-        return []
+    """Source keys with a hostname setting: one per bundled template."""
+    from quasarr.search.sources.templates import get_template_keys
 
-    hostnames = []
-    for _, module_name, _ in pkgutil.iter_modules(spec.submodule_search_locations):
-        if module_name == "helpers" or module_name.startswith("_"):
-            continue
-        hostnames.append(module_name)
-
-    return sorted(hostnames)
+    return get_template_keys()
 
 
 def get_login_required_hostnames():

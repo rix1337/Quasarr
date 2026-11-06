@@ -3,8 +3,8 @@ title: RM reads the server-rendered site, not a JSON API
 date: 2026-11-04
 author: Quasarr
 touches:
-  - quasarr/search/sources/rm.py
-  - quasarr/downloads/sources/rm.py
+  - quasarr/search/sources/templates/rm/search.py
+  - quasarr/search/sources/templates/rm/download.py
 ---
 
 ## Decided

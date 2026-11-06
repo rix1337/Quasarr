@@ -5,12 +5,8 @@ from quasarr.constants import SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS
 from quasarr.providers.html_images import FLAG_SVGS, LANGUAGE_FLAG_EMOJI
 from quasarr.search.sources import get_sources
 from quasarr.search.sources.helpers import get_source_metadata
-from quasarr.storage.setup.hostnames import (
-    _capabilities_html,
-    _language_flag_html,
-)
 
-# Languages the editor knows how to render a flag for. Every source must declare
+# Languages the sites page knows how to render a flag for. Every source must declare
 # one of these so its row gets a flag instead of a blank.
 ALLOWED_LANGUAGES = {"de", "en", "fr"}
 
@@ -127,53 +123,6 @@ class SourceMetadataTests(unittest.TestCase):
                     SEARCH_CAT_SHOWS in source.supported_categories,
                     source.requires_sonarr,
                 )
-
-
-class EditorRenderHelpersTests(unittest.TestCase):
-    def test_language_flag_html_carries_swap_hook(self):
-        html = _language_flag_html("fr")
-        self.assertIn("data-flag", html)
-        self.assertIn('data-lang="fr"', html)
-        self.assertIn(LANGUAGE_FLAG_EMOJI["fr"], html)
-
-    def test_language_flag_html_blank_for_unknown_language(self):
-        self.assertEqual(_language_flag_html(None), "")
-        self.assertEqual(_language_flag_html("xx"), "")
-
-    def test_capabilities_html_blank_without_metadata(self):
-        self.assertEqual(_capabilities_html({}), "")
-
-    def test_capabilities_html_renders_invite_login_and_feed_chips(self):
-        html = _capabilities_html(
-            {
-                "language": "en",
-                "categories": [],
-                "requires_login": True,
-                "requires_account": True,
-                "invite_only": True,
-                "requires_flaresolverr": True,
-                "requires_radarr": True,
-                "requires_sonarr": True,
-            }
-        )
-        # Invite-only sites still surface the login requirement (not hidden by it).
-        self.assertIn("🔒 Invite Only", html)
-        self.assertIn("🔑 Login Required", html)
-        self.assertIn("🛡️ FlareSolverr Required", html)
-        self.assertNotIn("📡 Radarr Required", html)
-        self.assertNotIn("📡 Sonarr Required", html)
-        self.assertLess(html.index('data-lang="en"'), html.index("🔒 Invite Only"))
-        self.assertLess(html.index("🔒 Invite Only"), html.index("🔑 Login Required"))
-        self.assertLess(
-            html.index("🔑 Login Required"), html.index("🛡️ FlareSolverr Required")
-        )
-
-    def test_capabilities_html_account_without_login(self):
-        html = _capabilities_html(
-            {"categories": [], "requires_login": False, "requires_account": True}
-        )
-        self.assertIn("👤 Account Required", html)
-        self.assertNotIn("🔑 Login Required", html)
 
 
 if __name__ == "__main__":

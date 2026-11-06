@@ -22,6 +22,24 @@ body:
       options:
         - label: No, hostnames are not part of this issue. I am also not asking for any clarification here!
           required: true
+  - type: dropdown
+    attributes:
+      label: Which kind of site is involved?
+      description: |
+        Built-in sites ship with Quasarr. A built-in site you changed under Sites → Template, and a site you set up yourself, are yours to maintain.
+      options:
+        - A built-in site I did not change
+        - No particular site
+        - A site I changed or set up myself (not supported)
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: Are changed or self-made sites part of this issue?
+      description: Issues about built-in sites you changed or sites you set up yourself are closed. Reset a changed site to the shipped version and check again first.
+      options:
+        - label: No. Every site involved is a built-in site I did not change, or I reset it and the problem remains.
+          required: true
   - type: textarea
     attributes:
       label: Environment

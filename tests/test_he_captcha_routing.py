@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from quasarr import downloads
-from quasarr.downloads.sources import he
+from quasarr.search.sources.templates.he import download as he
 
 SOURCE_URL = "https://source.invalid/releases/synthetic/"
 HOSTER_URL = "https://hoster.invalid/files/synthetic"

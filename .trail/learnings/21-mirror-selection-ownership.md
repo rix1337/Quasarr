@@ -3,7 +3,7 @@ title: Let source signals choose mirrors and JDownloader test liveness
 date: 2026-10-19
 author: Quasarr
 touches:
-  - quasarr/downloads/sources/wx.py
+  - quasarr/search/sources/templates/wx/download.py
   - quasarr/downloads/__init__.py
   - quasarr/downloads/mirror_filters.py
 ---

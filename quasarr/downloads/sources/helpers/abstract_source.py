@@ -8,6 +8,9 @@ from quasarr.downloads.sources.helpers.download_release import DownloadRelease
 
 
 class AbstractDownloadSource(ABC):
+    # Set only by user-defined sources, whose hostname is not in Quasarr.ini.
+    custom_hostname = None
+
     @property
     @abstractmethod
     def initials(self) -> str:

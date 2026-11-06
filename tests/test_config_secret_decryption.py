@@ -3,8 +3,10 @@
 import os
 import tempfile
 import unittest
+import unittest.mock
 
 from quasarr.providers import shared_state
+from quasarr.storage import config
 from quasarr.storage.config import Config
 from quasarr.storage.sqlite_database import DataBase
 
@@ -26,6 +28,8 @@ class ConfigSecretDecryptionTests(unittest.TestCase):
         secrets.delete("key")
         secrets.delete("iv")
         secrets._conn.close()
+        # a restored ini meets a freshly started Quasarr, which has no key cached
+        config._encryption_params.clear()
 
     def test_secret_roundtrips_with_its_own_database(self):
         Config("API").save("key", "synthetic-api-key")
@@ -64,6 +68,43 @@ class ConfigSecretDecryptionTests(unittest.TestCase):
         self.assertEqual("plain-value", Config("API").get("key"))
         with open(self.configfile, encoding="utf-8") as f:
             self.assertIn("secret|", f.read())
+
+
+class ConfigCacheTests(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        self.configfile = os.path.join(self.tmpdir.name, "Quasarr.ini")
+        shared_state.values = {
+            "dbfile": os.path.join(self.tmpdir.name, "Quasarr.db"),
+            "configfile": self.configfile,
+        }
+        shared_state.lock = None
+        Config("Settings").save("hostnames_url", "")
+        Config("Settings").get("hostnames_url")  # the latest file is now cached
+
+    def test_reads_the_file_only_after_it_changed(self):
+        reads = []
+        original = config.configparser.RawConfigParser.read
+
+        def counted(parser, *args, **kwargs):
+            reads.append(1)
+            return original(parser, *args, **kwargs)
+
+        with unittest.mock.patch.object(
+            config.configparser.RawConfigParser, "read", counted
+        ):
+            for _ in range(5):
+                Config("Settings").get("hostnames_url")
+            self.assertEqual([], reads)
+            # another process rewrites the file
+            Config("Settings").save("hostnames_url", "https://lists.invalid/a")
+            reads.clear()
+            self.assertEqual(
+                "https://lists.invalid/a", Config("Settings").get("hostnames_url")
+            )
+            Config("Settings").get("hostnames_url")
+        self.assertEqual(1, len(reads))
 
 
 if __name__ == "__main__":

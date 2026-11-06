@@ -6,8 +6,8 @@ from unittest.mock import patch
 from bs4 import BeautifulSoup
 
 from quasarr.constants import SEARCH_CAT_MOVIES
-from quasarr.downloads.sources.al import _parse_info_from_download_item
-from quasarr.search.sources.al import Source
+from quasarr.search.sources.templates.al.download import _parse_info_from_download_item
+from quasarr.search.sources.templates.al.search import Source
 
 
 def make_shared_state():
@@ -116,14 +116,17 @@ class AlSearchMetadataTests(unittest.TestCase):
             raise AssertionError(f"unexpected URL: {target_url}")
 
         with (
-            patch("quasarr.search.sources.al.fetch_via_requests_session", fetch),
             patch(
-                "quasarr.search.sources.al.generate_download_link",
+                "quasarr.search.sources.templates.al.search.fetch_via_requests_session",
+                fetch,
+            ),
+            patch(
+                "quasarr.search.sources.templates.al.search.generate_download_link",
                 return_value="synthetic-link",
             ),
-            patch("quasarr.search.sources.al.clear_hostname_issue"),
-            patch("quasarr.search.sources.al.mark_hostname_issue"),
-            patch("quasarr.search.sources.al.invalidate_session"),
+            patch("quasarr.search.sources.templates.al.search.clear_hostname_issue"),
+            patch("quasarr.search.sources.templates.al.search.mark_hostname_issue"),
+            patch("quasarr.search.sources.templates.al.search.invalidate_session"),
         ):
             releases = Source().search(
                 state, time.time(), SEARCH_CAT_MOVIES, search_string="Invented Feature"

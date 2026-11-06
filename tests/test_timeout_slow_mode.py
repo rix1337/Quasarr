@@ -10,7 +10,7 @@ from quasarr.constants import (
     TIMEOUT_SLOW_MODE_DEFINITIONS,
     apply_timeout_slow_mode_settings,
 )
-from quasarr.downloads.sources import rm as rm_downloads
+from quasarr.search.sources.templates.rm import download as rm_downloads
 
 
 class TimeoutSlowModeTests(unittest.TestCase):

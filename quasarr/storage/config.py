@@ -33,10 +33,11 @@ import re
 import shutil
 import string
 import tempfile
+import threading
 
 from Cryptodome.Cipher import AES
 from Cryptodome.Random import get_random_bytes
-from Cryptodome.Util.Padding import pad
+from Cryptodome.Util.Padding import pad, unpad
 
 from quasarr.providers import shared_state
 from quasarr.providers.log import error, info, warn
@@ -73,6 +74,75 @@ def _write_ini_atomically(configfile, config):
         with contextlib.suppress(OSError):
             os.remove(tmp_path)
         raise
+
+
+# the key never changes once stored, so each process reads it once per database
+_encryption_params = {}
+
+
+def _get_encryption_params():
+    dbfile = shared_state.values.get("dbfile")
+    cached = _encryption_params.get(dbfile)
+    if cached:
+        return cached
+    secrets = DataBase("secrets")
+    crypt_key = secrets.retrieve("key")
+    crypt_iv = secrets.retrieve("iv")
+    if crypt_iv and crypt_key:
+        params = base64.b64decode(crypt_key), base64.b64decode(crypt_iv)
+    else:
+        crypt_key = get_random_bytes(32)
+        crypt_iv = get_random_bytes(16)
+        secrets.update_store("key", base64.b64encode(crypt_key).decode())
+        secrets.update_store("iv", base64.b64encode(crypt_iv).decode())
+        params = crypt_key, crypt_iv
+    _encryption_params[dbfile] = params
+    return params
+
+
+# Quasarr.ini parsed once per process and kept until the file changes; every
+# write replaces the file atomically, so its inode, mtime and size tell when
+# this or another process changed it
+_parsed_ini = {"stamp": None, "parser": None}
+_parsed_ini_lock = threading.Lock()
+
+
+def _ini_stamp(configfile):
+    try:
+        stat = os.stat(configfile)
+    except OSError:
+        return None
+    return configfile, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size
+
+
+def _read_ini(configfile):
+    """A parser of the current Quasarr.ini; callers must not change it."""
+    stamp = _ini_stamp(configfile)
+    with _parsed_ini_lock:
+        if stamp is not None and _parsed_ini["stamp"] == stamp:
+            return _parsed_ini["parser"]
+        parser = configparser.RawConfigParser()
+        parser.read(configfile)
+        _parsed_ini.update(stamp=stamp, parser=parser)
+        return parser
+
+
+def encrypt_secret(value: str) -> str:
+    """Encrypt a value stored outside Quasarr.ini with the config secret key."""
+    crypt_key, crypt_iv = _get_encryption_params()
+    cipher = AES.new(crypt_key, AES.MODE_CBC, crypt_iv)
+    return base64.b64encode(
+        cipher.encrypt(pad(value.encode("utf-8"), AES.block_size))
+    ).decode()
+
+
+def decrypt_secret(token: str) -> str:
+    """Reverse encrypt_secret; raises when the key does not match."""
+    crypt_key, crypt_iv = _get_encryption_params()
+    cipher = AES.new(crypt_key, AES.MODE_CBC, crypt_iv)
+    return unpad(cipher.decrypt(base64.b64decode(token)), AES.block_size).decode(
+        "utf-8"
+    )
 
 
 class Config(object):
@@ -122,10 +192,12 @@ class Config(object):
         self._config = configparser.RawConfigParser()
 
         try:
-            self._config.read(self._configfile)
-            self._config.has_section(self._section) or self._set_default_config(
-                self._section
-            )
+            self._config = _read_ini(self._configfile)
+            if not self._config.has_section(self._section):
+                # never change the shared parser: add the section to a fresh one
+                self._config = configparser.RawConfigParser()
+                self._config.read(self._configfile)
+                self._set_default_config(self._section)
             self.__config__ = self._read_config(self._section)
         except configparser.DuplicateSectionError:
             print("Duplicate Section in Config File")
@@ -217,17 +289,7 @@ class Config(object):
         return prune_plan
 
     def _get_encryption_params(self):
-        secrets = DataBase("secrets")
-        crypt_key = secrets.retrieve("key")
-        crypt_iv = secrets.retrieve("iv")
-        if crypt_iv and crypt_key:
-            return base64.b64decode(crypt_key), base64.b64decode(crypt_iv)
-        else:
-            crypt_key = get_random_bytes(32)
-            crypt_iv = get_random_bytes(16)
-            secrets.update_store("key", base64.b64encode(crypt_key).decode())
-            secrets.update_store("iv", base64.b64encode(crypt_iv).decode())
-            return crypt_key, crypt_iv
+        return _get_encryption_params()
 
     def _set_to_config(self, section, key, value):
         # Re-sync under outer lock. configparser.read() merges into the

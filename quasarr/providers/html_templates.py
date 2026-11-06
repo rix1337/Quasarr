@@ -2,6 +2,7 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+import json
 import time
 
 import quasarr.providers.html_images as images
@@ -194,6 +195,20 @@ def render_centered_html(inner_content, footer_content=""):
                 background-color: var(--card-bg);
                 color: var(--fg-color);
                 box-sizing: border-box;
+            }
+            /* drawn like the text inputs; browsers otherwise draw select boxes smaller */
+            input, select {
+                font-family: inherit;
+                line-height: 1.5;
+            }
+            select {
+                -webkit-appearance: none;
+                appearance: none;
+                padding-right: 2.25rem;
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236c757d' stroke-width='1.5'/%3E%3C/svg%3E");
+                background-repeat: no-repeat;
+                background-position: right 0.75rem center;
+                background-size: 0.75rem;
             }
             *, *::before, *::after {
                 box-sizing: border-box;
@@ -576,3 +591,15 @@ def render_fail(message):
         <h2>{message}</h2>
         {button_html}
     """)
+
+
+def json_for_script(value):
+    """JSON that cannot close or break out of the script element holding it."""
+    return (
+        json.dumps(value)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )

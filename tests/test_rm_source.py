@@ -12,25 +12,25 @@ import requests
 from bs4 import BeautifulSoup
 
 from quasarr.constants import SEARCH_CAT_MOVIES, SEARCH_CAT_SHOWS
-from quasarr.downloads.sources import rm as rm_downloads
-from quasarr.downloads.sources.rm import (
+from quasarr.providers.cloudflare import (
+    FlareSolverrResponse,
+    _clear_cloudflare_gate_cache,
+)
+from quasarr.search.sources.templates.rm import download as rm_downloads
+from quasarr.search.sources.templates.rm.download import (
     Source as DownloadSource,
 )
-from quasarr.downloads.sources.rm import (
+from quasarr.search.sources.templates.rm.download import (
     _extract_download_links,
     _extract_imdb_id,
     _extract_release_slug,
     _get_base_url,
     _get_page,
 )
-from quasarr.providers.cloudflare import (
-    FlareSolverrResponse,
-    _clear_cloudflare_gate_cache,
-)
-from quasarr.search.sources.rm import (
+from quasarr.search.sources.templates.rm.search import (
     Source as SearchSource,
 )
-from quasarr.search.sources.rm import (
+from quasarr.search.sources.templates.rm.search import (
     _build_phrase_query,
     _clean_title,
     _parse_feed,
@@ -233,7 +233,7 @@ class DownloadTests(unittest.TestCase):
                     f"{intact}<div>banner {opener}</div>{RELEASE_HTML}{RESULTS_HTML}"
                 )
                 with patch(
-                    "quasarr.downloads.sources.rm._get_content",
+                    "quasarr.search.sources.templates.rm.download._get_content",
                     return_value=markup.encode(),
                 ):
                     page = _get_page(shared_state(), "/", 1)
@@ -259,10 +259,12 @@ class DownloadTests(unittest.TestCase):
     def test_download_reports_links_and_clears_issue(self):
         with (
             patch(
-                "quasarr.downloads.sources.rm._fetch_release_page",
+                "quasarr.search.sources.templates.rm.download._fetch_release_page",
                 return_value=soup(RELEASE_HTML),
             ),
-            patch("quasarr.downloads.sources.rm.clear_hostname_issue") as clear,
+            patch(
+                "quasarr.search.sources.templates.rm.download.clear_hostname_issue"
+            ) as clear,
         ):
             result = DownloadSource().get_download_links(
                 shared_state(), "https://source.invalid/release/x", [], "t", ""
@@ -275,11 +277,15 @@ class DownloadTests(unittest.TestCase):
     def test_download_unmatched_mirror_filter_clears_issue(self):
         with (
             patch(
-                "quasarr.downloads.sources.rm._fetch_release_page",
+                "quasarr.search.sources.templates.rm.download._fetch_release_page",
                 return_value=soup(RELEASE_HTML),
             ),
-            patch("quasarr.downloads.sources.rm.clear_hostname_issue") as clear,
-            patch("quasarr.downloads.sources.rm.mark_hostname_issue") as mark,
+            patch(
+                "quasarr.search.sources.templates.rm.download.clear_hostname_issue"
+            ) as clear,
+            patch(
+                "quasarr.search.sources.templates.rm.download.mark_hostname_issue"
+            ) as mark,
         ):
             result = DownloadSource().get_download_links(
                 shared_state(),
@@ -300,9 +306,12 @@ class DownloadTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.downloads.sources.rm._fetch_release_page", side_effect=error
+                "quasarr.search.sources.templates.rm.download._fetch_release_page",
+                side_effect=error,
             ),
-            patch("quasarr.downloads.sources.rm.mark_hostname_issue") as mark,
+            patch(
+                "quasarr.search.sources.templates.rm.download.mark_hostname_issue"
+            ) as mark,
         ):
             result = DownloadSource().get_download_links(
                 shared_state(), "https://source.invalid/release/x", [], "t", ""
@@ -318,9 +327,12 @@ class DownloadTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.downloads.sources.rm._fetch_release_page", side_effect=error
+                "quasarr.search.sources.templates.rm.download._fetch_release_page",
+                side_effect=error,
             ),
-            patch("quasarr.downloads.sources.rm.mark_hostname_issue") as mark,
+            patch(
+                "quasarr.search.sources.templates.rm.download.mark_hostname_issue"
+            ) as mark,
         ):
             DownloadSource().get_download_links(
                 shared_state(), "https://source.invalid/release/x", [], "t", ""
@@ -345,7 +357,10 @@ class SecurityCheckTests(unittest.TestCase):
         self.addCleanup(rm_downloads._SESSION.cookies.clear)
         self.passed = threading.Event()
         self.solves = []
-        for target in ("quasarr.downloads.sources.rm", "quasarr.providers.cloudflare"):
+        for target in (
+            "quasarr.search.sources.templates.rm.download",
+            "quasarr.providers.cloudflare",
+        ):
             available = patch(f"{target}.is_flaresolverr_available", return_value=True)
             available.start()
             self.addCleanup(available.stop)
@@ -404,7 +419,9 @@ class SecurityCheckTests(unittest.TestCase):
         with (
             patch.object(rm_downloads._SESSION, "get", side_effect=self.plain_get),
             self.solve(status=404),
-            patch("quasarr.downloads.sources.rm.mark_hostname_issue") as mark,
+            patch(
+                "quasarr.search.sources.templates.rm.download.mark_hostname_issue"
+            ) as mark,
         ):
             result = DownloadSource().get_download_links(
                 shared_state(), "https://source.invalid/release/gone", [], "t", ""
@@ -417,7 +434,7 @@ class SecurityCheckTests(unittest.TestCase):
         with (
             patch.object(rm_downloads._SESSION, "get", side_effect=self.plain_get),
             patch(
-                "quasarr.downloads.sources.rm.is_flaresolverr_available",
+                "quasarr.search.sources.templates.rm.download.is_flaresolverr_available",
                 return_value=False,
             ),
         ):
@@ -428,8 +445,11 @@ class SecurityCheckTests(unittest.TestCase):
         with (
             patch.object(rm_downloads._SESSION, "get", side_effect=self.plain_get),
             self.solve(),
-            patch("quasarr.downloads.sources.rm.SEARCH_FANOUT_DEADLINE_SECONDS", 0),
-            patch("quasarr.downloads.sources.rm.info") as info,
+            patch(
+                "quasarr.search.sources.templates.rm.download.SEARCH_FANOUT_DEADLINE_SECONDS",
+                0,
+            ),
+            patch("quasarr.search.sources.templates.rm.download.info") as info,
         ):
             rm_downloads._get_content(shared_state(), "/", 5)
 
@@ -439,12 +459,12 @@ class SecurityCheckTests(unittest.TestCase):
 class SearchFlowTests(unittest.TestCase):
     def setUp(self):
         link = patch(
-            "quasarr.search.sources.rm.generate_download_link",
+            "quasarr.search.sources.templates.rm.search.generate_download_link",
             return_value="http://localhost:8080/download/?payload=x",
         )
         link.start()
         self.addCleanup(link.stop)
-        clear = patch("quasarr.search.sources.rm.clear_hostname_issue")
+        clear = patch("quasarr.search.sources.templates.rm.search.clear_hostname_issue")
         clear.start()
         self.addCleanup(clear.stop)
 
@@ -457,10 +477,15 @@ class SearchFlowTests(unittest.TestCase):
 
         stack = ExitStack()
         stack.enter_context(
-            patch("quasarr.search.sources.rm._get_page", side_effect=fake)
+            patch(
+                "quasarr.search.sources.templates.rm.search._get_page", side_effect=fake
+            )
         )
         stack.enter_context(
-            patch("quasarr.search.sources.rm._get_markup", side_effect=fake_markup)
+            patch(
+                "quasarr.search.sources.templates.rm.search._get_markup",
+                side_effect=fake_markup,
+            )
         )
         return stack
 
@@ -511,7 +536,9 @@ class SearchFlowTests(unittest.TestCase):
                 return soup(two_titles)
             raise RuntimeError("500 Server Error")
 
-        with patch("quasarr.search.sources.rm._get_page", side_effect=fake):
+        with patch(
+            "quasarr.search.sources.templates.rm.search._get_page", side_effect=fake
+        ):
             releases = SearchSource().search(
                 shared_state(), time.time(), SEARCH_CAT_SHOWS, "tt0000009", 1, 2
             )
@@ -537,7 +564,9 @@ class SearchFlowTests(unittest.TestCase):
     def test_unexpected_layout_marks_the_host(self):
         with (
             self.pages({"/": "<html><body>some other site</body></html>"}),
-            patch("quasarr.search.sources.rm.mark_hostname_issue") as mark,
+            patch(
+                "quasarr.search.sources.templates.rm.search.mark_hostname_issue"
+            ) as mark,
         ):
             releases = SearchSource().feed(
                 shared_state(), time.time(), SEARCH_CAT_MOVIES
@@ -551,10 +580,12 @@ class SearchFlowTests(unittest.TestCase):
         with (
             self.pages({"/": FEED_HTML}),
             patch(
-                "quasarr.search.sources.rm._feed_date",
+                "quasarr.search.sources.templates.rm.search._feed_date",
                 side_effect=[ValueError("odd post"), "Sat, 31 Oct 2026 00:00:00 +0000"],
             ),
-            patch("quasarr.search.sources.rm.mark_hostname_issue") as mark,
+            patch(
+                "quasarr.search.sources.templates.rm.search.mark_hostname_issue"
+            ) as mark,
         ):
             releases = SearchSource().feed(
                 shared_state(), time.time(), SEARCH_CAT_SHOWS
@@ -570,7 +601,9 @@ class SearchFlowTests(unittest.TestCase):
         movie_only = FEED_HTML.split('<div class="blog-post clear">')[1]
         with (
             self.pages({"/": f'<div class="blog-post clear">{movie_only}'}),
-            patch("quasarr.search.sources.rm.mark_hostname_issue") as mark,
+            patch(
+                "quasarr.search.sources.templates.rm.search.mark_hostname_issue"
+            ) as mark,
         ):
             releases = SearchSource().feed(
                 shared_state(), time.time(), SEARCH_CAT_SHOWS
@@ -582,9 +615,12 @@ class SearchFlowTests(unittest.TestCase):
     def test_failed_request_marks_the_host(self):
         with (
             patch(
-                "quasarr.search.sources.rm._get_markup", side_effect=RuntimeError("503")
+                "quasarr.search.sources.templates.rm.search._get_markup",
+                side_effect=RuntimeError("503"),
             ),
-            patch("quasarr.search.sources.rm.mark_hostname_issue") as mark,
+            patch(
+                "quasarr.search.sources.templates.rm.search.mark_hostname_issue"
+            ) as mark,
         ):
             releases = SearchSource().feed(
                 shared_state(), time.time(), SEARCH_CAT_MOVIES

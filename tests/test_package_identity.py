@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from quasarr.downloads import download, generate_deterministic_package_id
-from quasarr.downloads.sources.wx import Source as WxSource
+from quasarr.search.sources.templates.wx.download import Source as WxSource
 
 
 class PackageIdentityTests(unittest.TestCase):
