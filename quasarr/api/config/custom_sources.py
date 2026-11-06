@@ -2,6 +2,7 @@
 # Quasarr
 # Project by https://github.com/rix1337
 
+import re
 import secrets
 import threading
 import time
@@ -35,6 +36,7 @@ from quasarr.search.sources.helpers.custom_suggest import (
     import_template,
     is_feed_markup,
     listing_from_suggestion,
+    pick_download,
     pick_field,
     pick_item,
     preview_html,
@@ -127,6 +129,11 @@ def _draft_source(definition):
 def _fail(message, status=400):
     response.status = status
     return {"success": False, "error": message}
+
+
+_VIDEO_SOURCE = re.compile(
+    r"\b(web(-?dl|rip)?|blu-?ray|bdrip|hdtv|dvd(rip)?|remux)\b", re.I
+)
 
 
 def _report_payload(report):
@@ -241,16 +248,45 @@ def setup_custom_source_routes(app, shared_state):
                 "error": fetched.error,
                 "suggest_flaresolverr": suggest,
             }
+        table = report_table(fetched.markup, url, listing, source.hostname, report)
+        if data.get("step") == "search":
+            # what Radarr or Sonarr would get: the same release check as a real search
+            from quasarr.constants import CODEC_REGEX, RESOLUTION_REGEX
+            from quasarr.providers.utils import is_valid_release
+
+            match = query if spec["search_match"] == "query" else raw_query
+            kind = {2000: "movie", 5000: "TV"}.get(category)
+            skipped = dict(report["skipped"])
+            for row in table:
+                if not kind or "skipped" in row:
+                    continue
+                title = row["title"]
+                # a video release names its resolution, codec or source
+                video = (
+                    RESOLUTION_REGEX.search(title)
+                    or CODEC_REGEX.search(title)
+                    or _VIDEO_SOURCE.search(title)
+                )
+                if not video or not is_valid_release(
+                    title, category, match, None, None
+                ):
+                    row["skipped"] = f"not a {kind} release"
+                    skipped[row["skipped"]] = skipped.get(row["skipped"], 0) + 1
+            report = {
+                **report,
+                "rows": [r for r in table if "skipped" not in r],
+                "skipped": skipped,
+            }
         payload = {
             "url": url,
             "suggest_flaresolverr": suggest,
             **_report_payload(report),
-            "table": report_table(
-                fetched.markup, url, listing, source.hostname, report
-            ),
+            "table": table,
         }
         if data.get("step") == "search":
             payload["quality"] = search_quality(query, report["rows"])
+            # what the site was asked for, as a title looked up from an IMDb ID
+            payload["query"] = query
         return payload
 
     @app.post("/api/custom-sources/suggest")
@@ -366,7 +402,9 @@ def setup_custom_source_routes(app, shared_state):
             listing_from_suggestion(suggestion["best"]) if suggestion["best"] else None
         )
         if purpose == "listing":
-            result["feeds"] = suggest_feeds(soup, url, hostname)
+            result["feeds"] = suggest_feeds(
+                soup, url, hostname, str(data.get("language") or "")
+            )
             result["templates"] = detect_templates(
                 shared_state, fetched.markup, url, hostname
             )
@@ -385,6 +423,11 @@ def setup_custom_source_routes(app, shared_state):
             q = int(data.get("q"))
         except (TypeError, ValueError):
             return _fail("No element was clicked")
+        if data.get("kind") == "download":
+            picked = pick_download(page["soup"], q, page["url"], page["hostname"])
+            if picked.get("error"):
+                return _fail(picked["error"])
+            return {"success": True, **picked}
         if data.get("kind") == "item":
             picked = pick_item(page["soup"], q, page["url"], page["hostname"])
             if picked is None:
@@ -432,6 +475,37 @@ def setup_custom_source_routes(app, shared_state):
         if marked.get("error"):
             return _fail(marked["error"])
         return {"success": True, **marked}
+
+    @app.post("/api/custom-sources/imdb-lookup")
+    @require_api_key
+    def lookup_imdb_titles():
+        """Movies or shows by title or IMDb ID, through Radarr or Sonarr."""
+        response.content_type = "application/json"
+        data = request.json or {}
+        term = str(data.get("term") or "").strip()[:100]
+        shows = data.get("kind") == "tv"
+        if shows:
+            from quasarr.providers.sonarr_api import get_client
+        else:
+            from quasarr.providers.radarr_api import get_client
+        client = get_client(shared_state)
+        if client is None:
+            return _fail(f"{'Sonarr' if shows else 'Radarr'} is not set up")
+        if not term:
+            return {"success": True, "results": []}
+        if re.fullmatch(r"tt\d{5,10}", term):
+            term = f"imdb:{term}"
+        found = client.series_lookup(term) if shows else client.movie_lookup(term)
+        results = [
+            {
+                "imdb_id": item["imdbId"],
+                "title": item.get("title"),
+                "year": item.get("year"),
+            }
+            for item in found or []
+            if item.get("imdbId")
+        ]
+        return {"success": True, "results": results[:8]}
 
     @app.post("/api/custom-sources/suggest-search")
     @require_api_key

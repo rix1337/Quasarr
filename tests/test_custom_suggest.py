@@ -168,14 +168,13 @@ class SearchDiscoveryTests(unittest.TestCase):
             ["Other", "Film"], pick_query(rows[1:])[1]["title"].split(".")[:2]
         )
 
-    def test_first_template_that_searches_wins_and_imdb_is_probed(self):
+    def test_first_template_that_searches_wins(self):
         feed = blog_page()
         hit = blog_page(count=1)
         pages = {
             f"https://{HOST}/movies/": feed,
             f"https://{HOST}/?s=Movie+Number1": feed,  # ignores the query
             f"https://{HOST}/movies/?s=Movie+Number1": hit,
-            f"https://{HOST}/movies/?s=tt1000001": hit,
         }
 
         def fetch(_state, url, _timeout, _solver, data=None):
@@ -190,7 +189,6 @@ class SearchDiscoveryTests(unittest.TestCase):
         self.assertEqual(
             {"url": "https://{host}/movies/?s={q}", "method": "get"}, result["search"]
         )
-        self.assertEqual("imdb", result["mode"])
         self.assertFalse(result["attempts"][0]["works"])
 
     def test_post_searches_send_the_query_in_the_body(self):
@@ -291,9 +289,32 @@ class DownloadSuggestionTests(unittest.TestCase):
             <a href="https://filecrypt.cc/Container/B.html">DDownload</a></div>
             <a href="/comments/">Comments</a>"""
         best = suggest_download(markup, f"https://{HOST}/r/", HOST)[0]
-        self.assertEqual("text", best["spec"]["mirror"])
+        # crypter links are named after the hoster in their text, not their address
+        self.assertEqual("hoster_name", best["spec"]["mirror"])
+        self.assertEqual("rapidgator", best["names"]["hoster_name"])
         self.assertEqual(2, best["known"])
         self.assertNotIn("redirects", best["spec"])
+
+    def test_a_click_on_a_link_picks_its_links_and_choices_do_not_repeat(self):
+        from quasarr.search.sources.helpers.custom_suggest import (
+            annotate_page,
+            pick_download,
+        )
+
+        markup = """<div class="mirrors"><span>Mirror 1</span>
+            <a href="https://filecrypt.cc/Container/A.html">Rapidgator</a>
+            <a href="https://filecrypt.cc/Container/B.html">DDownload</a></div>
+            <a href="https://rapidgator.net/account/registration/ref/1">Get premium</a>"""
+        found = suggest_download(markup, f"https://{HOST}/r/", HOST)
+        # an ad for a hoster account is no download link
+        self.assertEqual(2, found[0]["known"])
+        # both selectors collect the same two links: one choice
+        self.assertEqual(1, len(found))
+        soup = annotate_page(markup)
+        label = soup.select_one("div.mirrors span")
+        picked = pick_download(soup, label["data-q"], f"https://{HOST}/r/", HOST)
+        self.assertEqual(2, picked["known"])
+        self.assertEqual("hoster_name", picked["spec"]["mirror"])
 
     def test_hoster_buttons_on_the_site_resolve_redirects(self):
         markup = """<div class="mirrors">

@@ -23,9 +23,11 @@ from quasarr.search.sources.helpers.custom_source import (
     _SIZE_REGEX,
     _compile_field,
     _is_known_link,
+    _mirror_name,
     _resolve_link,
     describe_report,
     extract_field,
+    find_release_name,
     is_feed_markup,
     is_on_host,
     normalize_feed_markup,
@@ -373,13 +375,20 @@ def _evaluate(items, spec, kind, page_url, hostname):
         return None
     distinct = len(set(map(str, found))) / len(found)
     return {
-        "spec": {k: v for k, v in spec.items() if v},
+        "spec": spec
+        if isinstance(spec, list)
+        else {k: v for k, v in spec.items() if v},
         "coverage": round(len(found) / len(items), 2),
         "distinct": round(distinct, 2),
         "samples": [str(v) for v in found[:3]],
         # per item, to tell candidates that read the same values apart
         "_values": values,
     }
+
+
+def _first_way(spec):
+    """A field read several ways is judged by its first way."""
+    return spec[0] if isinstance(spec, list) else spec
 
 
 def _rank(results, prefer=None, individual=False):
@@ -390,10 +399,11 @@ def _rank(results, prefer=None, individual=False):
     ranked = sorted(
         results,
         key=lambda r: (
+            r.get("release", False),
             r["coverage"] * (r["distinct"] if prefer == "distinct" else 1),
             r.get("bonus", 0)
             # position paths break on the next layout tweak
-            - 3 * (":nth-of-type" in str(r["spec"].get("selector", ""))),
+            - 3 * (":nth-of-type" in str(_first_way(r["spec"]).get("selector", ""))),
         ),
         reverse=True,
     )
@@ -489,9 +499,56 @@ def suggest_title_link(items, page_url, hostname):
             result["bonus"] = sum(release_likeness(s) for s in result["samples"])
         title_results.append(result)
 
-    title_results = [r for r in title_results if r]
+    # a release name at the start of a longer text, as a post body under a headline
+    def holding(item):
+        return [
+            e
+            for e in item.find_all(True)
+            if (found := find_release_name(e.get_text(" ", strip=True)))
+            and release_likeness(found) >= 3
+            and found != e.get_text(" ", strip=True)
+        ][:2]
+
+    for selector in _count_selectors(items, holding):
+        result = _evaluate(
+            items,
+            {"selector": selector, "find": "release"},
+            "title",
+            page_url,
+            hostname,
+        )
+        if result:
+            result["bonus"] = sum(release_likeness(s) for s in result["samples"]) + 1
+        title_results.append(result)
+
+    # a whole block of text is no name; a name that reads as a release comes first
+    title_results = [
+        r
+        for r in title_results
+        if r and sum(map(len, r["samples"])) / len(r["samples"]) <= 150
+    ]
     for result in title_results:
         samples = result["samples"]
+        result["release"] = (
+            sum(release_likeness(s) for s in samples) / len(samples) >= 2
+        )
+    # release names in some posts only: the headline names the others
+    inside = [r for r in title_results if r["spec"].get("find") and r["coverage"] < 1]
+    headline = [r for r in title_results if not r["release"]]
+    if inside and headline:
+        best_inside = max(inside, key=lambda r: r["coverage"])
+        best_headline = max(headline, key=lambda r: r["coverage"])
+        both = _evaluate(
+            items,
+            [best_inside["spec"], best_headline["spec"]],
+            "title",
+            page_url,
+            hostname,
+        )
+        if both and both["coverage"] > best_inside["coverage"]:
+            both["release"] = True
+            both["bonus"] = best_inside.get("bonus", 0) + 1
+            title_results.append(both)
         # a whole block of text is not a release name
         if sum(map(len, samples)) / len(samples) > 120:
             result["bonus"] -= 3
@@ -743,21 +800,32 @@ _FEED_WORDS = {
         "magazines",
         "zeitschriften",
     ),
-    6000: ("xxx", "adult", "erotik", "porn"),
 }
+# how menus name a language, to prefer the site's own over the others
+_LANGUAGE_WORDS = {
+    "de": ("german", "deutsch", "deutsche"),
+    "en": ("english", "englisch"),
+    "fr": ("french", "français", "francais", "französisch"),
+}
+_OTHER_LANGUAGE = re.compile(r"\b(international|non-\w+|foreign)\b")
 
 
-def suggest_feeds(soup, page_url, hostname):
+def suggest_feeds(soup, page_url, hostname, language=None):
     """Pages for each kind of release, found by their menu links.
 
-    Returns {category: path}. A link counts when its whole text is one of the
-    words, or starts with it, so release names that contain one do not.
+    Returns {category: path}. A short link text that holds one of the words
+    counts; release names do not. Menus often split a kind by language, as
+    "German Movies" and "English Movies", so the site's language wins.
     """
+    own = _LANGUAGE_WORDS.get(language, ())
+    others = [
+        w for code, words in _LANGUAGE_WORDS.items() if code != language for w in words
+    ]
     found = {}
     kinds_of = {}
     for anchor in soup.find_all("a", href=True):
         text = " ".join(anchor.get_text(" ", strip=True).lower().split())
-        if not text or len(text) > 30:
+        if not text or len(text) > 30 or release_likeness(text) >= 2:
             continue
         link = _resolve_link(page_url, anchor["href"], hostname)
         if not link or not is_on_host(link, hostname):
@@ -771,22 +839,31 @@ def suggest_feeds(soup, page_url, hostname):
         for category, words in _FEED_WORDS.items():
             for rank, word in enumerate(words):
                 if text == word:
-                    score = (0, rank)
-                elif re.match(rf"{re.escape(word)}\b", text):
-                    score = (1, rank)
+                    match = 0
+                elif re.search(rf"\b{re.escape(word)}\b", text):
+                    match = 1
                 else:
                     continue
-                score += (path.count("/"), len(path))
+                if any(re.search(rf"\b{w}\b", text) for w in own):
+                    spoken = 0
+                elif _OTHER_LANGUAGE.search(text) or any(
+                    re.search(rf"\b{w}\b", text) for w in others
+                ):
+                    spoken = 2
+                else:
+                    spoken = 1
+                # the word decides first; language only between links of one word
+                score = (rank, spoken, match, path.count("/"), len(path))
                 kinds_of.setdefault(path, set()).add(category)
-                if category not in found or score < found[category][0]:
-                    found[category] = (score, path)
+                found.setdefault(category, []).append((score, path))
                 break
     # a page linked as several kinds is a mixed list, not a kind of its own
-    return {
-        category: path
-        for category, (_, path) in found.items()
-        if len(kinds_of[path]) == 1
-    }
+    chosen = {}
+    for category, links in found.items():
+        own_pages = [link for link in links if len(kinds_of[link[1]]) == 1]
+        if own_pages:
+            chosen[category] = min(own_pages)[1]
+    return chosen
 
 
 def suggest_search_url(soup, page_url, hostname):
@@ -874,11 +951,57 @@ def _hoster_named(anchor):
 
 def suggest_download(markup, page_url, hostname=None):
     """Link selectors on a release page that collect crypter and hoster links."""
+    return _download_candidates(
+        BeautifulSoup(markup, "html.parser"), page_url, hostname
+    )
+
+
+def _mirror_default(anchors, page_url):
+    """How links are best named: crypter addresses say nothing about the hoster."""
     from quasarr.constants import SHARE_HOSTERS_LOWERCASE
 
-    soup = BeautifulSoup(markup, "html.parser")
+    texts = " ".join(a.get_text(" ", strip=True).lower() for a in anchors)
+    named = sum(h in texts for h in SHARE_HOSTERS_LOWERCASE) >= max(
+        1, len(anchors) // 2
+    )
+
+    def to_hoster(anchor):
+        host = (urlparse(urljoin(page_url, anchor["href"])).hostname or "").lower()
+        return any(part in SHARE_HOSTERS_LOWERCASE for part in host.split("."))
+
+    if sum(map(to_hoster, anchors)) * 2 >= len(anchors):
+        return "text" if named else "href_host"
+    return "hoster_name" if named else "text"
+
+
+def _link_names(anchor, page_url):
+    """What each naming choice calls one link, shown in the wizard."""
+    href = urljoin(page_url, anchor.get("href", ""))
+    return {
+        mode: _mirror_name(anchor, href, mode)
+        for mode in ("text", "href_host", "hoster_name")
+    }
+
+
+# hoster pages that sell accounts rather than hold a file, as in ads and ref links
+_HOSTER_PAGES = re.compile(
+    r"/(account|registration|register|signup|premium|pricing|ref|affiliate|login)\b|[?&]ref=",
+    re.I,
+)
+
+
+def _download_link(url):
+    if not _is_known_link(url):
+        return False
+    parsed = urlparse(url)
+    return parsed.path.strip("/") != "" and not _HOSTER_PAGES.search(
+        parsed.path + ("?" + parsed.query if parsed.query else "")
+    )
+
+
+def _download_candidates(soup, page_url, hostname=None):
     anchors = soup.find_all("a", href=True)
-    known = [a for a in anchors if _is_known_link(urljoin(page_url, a["href"]))]
+    known = [a for a in anchors if _download_link(urljoin(page_url, a["href"]))]
     redirects = False
     if not known and hostname:
         # on-site buttons named after hosters redirect to the real links
@@ -901,27 +1024,27 @@ def suggest_download(markup, page_url, hostname=None):
         if container is not None:
             selectors[f"{_simple_selector(container)} a[href]"] += 1
 
-    texts = " ".join(a.get_text(" ", strip=True).lower() for a in known)
-    mirror = (
-        "text"
-        if sum(h in texts for h in SHARE_HOSTERS_LOWERCASE) >= max(1, len(known) // 2)
-        else "href_host"
-    )
+    mirror = _mirror_default(known, page_url)
     results = []
+    seen = set()
     for selector, _ in selectors.most_common(6):
         try:
             matched = soupsieve.select(selector, soup)
         except Exception:
             continue
         hits = [a for a in matched if a in known]
-        if not hits:
+        # selectors that collect the same links are one choice
+        found = frozenset(map(id, matched))
+        if not hits or found in seen:
             continue
+        seen.add(found)
         spec = {"selector": selector, "mirror": mirror}
         if redirects:
             spec["redirects"] = True
         results.append(
             {
                 "spec": spec,
+                "names": _link_names(hits[0], page_url),
                 "known": len(hits),
                 "other": len(matched) - len(hits),
                 "coverage": round(len(hits) / len(known), 2),
@@ -929,6 +1052,50 @@ def suggest_download(markup, page_url, hostname=None):
         )
     results.sort(key=lambda r: (r["coverage"], -r["other"]), reverse=True)
     return results[:MAX_CANDIDATES]
+
+
+def pick_download(soup, q, page_url, hostname):
+    """The download link selector around one clicked link.
+
+    A suggestion that holds the clicked link wins; otherwise the links that
+    share its box, or links like it, are taken.
+    """
+    element = element_by_q(soup, q)
+    if element is None:
+        return {"error": "The page changed. Load it again."}
+    anchor = (
+        element
+        if element.name == "a" and element.get("href")
+        else element.find_parent("a", href=True) or element.find("a", href=True)
+    )
+    # a click next to the links, as on a "Mirror 1" label, takes the closest one
+    for box in element.parents if anchor is None else []:
+        if box.name in ("body", "html", "[document]"):
+            break
+        anchor = box.find("a", href=True)
+        if anchor is not None:
+            break
+    if anchor is None:
+        return {"error": "That is not a link. Click one of the download links."}
+    for candidate in _download_candidates(soup, page_url, hostname):
+        if anchor in soupsieve.select(candidate["spec"]["selector"], soup):
+            return candidate
+    container = anchor.find_parent(
+        lambda t: t.name in ("div", "p", "td", "ul", "section") and stable_classes(t)
+    )
+    selectors = [_attribute_selector(anchor)]
+    if container is not None:
+        selectors.append(f"{_simple_selector(container)} a[href]")
+    selectors.append(build_selector(anchor, soup))
+    selector = next(s for s in selectors if s and anchor in soupsieve.select(s, soup))
+    matched = soupsieve.select(selector, soup)
+    return {
+        "spec": {"selector": selector, "mirror": _mirror_default(matched, page_url)},
+        "names": _link_names(anchor, page_url),
+        "known": len(matched),
+        "other": 0,
+        "coverage": 1.0,
+    }
 
 
 # --- Search discovery ------------------------------------------------------------
@@ -1065,43 +1232,13 @@ def discover_search(shared_state, hostname, feed_url, listing, fetch=None):
             "error": "No search URL answered the query",
         }
 
-    mode, mode_note = (
-        "title",
-        "No release on the feed shows an IMDb ID, so Quasarr searches by title",
-    )
-    imdb_row = next((r for r in feed_rows if r["imdb_id"]), None)
-    if imdb_row and time.time() < deadline:
-        url, form = _search_request(found["search"], hostname, imdb_row["imdb_id"])
-        page = fetch(shared_state, url, SEARCH_DISCOVERY_TIMEOUT, False, form)
-        imdb_hits = 0
-        if not page.error:
-            rows = parse_listing(
-                page.markup,
-                url,
-                _compile_listing(found["search_list"] or listing, "list"),
-                hostname,
-            )["rows"]
-            words = pick_query([imdb_row])[0] or imdb_row["title"]
-            imdb_hits = sum(
-                r["imdb_id"] == imdb_row["imdb_id"]
-                or search_quality(words, [r])["matches"]
-                for r in rows
-            )
-        if imdb_hits:
-            mode, mode_note = "imdb", "The site also finds releases by their IMDb ID"
-        else:
-            mode_note = (
-                "The site finds nothing for IMDb IDs, so Quasarr searches by title"
-            )
-
+    # IMDb ID or title is left to the wizard's search test, which tries IMDb IDs first
     return {
         "success": True,
         "query": query,
         "query_title": query_row["title"],
         "search": found["search"],
         "search_list": found["search_list"],
-        "mode": mode,
-        "mode_note": mode_note,
         # a template that finds text finds music and books too
         "phrase": True,
         "attempts": attempts,
@@ -1380,7 +1517,11 @@ _PREVIEW_SCRIPT = """
       });
       solo(message.shown);
       var first = shown || (message.scroll && document.querySelector('.q-item'));
-      if (first) first.scrollIntoView({block: shown ? 'start' : 'center'});
+      // scrolls only this preview; scrollIntoView would move the wizard page too
+      if (first) {
+        var top = first.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo(0, Math.max(0, shown ? top - 8 : top - window.innerHeight / 3));
+      }
     } else if (message.type === 'picking') {
       picking = !!message.on;
       document.documentElement.classList.toggle('q-picking', picking);
@@ -1393,9 +1534,12 @@ _PREVIEW_SCRIPT = """
   document.addEventListener('click', function(event) {
     event.preventDefault();
     event.stopPropagation();
-    var node = picking && numbered(event.target);
-    if (shown && !shown.contains(event.target)) node = null;
-    if (node) post({type: 'pick', q: Number(node.getAttribute('data-q'))});
+    // a click that picks nothing says why, so the wizard can explain it
+    var node = numbered(event.target);
+    if (!picking) post({type: 'refused', reason: 'idle'});
+    else if (shown && !shown.contains(event.target)) post({type: 'refused', reason: 'outside'});
+    else if (!node) post({type: 'refused', reason: 'nothing'});
+    else post({type: 'pick', q: Number(node.getAttribute('data-q'))});
   }, true);
   document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') post({type: 'cancel'});
@@ -1592,6 +1736,9 @@ def pick_field(soup, q, item_selector, field, page_url, hostname):
             break
     if spec is None:
         return {"error": "Nothing in this release reads as that. Click it directly."}
+    note = None
+    if field == "title":
+        spec, value, note = _release_name_spec(element, container, spec, value)
     sample = items[:SAMPLE_ITEMS]
     result = _evaluate(sample, spec, field, page_url, hostname)
     for suggestion in _field_suggestions(sample, field, page_url, hostname):
@@ -1605,7 +1752,49 @@ def pick_field(soup, q, item_selector, field, page_url, hostname):
             break
     if result:
         result.pop("_values", None)
-    return {"spec": spec, "result": result, "value": str(value)}
+    picked = {"spec": spec, "result": result, "value": str(value)}
+    if note:
+        picked["note"] = note
+    return picked
+
+
+def _release_name_spec(element, container, spec, value):
+    """A picked name that is no release name is replaced or flagged.
+
+    A release name with spaces is fine. A longer text that starts with one
+    keeps just the name; a headline gives way to a release name in the text
+    of the same release, and is flagged when there is none.
+    """
+    text = str(value)
+    found = find_release_name(text)
+    if release_likeness(text) >= 3 and (not found or found == text):
+        return spec, value, None
+    if found and release_likeness(found) >= 3:
+        return {**spec, "find": "release"}, found, None
+    for node in _around(element, container):
+        found = find_release_name(node.get_text(" ", strip=True))
+        if found and release_likeness(found) >= 3:
+            selector = build_selector(node, container)
+            replaced = {
+                "find": "release",
+                **({"selector": selector} if selector else {}),
+            }
+            return (
+                replaced,
+                found,
+                (
+                    "That looks like a headline, not a release name. Quasarr reads the release "
+                    "name from the text of each release instead."
+                ),
+            )
+    return (
+        spec,
+        value,
+        (
+            "That does not look like a release name, as Movie.Title.2026.1080p.WEB.x264-GROUP. "
+            "Your apps only accept releases with names like that."
+        ),
+    )
 
 
 def highlight(soup, item_selector, fields, page_url="", hostname="", options=None):

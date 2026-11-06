@@ -62,7 +62,7 @@ BASE_SEARCH_CATEGORY_CONFIG = {
         "download_category": "movies",
         "query_param": "imdbid",
         "query_validator": "imdb",
-        "default_query": "tt0133093",
+        "default_query": "tt0499549",
         "supports_season_episode": False,
         "search_capability": "movie",
     },
@@ -2290,7 +2290,7 @@ def run_cli():
             sys.exit("API Key required for tests")
         client = QuasarrClient(args.url, api_key)
         if args.test_movie:
-            sys.exit(0 if client.search_movie("tt0133093") else 1)
+            sys.exit(0 if client.search_movie("tt0499549") else 1)
         if args.test_tv:
             sys.exit(0 if client.search_tv("tt0944947") else 1)
         if args.test_music:

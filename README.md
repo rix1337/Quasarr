@@ -51,14 +51,15 @@ hostnames
 When no built-in template matches a hostname, Quasarr says so and offers **Set it up yourself**: a guided setup for
 experienced users that works on desktop and phones and needs no code.
 
-1. **Site:** name, hostname and the language of its releases. You can also import a template someone shared.
-2. **Newest releases:** Quasarr loads the page listing the newest releases, suggests where each release, its name,
-   link, size and date are, and shows them in a preview of the page. Fix a wrong suggestion by clicking the right text
-   in the preview.
-3. **Search:** Quasarr finds the site's search, checks whether it takes IMDb IDs or needs titles, and loads a results
-   page. Results laid out differently from the newest releases get their own fields.
-4. **Downloads:** Quasarr opens a release page and finds its download or container links.
-5. **Save.**
+1. **Site:** hostname, a name and the language of its releases. You can also import a template someone shared.
+2. **Feed:** Quasarr finds the page for each kind in the site menu, picks the release block and the release name,
+   link, size and date, and tests every page. A preview shows what it read; pick a dropdown entry or click the page
+   to change it.
+3. **Search:** Quasarr finds the site's search and tests it with each kind's newest release, by IMDb ID or, when the
+   site cannot find IDs, by title. Results laid out differently from the feed get their own fields.
+4. **Downloads:** Quasarr opens a release page and frames its download or crypter links. When there are none, the
+   site needs a userscript.
+5. **Save:** a summary of everything set up, and the template to export.
 
 Every step has a test that runs the same code Quasarr uses for your apps, so you see the releases and links before
 saving.

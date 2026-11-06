@@ -296,6 +296,21 @@ class SourceTests(unittest.TestCase):
         clear.assert_called_once_with("c1")
         mark.assert_not_called()
 
+    def test_title_search_falls_back_to_the_english_title(self, mark, clear, _link):
+        definition = make_definition(language="ru")
+        definition["search"]["mode"] = "title"
+        source = CustomSource(definition)
+        titles = {"ru": None, "en": "Synthetic Movie"}
+        with patch(
+            "quasarr.providers.imdb_metadata.get_localized_title",
+            side_effect=lambda _s, _id, language, *_a, **_k: titles[language],
+        ):
+            query, _ = source._search_query(
+                fake_shared_state(), 0, SEARCH_CAT_MOVIES, "tt0000001"
+            )
+        # a title in another script is lost in cleanup; the English one searches
+        self.assertEqual("Synthetic Movie", query)
+
     def test_feed_without_items_marks_a_hostname_issue(self, mark, clear, _link):
         with patch.object(
             custom_source, "fetch_markup", return_value=FetchResult(page(), None, 200)

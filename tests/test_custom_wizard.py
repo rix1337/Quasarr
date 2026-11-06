@@ -161,6 +161,74 @@ class PreviewSafetyTests(unittest.TestCase):
             {2000: "/filme/", 5000: "/serien/", 7000: "/ebooks/"},
             suggest_feeds(menu, "https://source.invalid/", "source.invalid"),
         )
+        # menus split by language: the site's own wins
+        split = BeautifulSoup(
+            '<a href="/en/">English Movies</a><a href="/de/">German Movies</a>'
+            '<a href="/int/">International Movies</a>',
+            "html.parser",
+        )
+        self.assertEqual(
+            {2000: "/de/"},
+            suggest_feeds(split, "https://source.invalid/", "source.invalid", "de"),
+        )
+
+    def test_release_names_inside_post_texts_are_found_and_headlines_flagged(self):
+        from quasarr.search.sources.helpers.custom_source import find_release_name
+
+        self.assertEqual(
+            "Synthetic Movie 2026 1080p WEB-DL x265-GRP",
+            find_release_name(
+                "Synthetic Movie 2026 1080p WEB-DL x265-GRP A story about it."
+            ),
+        )
+        self.assertEqual(
+            "Synthetic.Movie.2026.1080p.WEB.x264-GRP",
+            find_release_name("Download Synthetic.Movie.2026.1080p.WEB.x264-GRP now"),
+        )
+        self.assertIsNone(find_release_name("Synthetic Movie (2026)"))
+        # without a group the name ends with its last release word
+        self.assertEqual(
+            "Synthetic Movie 2004 1080p WEBRip x264 AAC",
+            find_release_name(
+                'Synthetic Movie 2004 1080p WEBRip x264 AAC- "Synthetic Movie" tells'
+            ),
+        )
+
+        page = annotate_page(
+            "<html><body>"
+            + "".join(
+                f'<div class="post"><h2><a href="/r/{i}">Synthetic Movie {i} (2026)</a></h2>'
+                f'<p class="text">Synthetic Movie {i} 2026 1080p WEB-DL x265-GRP A story.</p></div>'
+                for i in range(1, 4)
+            )
+            + "</body></html>"
+        )
+        # a post without a release name in its text keeps its headline
+        mixed = str(page).replace(
+            "Synthetic Movie 3 2026 1080p WEB-DL x265-GRP A story.", "A story."
+        )
+        from quasarr.search.sources.helpers.custom_suggest import suggest_listing
+
+        titles = suggest_listing(
+            mixed, "https://source.invalid/", "source.invalid", min_items=1
+        )["best"]["fields"]["title"]
+        self.assertIsInstance(titles[0]["spec"], list)
+        self.assertEqual(1.0, titles[0]["coverage"])
+        headline = page.select("div.post h2 a")[1]
+        picked = pick_field(
+            page,
+            headline["data-q"],
+            "div.post",
+            "title",
+            "https://source.invalid/",
+            "source.invalid",
+        )
+        # the headline gives way to the release name in the post text
+        self.assertEqual("release", picked["spec"]["find"])
+        self.assertEqual(
+            "Synthetic Movie 2 2026 1080p WEB-DL x265-GRP", picked["value"]
+        )
+        self.assertIn("headline", picked["note"])
 
     def test_embedded_json_cannot_close_its_script(self):
         text = json_for_script({"name": "</script><script>alert(1)</script>"})

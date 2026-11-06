@@ -425,6 +425,8 @@ def _compile_field(spec, name, default_attr):
         "without": _compile_selector(spec.get("without"), f"{name}.without", False),
         # percent-encode the address, for links with spaces or umlauts
         "quote": _require_bool(spec.get("quote", False), f"{name}.quote"),
+        # "release": keep only the release name the text holds
+        "find": _require_choice(spec.get("find", ""), ("", "release"), f"{name}.find"),
         # several elements whose texts form the value, as a calendar block of
         # month, day, year and clock; the first part must exist
         "parts": [
@@ -953,6 +955,56 @@ def _text_after_label(element, label, adjacent=False):
     return None
 
 
+# words of a release name: year, episode, resolution, source, codec, language
+_RELEASE_WORD = re.compile(
+    r"^(?:(?:19|20)\d{2}|S\d{1,2}(?:E\d{1,3})?|\d{3,4}p|web(?:-?dl|rip)?|blu-?ray|bdrip|"
+    r"hdtv|dvdrip|remux|uhd|hdr|x26[45]|h\.?26[45]|hevc|avc|german|dl|multi|dual|ac3|dd5|aac)$",
+    re.I,
+)
+
+
+# short words between release words, as "DUAL", "AAC2" or the "5 1" of 5.1 sound
+_RELEASE_EXTRA = re.compile(r"^(?:\d{1,2}|[A-Z0-9][A-Z0-9+.]{1,7})$")
+
+
+def find_release_name(text):
+    """The release name inside a longer text, as a post that starts with it.
+
+    A dotted name is one word; a name with spaces runs from the start of the
+    text to the word that ends in the group, as "x265-GROUP", after a release
+    word. None when the text holds no release name.
+    """
+    words = str(text or "").split()
+    for word in words:
+        word = word.strip(".,;:()[]\"'")
+        parts = re.split(r"[.]", word)
+        if (
+            len(parts) >= 4
+            and "-" in word
+            and any(_RELEASE_WORD.match(p) for p in parts)
+        ):
+            return word
+    tags = 0
+    last = None
+    for index, word in enumerate(words[:40]):
+        pieces = re.split(r"[.-]", word)
+        tag = any(_RELEASE_WORD.match(piece) for piece in pieces)
+        group = re.search(r"-([A-Za-z0-9]{2,})$", word)
+        if tags and index and group and not _RELEASE_WORD.match(group.group(1)):
+            return " ".join(words[: index + 1])
+        if tag:
+            tags += 1
+            last = index
+        elif tags and not _RELEASE_EXTRA.match(word.rstrip("-")):
+            break
+        elif tags:
+            last = index
+    # no group: the name ends with its last release word, as "… x264 AAC-" before a text
+    if tags >= 2 and last:
+        return " ".join(words[: last + 1]).rstrip("-").strip()
+    return None
+
+
 def extract_field(item, field):
     """Read one field from an item; None when the element or value is missing."""
     value = _extract_one(item, field)
@@ -1027,6 +1079,9 @@ def _extract_single(item, field):
         if isinstance(value, list):
             value = " ".join(value)
     value = str(value or "").strip()[:MAX_FIELD_CHARS]
+    if field.get("find") == "release":
+        # the release name a longer text starts with, as a post body
+        value = find_release_name(value) or ""
     return value or None
 
 
@@ -1668,6 +1723,15 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 search_category,
                 deadline=start_time + SEARCH_REQUEST_TIMEOUT_SECONDS,
             )
+            if not title and not self.spec["bundled"] and self.spec["language"] != "en":
+                # titles in other scripts cannot be searched; the English one can
+                title = get_localized_title(
+                    shared_state,
+                    imdb_id,
+                    "en",
+                    search_category,
+                    deadline=start_time + SEARCH_REQUEST_TIMEOUT_SECONDS,
+                )
             if (
                 title
                 and self.spec["search_append_year"]

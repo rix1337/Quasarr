@@ -98,6 +98,13 @@ class IMDbHTML:
         "ru": "ru-RU,ru;q=0.9,en;q=0.8",
         "ja": "ja-JP,ja;q=0.9,en;q=0.8",
         "hi": "hi-IN,hi;q=0.9,en;q=0.8",
+        "zh": "zh-CN,zh;q=0.9,en;q=0.8",
+        "ko": "ko-KR,ko;q=0.9,en;q=0.8",
+        "ar": "ar,en;q=0.8",
+        "tr": "tr-TR,tr;q=0.9,en;q=0.8",
+        "pl": "pl-PL,pl;q=0.9,en;q=0.8",
+        "nl": "nl-NL,nl;q=0.9,en;q=0.8",
+        "sv": "sv-SE,sv;q=0.9,en;q=0.8",
     }
 
     @staticmethod
@@ -168,6 +175,13 @@ class IMDbHTML:
         "ru": ("Russia", "Soviet Union"),
         "ja": ("Japan",),
         "hi": ("India",),
+        "zh": ("China", "Taiwan", "Hong Kong"),
+        "ko": ("South Korea",),
+        "ar": ("Egypt", "Saudi Arabia", "United Arab Emirates"),
+        "tr": ("Turkey",),
+        "pl": ("Poland",),
+        "nl": ("Netherlands", "Belgium"),
+        "sv": ("Sweden",),
     }
     _COUNTRY_CODES_BY_LANGUAGE = {
         "en": ("US", "GB", "CA", "AU"),
@@ -179,6 +193,13 @@ class IMDbHTML:
         "ru": ("RU", "SUHH"),
         "ja": ("JP",),
         "hi": ("IN",),
+        "zh": ("CN", "TW", "HK"),
+        "ko": ("KR",),
+        "ar": ("EG", "SA", "AE"),
+        "tr": ("TR",),
+        "pl": ("PL",),
+        "nl": ("NL", "BE"),
+        "sv": ("SE",),
     }
     _LANGUAGE_CODES_BY_NAME = {
         "english": "en",
@@ -190,6 +211,14 @@ class IMDbHTML:
         "russian": "ru",
         "japanese": "ja",
         "hindi": "hi",
+        "chinese": "zh",
+        "mandarin": "zh",
+        "korean": "ko",
+        "arabic": "ar",
+        "turkish": "tr",
+        "polish": "pl",
+        "dutch": "nl",
+        "swedish": "sv",
     }
 
     @staticmethod
