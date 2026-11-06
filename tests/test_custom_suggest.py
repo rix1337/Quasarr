@@ -200,6 +200,33 @@ class SearchKindTests(unittest.TestCase):
         self.assertEqual("Movie.2026.1080p.WEB.x264-GRP", report["rows"][0]["title"])
 
 
+class ResultBlockTests(unittest.TestCase):
+    def test_a_recent_posts_box_is_not_the_results(self):
+        results = "".join(
+            f"""<div class="post"><h1><a href="/r/{i}/">Other.Movie.{i}.2020.1080p.WEB.x264-GRP</a></h1></div>"""
+            for i in range(1, 4)
+        )
+        recent = "".join(
+            f"""<article><h2 class="t"><a href="/n/{i}/">New.Movie.{i}.2026.1080p.WEB.x264-GRP</a></h2></article>"""
+            for i in range(1, 6)
+        )
+        markup = (
+            f"<html><body><main>{results}</main><aside>{recent}</aside></body></html>"
+        )
+        feed = {f"https://{HOST}/n/{i}/" for i in range(1, 6)}
+        best = suggest_listing(markup, URL, HOST, min_items=1, avoid_links=feed)["best"]
+        self.assertEqual("div.post", best["item"])
+
+    def test_another_release_is_picked_once_one_was_tried(self):
+        rows = [
+            {"title": "First.Movie.2026.1080p-GRP"},
+            {"title": "Second.Film.2026.1080p-GRP"},
+        ]
+        first, _ = pick_query(rows)
+        second, _ = pick_query(rows, [first])
+        self.assertNotEqual(first, second)
+
+
 class TagLinkTests(unittest.TestCase):
     def test_a_tag_link_in_every_post_does_not_split_it(self):
         posts = "".join(
@@ -386,6 +413,9 @@ class DownloadSuggestionTests(unittest.TestCase):
         best = suggest_download(markup, f"https://{HOST}/r/", HOST)[0]
         self.assertEqual(2, best["known"])
         self.assertTrue(best["spec"]["redirects"])
+        # the image buttons name their hoster only in the forwarding address
+        self.assertEqual("hoster_name", best["spec"]["mirror"])
+        self.assertEqual("hoster-one", best["names"]["hoster_name"])
 
     def test_a_click_on_a_link_picks_its_links_and_choices_do_not_repeat(self):
         from quasarr.search.sources.helpers.custom_suggest import (

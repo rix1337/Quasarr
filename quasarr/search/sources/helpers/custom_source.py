@@ -1330,6 +1330,8 @@ def _download_anchors(soup, download):
 
 
 _HOSTER_ALIASES = {"ddl": "ddownload", "ddlto": "ddownload", "rg": "rapidgator"}
+# on-site addresses that forward to a hoster or crypter
+_REDIRECT_SEGMENT = re.compile(r"/(go|out|redirect|link)/[^/]+")
 
 
 def normalize_hoster_name(name):
@@ -1368,6 +1370,10 @@ def _mirror_name(element, url, mode):
         mirror = host.split(".")[0] if host else "unknown"
     elif mode == "hoster_name":
         text = element.get_text(" ", strip=True) if element is not None else ""
+        # an image button names its hoster only in a forwarding address, as /go/ddl.to
+        forwarded = [part for part in urlparse(url).path.split("/") if part][-1:]
+        if not text and forwarded and _REDIRECT_SEGMENT.match(urlparse(url).path):
+            text = forwarded[0]
         mirror = normalize_hoster_name(text or host)
     else:
         mirror = (element.get(mode) if element is not None else "") or ""

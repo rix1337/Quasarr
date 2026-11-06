@@ -456,10 +456,18 @@ _WIZARD_SCRIPT = r"""
   }
   function clear(target) { (typeof target === 'string' ? $(target) : target).textContent = ''; }
   // a slow site that timed out once gets a second chance before a step gives up on it
+  function timedOut(data) { return data && !data.success && /timed? ?out|did not answer in time/i.test(String(data.error || '')); }
   function api(path, body, method) {
     return request(path, body, method).then(function(data) {
-      if (data && !data.success && /timed? ?out/i.test(String(data.error || ''))) return request(path, body, method);
-      return data;
+      if (!timedOut(data)) return data;
+      return request(path, body, method).then(function(again) {
+        // searches wait as long as they will for your apps; a slower site needs slow mode
+        if (timedOut(again)) {
+          again.error = 'the site did not answer in time, twice. It may only be slow: turn on Slow Mode for its ' +
+            'timeout under Timeouts on the home page, then test again';
+        }
+        return again;
+      });
     });
   }
   function request(path, body, method) {
@@ -1747,7 +1755,8 @@ _WIZARD_SCRIPT = r"""
           });
         });
     }).then(function(results) {
-      var failed = results.filter(function(run) { return isVideo(run.category) && !searchWorked(run); });
+      // a site too slow to answer says nothing about IMDb IDs
+      var failed = results.filter(function(run) { return isVideo(run.category) && !searchWorked(run) && !timedOut(run.data); });
       if (mode() !== 'imdb' || !failed.length) return results;
       // the site does not find IMDb IDs: titles in the site's language may work
       document.querySelector('input[name="w-mode"][value="title"]').checked = true;
@@ -1757,6 +1766,7 @@ _WIZARD_SCRIPT = r"""
         if (!retried.some(searchWorked)) {
           document.querySelector('input[name="w-mode"][value="imdb"]').checked = true;
           state.videoFound = false;
+          state.videoMissing = failed.map(function(run) { return run.category.name.toLowerCase(); });
           note('search-results', 'warn', 'Neither the IMDb ID nor the ' + language + ' title found the examples for ' +
             failed.map(function(run) { return run.category.name.toLowerCase(); }).join(' and ') + '. The site may not list them: ' +
             'type a movie or show the site has into its box, press Grab IMDb ID, then test the search again.');
@@ -1813,7 +1823,7 @@ _WIZARD_SCRIPT = r"""
     }).then(function(results) {
       // a kind that found nothing tries its next example, one after the other
       var retry = results.filter(function(run) {
-        return !searchWorked(run) && ((state.examples || {})[run.category.id] || []).length > 1;
+        return !searchWorked(run) && !timedOut(run.data) && ((state.examples || {})[run.category.id] || []).length > 1;
       });
       return retry.reduce(function(chain, run) {
         var next = state.examples[run.category.id].slice(1);
@@ -1826,6 +1836,9 @@ _WIZARD_SCRIPT = r"""
         }, Promise.resolve(null)).then(function(found) {
           if (found && searchWorked(found)) {
             results = results.map(function(other) { return other === run ? found : other; });
+            var name = run.category.name.toLowerCase();
+            state.videoMissing = (state.videoMissing || []).filter(function(missing) { return missing !== name; });
+            if (!state.videoMissing.length && state.videoFound === false) state.videoFound = null;
           } else {
             searchQueries[run.category.id] = state.examples[run.category.id][0];
           }
@@ -1856,7 +1869,7 @@ _WIZARD_SCRIPT = r"""
             : 'failed');
         });
         note('search-notes', 'ok', 'Quasarr set up the search on its own. ' +
-          (state.videoFound === false ? 'No example movie or show was found, by IMDb ID or by title. '
+          (state.videoFound === false ? 'No example of ' + state.videoMissing.join(' or ') + ' was found, by IMDb ID or by title. '
             : mode() === 'imdb' ? 'Movies and shows are found by IMDb ID. '
             : state.titleFromFeed ? 'No IMDb ID was found for the examples, so movies and shows are searched by title. '
             : 'Searching by IMDb ID found nothing, so movies and shows are searched by title. ') +

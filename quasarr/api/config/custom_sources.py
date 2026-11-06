@@ -315,16 +315,25 @@ def setup_custom_source_routes(app, shared_state):
         }
         if data.get("step") == "search":
             # names never carry the IMDb ID: its title tells whether a result is the one
-            named = query
+            names = [query]
             if spec["search_mode"] == "imdb" and is_imdb_id(query):
                 from quasarr.providers.imdb_metadata import get_localized_title
 
-                named = (
-                    get_localized_title(shared_state, query, spec["language"], category)
-                    or get_localized_title(shared_state, query, "en", category)
-                    or query
-                )
-            payload["quality"] = search_quality(named, report["rows"], imdb_id=query)
+                # release names follow the site's title or the English one, not always the original
+                names = [
+                    title
+                    for title in {
+                        get_localized_title(
+                            shared_state, query, spec["language"], category
+                        ),
+                        get_localized_title(shared_state, query, "en", category),
+                    }
+                    if title
+                ] or [query]
+            payload["quality"] = max(
+                (search_quality(name, report["rows"], imdb_id=query) for name in names),
+                key=lambda quality: quality["matches"],
+            )
             # what the site was asked for, as a title looked up from an IMDb ID
             payload["query"] = query
         return payload
@@ -436,6 +445,7 @@ def setup_custom_source_routes(app, shared_state):
             url,
             hostname,
             min_items=1 if purpose == "search" else MIN_ITEMS,
+            query=str(data.get("query") or "") if purpose == "search" else None,
         )
         result.update(suggestion)
         result["listing"] = (

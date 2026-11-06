@@ -62,6 +62,10 @@ _RELEASE_TAGS = {
 # share of search results that must name the query; a page listing
 # hundreds of releases with one match did not search
 MIN_SEARCH_PRECISION = 0.02
+# share of results that must name the distinctive query search discovery sends:
+# fuzzy searches answer 1 of 10, a box of 20 recent posts on an unrelated page 1 of 20
+# ponytail: a ratio, not proof; confirming with a second query would be stronger
+DISCOVERY_PRECISION = 0.1
 COMMON_SEARCH_TEMPLATES = (
     "https://{host}/?s={q}",
     "https://{host}/search?q={q}",
@@ -650,7 +654,13 @@ def suggest_imdb(items, page_url, hostname):
 
 
 def suggest_listing(
-    markup, page_url, hostname, item_selector=None, min_items=MIN_ITEMS
+    markup,
+    page_url,
+    hostname,
+    item_selector=None,
+    min_items=MIN_ITEMS,
+    query=None,
+    avoid_links=None,
 ):
     """Item and field suggestions for one listing page, best first.
 
@@ -686,6 +696,38 @@ def suggest_listing(
             for f, weight in (("title", 2), ("link", 2), ("size", 1), ("date", 1))
             if fields[f]
         )
+        # a widget of post titles next to the releases reads as well, but its
+        # names are no release names
+        if fields["title"]:
+            samples = fields["title"][0]["samples"]
+            quality += (
+                2
+                * sum(release_likeness(t) >= 2 for t in samples)
+                / max(len(samples), 1)
+            )
+            # on a results page, the results name what was searched for; a list
+            # of recent posts beside them does not
+            words = [
+                w.lower()
+                for w in re.split(r"[\W_]+", query or "")
+                if len(w) > 2 and not re.fullmatch(r"tt\d+", w.lower())
+            ]
+            if words:
+                quality += (
+                    4
+                    * sum(all(w in t.lower() for w in words) for t in samples)
+                    / max(len(samples), 1)
+                )
+        # a "recent posts" box lists the feed again; results are other releases.
+        # Feeds may link short addresses, so the names count as well.
+        if avoid_links and fields["link"]:
+            links = fields["link"][0]["samples"]
+            names = fields["title"][0]["samples"] if fields["title"] else []
+            again = [
+                link in avoid_links or _plain(name) in avoid_links
+                for link, name in zip(links, names + [""] * len(links), strict=False)
+            ]
+            quality -= 6 * sum(again) / max(len(again), 1)
         if best is None or quality > best["quality"]:
             best = {"item": candidate["selector"], "fields": fields, "quality": quality}
 
@@ -1051,9 +1093,14 @@ def search_quality(query, rows, feed_rows=(), imdb_id=None):
         return all(w in row["title"].lower() for w in words)
 
     matches = sum(map(matches_query, rows))
-    feed_links = {r["link"] for r in feed_rows}
+    # feeds may link short addresses, so names count as well
+    feed_keys = {r["link"] for r in feed_rows} | {_plain(r["title"]) for r in feed_rows}
+
+    def in_feed(row):
+        return row["link"] in feed_keys or _plain(row["title"]) in feed_keys
+
     # a site that ignores the query answers with its front page
-    unrelated_feed = sum(r["link"] in feed_links and not matches_query(r) for r in rows)
+    unrelated_feed = sum(in_feed(r) and not matches_query(r) for r in rows)
     same_as_feed = bool(rows) and unrelated_feed >= len(rows) / 2
     return {
         "rows": len(rows),
@@ -1167,7 +1214,8 @@ def _download_candidates(soup, page_url, hostname=None):
         if container is not None:
             selectors[f"{_simple_selector(container)} a[href]"] += 1
 
-    mirror = _mirror_default(known, page_url)
+    # forwarding buttons are named by the hoster in their text or address
+    mirror = "hoster_name" if redirects else _mirror_default(known, page_url)
     results = []
     seen = set()
     for selector, _ in selectors.most_common(6):
@@ -1264,9 +1312,18 @@ def _name_words(title):
     return words
 
 
-def pick_query(rows):
-    """A release name from the feed that few other releases share, and its row."""
+def _plain(name):
+    """A release name for comparing: lower case, dots and spaces alike."""
+    return " ".join(re.split(r"[\W_]+", str(name or "").lower())).strip()
+
+
+def pick_query(rows, skip=()):
+    """A release name from the feed that few other releases share, and its row.
+
+    ``skip`` holds queries already tried, so a second call picks another release.
+    """
     names = [(row, _name_words(row["title"])[:3]) for row in rows]
+    names = [(row, words) for row, words in names if " ".join(words) not in skip]
     counts = Counter(w.lower() for _, words in names for w in set(words))
     for row, words in names:
         if words and min(counts[w.lower()] for w in words) <= 2:
@@ -1287,7 +1344,20 @@ def _search_rows(markup, url, hostname, listing, feed_rows, query):
     ]
     if search_quality(query, rows, feed_rows)["works"]:
         return rows, None
-    own = suggest_listing(markup, url, hostname, min_items=1)
+    words = [w for w in _plain(query).split() if len(w) > 2]
+    unrelated = [
+        row for row in feed_rows if not all(w in _plain(row["title"]) for w in words)
+    ]
+    own = suggest_listing(
+        markup,
+        url,
+        hostname,
+        min_items=1,
+        query=query,
+        # feed releases the query does not name: a box of recent posts, not results
+        avoid_links={row["link"] for row in unrelated}
+        | {_plain(row["title"]) for row in unrelated},
+    )
     if not own["best"]:
         return rows, None
     own_listing = listing_from_suggestion(own["best"])
@@ -1350,22 +1420,37 @@ def discover_search(shared_state, hostname, feed_url, listing, fetch=None):
 
     attempts = []
     found = None
-    for template in candidates:
-        if time.time() >= deadline:
-            break
-        url, form = _search_request(template, hostname, query)
-        page = fetch(shared_state, url, SEARCH_DISCOVERY_TIMEOUT, False, form)
-        if page.error:
-            attempts.append({"search": template, "error": page.error})
-            continue
-        rows, own_listing = _search_rows(
-            page.markup, url, hostname, listing, feed_rows, query
-        )
-        quality = search_quality(query, rows, feed_rows)
-        attempts.append({"search": template, **quality})
-        if quality["works"]:
-            found = {"search": template, "search_list": own_listing}
-            break
+    tried = []
+    # the newest release may not be searchable yet: up to three releases are tried
+    while query and len(tried) < 3 and not found and time.time() < deadline:
+        tried.append(query)
+        for template in candidates:
+            if time.time() >= deadline:
+                break
+            url, form = _search_request(template, hostname, query)
+            # a slow site sometimes answers with an unrelated page: one match among
+            # many is a box of recent posts there, so that address is asked again
+            for _ in range(2):
+                page = fetch(shared_state, url, SEARCH_DISCOVERY_TIMEOUT, False, form)
+                if page.error:
+                    attempts.append({"search": template, "error": page.error})
+                    break
+                rows, own_listing = _search_rows(
+                    page.markup, url, hostname, listing, feed_rows, query
+                )
+                quality = search_quality(query, rows, feed_rows)
+                attempts.append({"search": template, "query": query, **quality})
+                precise = quality["matches"] >= DISCOVERY_PRECISION * len(rows)
+                if not quality["works"] or precise:
+                    break
+            if page.error:
+                continue
+            if quality["works"] and precise:
+                found = {"search": template, "search_list": own_listing}
+                break
+        if not found:
+            query, query_row = pick_query(feed_rows, tried)
+    query = tried[-1] if tried else query
 
     if not found:
         return {
