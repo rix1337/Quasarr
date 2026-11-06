@@ -1164,19 +1164,23 @@ def parse_listing(markup, page_url, listing, hostname, now=None):
     items = listing["item"].select(soup)
     rows = []
     skipped = Counter()
+    # where each skip happened, so the wizard can show it in page order
+    skipped_at = []
     warnings = Counter()
     seen_links = set()
 
-    for item in items:
+    for index, item in enumerate(items):
         try:
             row, reason = _parse_item(item, page_url, listing, hostname, now)
         except Exception as e:
             row, reason = None, f"item failed: {type(e).__name__}"
         if row is None:
             skipped[reason] += 1
+            skipped_at.append((index, reason))
             continue
         if listing["dedupe"] and row["link"] in seen_links:
             skipped["duplicate link"] += 1
+            skipped_at.append((index, "duplicate link"))
             continue
         seen_links.add(row["link"])
         warnings.update(row["warnings"])
@@ -1186,6 +1190,7 @@ def parse_listing(markup, page_url, listing, hostname, now=None):
         "items": len(items),
         "rows": rows,
         "skipped": dict(skipped),
+        "skipped_at": skipped_at,
         "warnings": dict(warnings),
     }
 

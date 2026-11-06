@@ -25,6 +25,17 @@ HOSTILE = (
     + "</body></html>"
 )
 
+BY_AUTHOR = (
+    "<html><body>"
+    + "".join(
+        f'<div class="post"><h2><a href="/r/{i}">Movie.{i}.2026.1080p.WEB.x264-GRP</a></h2>'
+        f'<a class="author" href="/user/uploader/">uploader</a>'
+        f'<p class="meta">Size: {i} GB</p></div>'
+        for i in range(1, 6)
+    )
+    + "</body></html>"
+)
+
 
 class PreviewSafetyTests(unittest.TestCase):
     def test_preview_runs_only_the_picker_and_keeps_images_and_styles(self):
@@ -104,6 +115,51 @@ class PreviewSafetyTests(unittest.TestCase):
                 "https://source.invalid/",
                 "source.invalid",
             ),
+        )
+
+    def test_suggestions_skip_repeated_and_duplicate_values(self):
+        from quasarr.search.sources.helpers.custom_suggest import suggest_listing
+
+        fields = suggest_listing(
+            BY_AUTHOR, "https://source.invalid/", "source.invalid"
+        )["best"]["fields"]
+        links = [c["samples"][0] for c in fields["link"]]
+        # the author page repeats in every release, so it is no release link
+        self.assertNotIn("https://source.invalid/user/uploader/", links)
+        self.assertIn("https://source.invalid/r/1", links)
+        # one choice per distinct set of values
+        values = [tuple(c["samples"]) for c in fields["title"]]
+        self.assertEqual(len(values), len(set(values)))
+
+    def test_a_missed_click_takes_the_nearest_matching_element(self):
+        soup = annotate_page(BY_AUTHOR)
+        size_line = soup.select("div.post p.meta")[1]
+        picked = pick_field(
+            soup,
+            size_line["data-q"],
+            "div.post",
+            "link",
+            "https://source.invalid/",
+            "source.invalid",
+        )
+        self.assertEqual("https://source.invalid/r/2", picked["value"])
+        self.assertEqual(1.0, picked["result"]["coverage"])
+
+    def test_menu_links_suggest_a_page_per_kind(self):
+        from bs4 import BeautifulSoup
+
+        from quasarr.search.sources.helpers.custom_suggest import suggest_feeds
+
+        menu = BeautifulSoup(
+            '<nav><a href="/">Home</a><a href="/filme/">Filme</a>'
+            '<a href="/serien/">Serien</a><a href="/ebooks/">E-Books</a>'
+            '<a href="/all/">Music</a><a href="/all/">Movies HD</a></nav>'
+            '<a href="/r/1">Some.Film.2026.1080p.WEB.x264-GRP</a>',
+            "html.parser",
+        )
+        self.assertEqual(
+            {2000: "/filme/", 5000: "/serien/", 7000: "/ebooks/"},
+            suggest_feeds(menu, "https://source.invalid/", "source.invalid"),
         )
 
     def test_embedded_json_cannot_close_its_script(self):

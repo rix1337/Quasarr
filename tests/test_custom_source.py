@@ -185,6 +185,26 @@ class ListingTests(unittest.TestCase):
         self.assertEqual(1, report["skipped"]["duplicate link"])
         self.assertIsNone(describe_report(report))
 
+        from quasarr.search.sources.helpers.custom_suggest import report_table
+
+        table = report_table(
+            markup, f"https://{HOST}/movies/", self.listing, HOST, report
+        )
+        # page order, with the reason and what a skipped item reads
+        self.assertEqual(
+            [
+                None,
+                "title not found",
+                "link is not an http(s) link on this site",
+                "link is not an http(s) link on this site",
+                None,
+                "duplicate link",
+            ],
+            [row.get("skipped") for row in table],
+        )
+        self.assertEqual("Movie.Two.2026.1080p.WEB.x264-GRP", table[2]["title"])
+        self.assertEqual("Movie.Four.2026.1080p.WEB.x264-GRP", table[4]["title"])
+
     def test_label_reads_the_value_after_it(self):
         row = self.parse(page(post("Movie.2026.1080p.WEB.x264-GRP", "/m/")))["rows"][0]
         self.assertEqual(1433, row["size_mb"])

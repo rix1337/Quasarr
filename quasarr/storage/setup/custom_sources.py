@@ -15,6 +15,7 @@ import re
 from bottle import abort
 
 from quasarr.providers.html_templates import json_for_script, render_form
+from quasarr.search.sources.helpers.custom_suggest import FIELD_COLORS
 from quasarr.storage.custom_sources import load_definitions
 
 _KEY_REGEX = re.compile(r"^[c-z][1-9]$")
@@ -53,7 +54,7 @@ def custom_source_wizard_page(key=None, onboarding=False):
         + "</script>"
         + _WIZARD_HTML
     )
-    return render_form(title, body, _WIZARD_SCRIPT + _WIZARD_STYLE)
+    return render_form(title, body, _WIZARD_SCRIPT + _WIZARD_STYLE + _PART_STYLE)
 
 
 def setup_custom_source_pages(app, onboarding=False):
@@ -115,6 +116,10 @@ _WIZARD_HTML = """
     <p class="wizard-lead">Choose what the site offers and where its newest releases are listed.</p>
     <div id="feed-categories" class="category-grid"></div>
     <div id="feed-rows"></div>
+    <div class="feed-row inline">
+      <label for="feed-page">Set up on</label>
+      <select id="feed-page"></select>
+    </div>
     <div class="wizard-notes" id="feed-notes" aria-live="polite"></div>
     <div id="feed-picker"></div>
     <div class="results" id="feed-results" aria-live="polite"></div>
@@ -272,11 +277,9 @@ _WIZARD_STYLE = """
   @media (max-width: 900px) { .picker { grid-template-columns: minmax(0, 1fr); } }
   @media (max-width: 600px) {
     .field-inputs { flex-wrap: wrap; }
-    .field-inputs input:first-child { flex: 1 1 100%; }
-    .field-inputs select, .field-inputs .label-input { flex: 1 1 auto; }
     .wizard .inline { flex-wrap: wrap; }
     .wizard .inline input, .wizard .inline select { flex: 1 1 100%; }
-    .feed-row.inline > span { flex: 1 1 100%; }
+    .feed-row.inline > span, .feed-row.inline > label { flex: 1 1 100%; }
     /* the step bar keeps its numbers; only the current step shows its name */
     .wizard-steps { flex-wrap: nowrap; }
     .wizard-steps li { flex: 0 0 auto; }
@@ -289,16 +292,20 @@ _WIZARD_STYLE = """
   }
   .wizard .results { overflow-x: auto; }
   .field-row { border: 1px solid var(--border-color); border-radius: .4rem; padding: .5rem .6rem; margin-bottom: .5rem; }
-  .field-row.active { border-color: #f59f00; box-shadow: 0 0 0 2px rgba(245,159,0,.25); }
+  .field-row.active { border-color: var(--part); box-shadow: 0 0 0 2px var(--part); }
+  .field-row .field-name::before { content: ""; display: inline-block; width: .7rem; height: .7rem;
+    border-radius: 50%; background: var(--part); margin-right: .4rem; vertical-align: baseline; }
+  .field-row .suggest { border-left: 4px solid var(--part); }
+  tr.skipped td { color: var(--text-muted); font-style: italic; }
+  tr.skipped td:last-child { color: var(--error-color); font-style: normal; }
   .field-name { font-weight: 600; }
   .field-inputs { display: flex; gap: .35rem; margin-top: .35rem; }
-  .field-inputs input { flex: 1; min-width: 0; }
-  .field-inputs .label-input { flex: 0 0 6.5rem; }
   .field-inputs select { flex: 0 0 8.5rem; width: auto; }
   .field-inputs .pick { flex: 0 0 auto; }
   .field-count { display: block; font-size: .8rem; color: var(--text-muted); margin-top: .25rem; }
   .field-count.good { color: var(--success-color); }
   .field-count.bad { color: var(--error-color); }
+  .field-inputs .suggest { flex: 1 1 auto; min-width: 0; text-overflow: ellipsis; }
   .field-chips { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .35rem; }
   .chip { border: 1px solid var(--border-color); background: var(--code-bg); color: var(--fg-color);
     border-radius: 1rem; padding: .15rem .6rem; font-size: .8rem; cursor: pointer; max-width: 100%;
@@ -308,6 +315,13 @@ _WIZARD_STYLE = """
   .preview-wrap { border: 1px solid var(--border-color); border-radius: .4rem; overflow: hidden; }
   .preview-bar { padding: .35rem .6rem; font-size: .8rem; background: var(--code-bg); color: var(--text-muted); }
   .preview-bar.picking { background: #f59f00; color: #000; }
+  .preview-bar { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+  .release-navs { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; }
+  .release-navs[hidden] { display: none; }
+  .release-nav { padding: .05rem .55rem; font-size: 1rem; line-height: 1.2; }
+  .phase-tabs { display: flex; gap: .35rem; margin: .5rem 0 .75rem; }
+  .phase-tab { background: var(--code-bg); color: var(--fg-color); border: 1px solid var(--border-color); }
+  .phase-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
   .preview-wrap iframe { display: block; width: 100%; height: 36rem; border: 0; background: #fff; }
   .results table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: .5rem; }
   .results th, .results td { text-align: left; padding: .3rem .4rem; border-bottom: 1px solid var(--divider-color);
@@ -318,10 +332,22 @@ _WIZARD_STYLE = """
   .summary dd { margin: 0; word-break: break-word; }
   details summary { cursor: pointer; margin: .8rem 0 .2rem; }
   .chip-button { margin: .25rem .35rem 0 0; padding: .25rem .7rem; font-size: .85rem; text-decoration: none; display: inline-block; }
-  .feed-row.inline > span { flex: 0 0 7rem; align-self: center; }
+  .feed-row.inline > span, .feed-row.inline > label { flex: 0 0 7rem; align-self: center; margin: 0; }
   .share-module { max-height: 22rem; overflow: auto; background: var(--code-bg); padding: .6rem; font-size: .8rem; text-align: left; }
 </style>
 """
+
+# the colors the preview marks each part with, also on its row and its result column
+_PART_STYLE = (
+    "<style>"
+    + "".join(
+        f'.field-row[data-field="{name}"]{{--part:{color}}}'
+        f".col-{name}{{box-shadow:inset 0 -3px 0 {color}}}"
+        f"td.col-{name}{{box-shadow:inset 3px 0 0 {color}40}}"
+        for name, color in FIELD_COLORS.items()
+    )
+    + "</style>"
+)
 
 _WIZARD_SCRIPT = r"""
 <script>
@@ -340,10 +366,10 @@ _WIZARD_SCRIPT = r"""
   }
   var draft = config.definition || {};
   var FIELDS = [
-    {name: 'title', label: 'Release name', help: 'The full release name, as in Movie.2026.1080p.WEB.x264-GROUP.', attrs: ['text', 'title']},
-    {name: 'link', label: 'Release link', help: 'The link that opens the release page.', attrs: ['href']},
-    {name: 'size', label: 'Size', help: 'Text such as 1,4 GB. Enter a label like "Size" when the value follows one.', attrs: ['text'], labelled: true},
-    {name: 'date', label: 'Date', help: 'When the release was posted.', attrs: ['text', 'datetime'], labelled: true}
+    {name: 'title', label: 'Release name', attrs: ['text', 'title']},
+    {name: 'link', label: 'Release link', attrs: ['href']},
+    {name: 'size', label: 'Size', attrs: ['text'], labelled: true},
+    {name: 'date', label: 'Date', attrs: ['text', 'datetime'], labelled: true}
   ];
   var ATTR_NAMES = {text: 'text', title: 'title text', href: 'link address', datetime: 'date attribute'};
   var ORDER = ['site', 'feed', 'search', 'download', 'save'];
@@ -451,45 +477,61 @@ _WIZARD_SCRIPT = r"""
   // --- picker: preview + click-to-pick + field rows -----------------------------
   var pickers = [];
   function createPicker(mountId, notesId, title, hint) {
-    var picker = {page: null, picking: null, marked: {items: [], fields: {}}, activeField: 'title', onEdit: null};
+    // two steps: first the blocks that hold one release each, then the details inside one
+    var picker = {page: null, picking: null, marked: {items: [], fields: {}, values: {}, options: {}},
+      activeField: 'title', onEdit: null, phase: 'blocks', index: 0};
     var mount = $(mountId);
-    var chips = el('div', {className: 'field-chips'});
-    var itemInput = el('input', {spellcheck: 'false', placeholder: 'CSS selector', 'aria-label': 'Release block selector'});
+    // users choose from what the page offers or click it; selectors stay out of sight
+    var itemChoice = el('select', {className: 'suggest', 'aria-label': 'Release block'},
+      [el('option', {value: 'own', text: 'Not chosen yet: click Pick'})]);
+    var itemInput = el('input', {type: 'hidden'});
     var itemPick = el('button', {type: 'button', className: 'btn-secondary pick', text: 'Pick'});
     var itemCount = el('span', {className: 'field-count'});
     var itemRow = el('div', {className: 'field-row', 'data-field': 'item'}, [
       el('span', {className: 'field-name', text: 'Release block'}),
-      chips,
-      el('div', {className: 'field-inputs'}, [itemInput, itemPick]),
-      el('span', {className: 'hint', text: 'The part of the page that holds one release.'}),
+      el('div', {className: 'field-inputs'}, [itemChoice, itemInput, itemPick]),
       itemCount
     ]);
+    var toDetails = el('button', {type: 'button', className: 'btn-primary', text: 'Continue to the details'});
+    var blocksBox = el('div', {}, [
+      el('p', {className: 'hint', text: 'A release block is the part of the page that holds exactly one release: ' +
+        'its name, its link and usually its size and date. Quasarr reads every block as one release, so choose ' +
+        'the one that frames each release on its own, not the whole list and not just the name. Click Pick and ' +
+        'then any release if no suggestion fits. Ads or notices that look alike are fine: Quasarr skips blocks ' +
+        'without a release.'}),
+      itemRow, toDetails
+    ]);
     var rows = {};
-    var fieldBox = el('div');
+    var fieldBox = el('div', {hidden: 'hidden'}, [
+      el('p', {className: 'hint', text: 'Now show Quasarr where each detail sits inside a release. The preview shows ' +
+        'one release at a time, starting in the middle, because the first and last blocks are often ads or ' +
+        'notices. Use the arrows to check a few others: a choice should read the right value in all of them. ' +
+        'Name and link are required; size and date help your apps choose between releases.'})
+    ]);
     FIELDS.forEach(function(field) {
-      var selector = el('input', {spellcheck: 'false', placeholder: 'inside the release block', 'aria-label': field.label + ' selector'});
-      var label = field.labelled ? el('input', {className: 'label-input', spellcheck: 'false', placeholder: 'label', 'aria-label': field.label + ' label'}) : null;
-      var attr = el('select', {'aria-label': field.label + ' reads'});
+      var selector = el('input', {type: 'hidden'});
+      var label = field.labelled ? el('input', {type: 'hidden'}) : null;
+      var attr = el('select');
       field.attrs.forEach(function(name) { attr.appendChild(el('option', {value: name, text: ATTR_NAMES[name]})); });
       var pick = el('button', {type: 'button', className: 'btn-secondary pick', text: 'Pick'});
-      var inputs = [selector];
+      var choice = el('select', {className: 'suggest', 'aria-label': field.label},
+        [el('option', {value: 'own', text: 'Not chosen yet: click Pick'})]);
+      var inputs = [choice, selector];
       if (label) inputs.push(label);
-      if (field.attrs.length > 1) inputs.push(attr);
       inputs.push(pick);
       var row = el('div', {className: 'field-row', 'data-field': field.name}, [
         el('span', {className: 'field-name', text: field.label}),
-        el('div', {className: 'field-chips'}),
         el('div', {className: 'field-inputs'}, inputs),
-        el('span', {className: 'hint', text: field.help}),
         el('span', {className: 'field-count'})
       ]);
       rows[field.name] = {row: row, selector: selector, label: label, attr: attr, pick: pick, field: field,
-        chips: row.querySelector('.field-chips'), count: row.querySelector('.field-count')};
-      [selector, label, attr].forEach(function(input) {
-        if (input) input.addEventListener('input', function() { edited(); });
-      });
+        choice: choice, suggestions: [], count: row.querySelector('.field-count')};
       row.addEventListener('focusin', function() { focusField(field.name); });
       pick.onclick = function() { startPicking(field.name, pick); };
+      choice.onchange = function() {
+        var candidate = rows[field.name].suggestions[Number(choice.value)];
+        if (candidate) { writeSpec(field.name, candidate.spec); edited(); }
+      };
       fieldBox.appendChild(row);
     });
     var cleanup = el('select', {'aria-label': 'Release names'});
@@ -502,23 +544,65 @@ _WIZARD_SCRIPT = r"""
       el('label', {className: 'field-name', text: 'Release names'}), cleanup,
       el('span', {className: 'hint', text: 'Scene style also removes umlauts and brackets, which can hurt music and book names.'})
     ]));
-    itemInput.addEventListener('input', function() { edited(); });
     itemPick.onclick = function() { startPicking('item', itemPick); };
-    var bar = el('div', {className: 'preview-bar', text: 'Preview of the loaded page'});
+    var tabs = {
+      blocks: el('button', {type: 'button', className: 'phase-tab', text: '1. Release blocks'}),
+      details: el('button', {type: 'button', className: 'phase-tab', text: '2. Details'})
+    };
+    tabs.blocks.onclick = function() { setPhase('blocks'); };
+    tabs.details.onclick = function() { setPhase('details'); };
+    toDetails.onclick = function() { setPhase('details'); };
+    var barText = el('span', {text: 'Preview of the loaded page'});
+    var previous = el('button', {type: 'button', className: 'release-nav', text: '‹', 'aria-label': 'Previous release'});
+    var next = el('button', {type: 'button', className: 'release-nav', text: '›', 'aria-label': 'Next release'});
+    var position = el('span');
+    var nav = el('span', {className: 'release-navs', hidden: 'hidden'}, [previous, position, next]);
+    previous.onclick = function() { showRelease(picker.index - 1); };
+    next.onclick = function() { showRelease(picker.index + 1); };
+    var bar = el('div', {className: 'preview-bar'}, [barText, nav]);
     // scripts without same-origin: the picker script in the preview cannot reach this page
     var frame = el('iframe', {sandbox: 'allow-scripts', referrerpolicy: 'no-referrer', title: title + ' preview'});
     var box = el('div', {className: 'picker-box', hidden: 'hidden'}, [
       el('h4', {text: title}),
       el('p', {className: 'hint', text: hint}),
+      el('div', {className: 'phase-tabs'}, [tabs.blocks, tabs.details]),
       el('div', {className: 'picker'}, [
-        el('div', {className: 'picker-fields'}, [itemRow, fieldBox]),
+        el('div', {className: 'picker-fields'}, [blocksBox, fieldBox]),
         el('div', {className: 'preview-wrap'}, [bar, frame])
       ])
     ]);
     mount.appendChild(box);
 
+    function setPhase(phase) {
+      if (phase === 'details' && !(picker.marked.items || []).length) {
+        clear(notesId);
+        note(notesId, 'warn', 'Choose the release block first.');
+        return;
+      }
+      picker.stopPicking();
+      picker.phase = phase;
+      blocksBox.hidden = phase !== 'blocks';
+      fieldBox.hidden = phase !== 'details';
+      Object.keys(tabs).forEach(function(key) { tabs[key].classList.toggle('active', key === phase); });
+      showRelease(picker.index);
+    }
+    // the release the details step shows; it starts in the middle of the page
+    function showRelease(index) {
+      var count = (picker.marked.items || []).length;
+      picker.index = count ? Math.max(0, Math.min(count - 1, index)) : 0;
+      var details = picker.phase === 'details' && count > 0;
+      nav.hidden = !details;
+      position.textContent = 'Release ' + (picker.index + 1) + ' of ' + count;
+      previous.disabled = picker.index === 0;
+      next.disabled = picker.index >= count - 1;
+      if (!picker.picking) barText.textContent = details ? 'One release of the loaded page' : 'Preview of the loaded page';
+      syncChoices();
+      paint();
+    }
+
     var timer = null;
     function edited() {
+      syncChoices();
       if (picker.onEdit) picker.onEdit();
       clearTimeout(timer);
       timer = setTimeout(refresh, 350);
@@ -560,29 +644,68 @@ _WIZARD_SCRIPT = r"""
       cleanup.value = ['spaces', 'scene'].indexOf(listing.title_cleanup) !== -1 ? listing.title_cleanup : 'trim';
       FIELDS.forEach(function(field) {
         writeSpec(field.name, listing[field.name]);
-        var target = rows[field.name].chips;
-        target.textContent = '';
-        ((suggestions || {})[field.name] || []).forEach(function(candidate) {
-          if (!candidate.spec) return;
-          var sample = (candidate.samples || [])[0] || '';
-          var chip = el('button', {type: 'button', className: 'chip',
-            title: (candidate.spec.selector || 'release block') + (candidate.spec.label ? ' after "' + candidate.spec.label + '"' : '') + (sample ? ': ' + sample : ''),
-            text: Math.round(candidate.coverage * 100) + '% · ' + (sample || candidate.spec.selector || 'release block')});
-          chip.onclick = function() { writeSpec(field.name, candidate.spec); edited(); };
-          target.appendChild(chip);
-        });
+        rows[field.name].suggestions = ((suggestions || {})[field.name] || []).filter(function(candidate) { return candidate.spec; });
       });
+      picker.index = -1;
       refresh();
     };
     picker.setItems = function(items) {
-      chips.textContent = '';
-      (items || []).forEach(function(candidate) {
-        var chip = el('button', {type: 'button', className: 'chip', title: 'Use ' + candidate.selector,
-          text: candidate.selector});
-        chip.onclick = function() { itemInput.value = candidate.selector; edited(); };
-        chips.appendChild(chip);
-      });
+      picker.items = items || [];
+      syncChoices();
     };
+    itemChoice.onchange = function() {
+      var candidate = picker.items[Number(itemChoice.value)];
+      if (candidate) { itemInput.value = candidate.selector; picker.index = -1; edited(); }
+    };
+    function shown(name, value) {
+      if (value === undefined || value === null || value === '') return '(nothing in this release)';
+      if (name === 'size') return sizeText(Number(value));
+      return name === 'date' ? dateText(value) : String(value);
+    }
+    function share(values) {
+      var count = (values || []).length;
+      var read = (values || []).filter(function(value) { return value !== null; }).length;
+      return count ? Math.round(read / count * 100) + '% of releases' : '';
+    }
+    function sameSpec(a, b) {
+      var keys = ['selector', 'label', 'attr'];
+      return keys.every(function(key) {
+        var x = (a || {})[key], y = (b || {})[key];
+        if (Array.isArray(x)) x = x[0];
+        if (Array.isArray(y)) y = y[0];
+        if (key === 'attr') { x = x || 'text'; y = y || 'text'; }
+        return (x || '') === (y || '');
+      });
+    }
+    // one option per suggestion, plus the user's own pick when it is none of them
+    function fill(select, labels, matched, own) {
+      select.textContent = '';
+      labels.forEach(function(text, index) { select.appendChild(el('option', {value: String(index), text: text})); });
+      if (matched === -1) select.appendChild(el('option', {value: 'own', text: own}));
+      select.value = matched === -1 ? 'own' : String(matched);
+    }
+    // each option shows what it reads in the release on display
+    function syncChoices() {
+      var itemIndex = (picker.items || []).map(function(c) { return c.selector; }).indexOf(itemInput.value.trim());
+      var found = (picker.marked.items || []).length;
+      fill(itemChoice, (picker.items || []).map(function(candidate) {
+        return candidate.selector + ' · ' + (candidate.count + candidate.mixed + candidate.empty) + ' blocks';
+      }), itemIndex, itemInput.value.trim() ? 'Your pick · ' + found + ' blocks' : 'Not chosen yet: click Pick');
+      FIELDS.forEach(function(field) {
+        var r = rows[field.name];
+        var spec = readSpec(field.name);
+        var options = (picker.marked.options || {})[field.name] || [];
+        var index = -1;
+        r.suggestions.forEach(function(candidate, i) { if (index === -1 && sameSpec(candidate.spec, spec)) index = i; });
+        var values = (picker.marked.values || {})[field.name];
+        var set = Object.keys(spec).some(function(key) { return key !== 'attr'; });
+        fill(r.choice, r.suggestions.map(function(candidate, i) {
+          var read = options[i] || [];
+          return shown(field.name, read[picker.index]) + ' · ' + share(read);
+        }), index, !set ? 'Not chosen yet: click Pick'
+          : 'Your pick · ' + shown(field.name, (values || [])[picker.index]) + ' · ' + share(values));
+      });
+    }
     picker.load = function(page) {
       picker.page = page;
       box.hidden = false;
@@ -590,6 +713,7 @@ _WIZARD_SCRIPT = r"""
       picker.ready = false;
       picker.scrolled = false;
       frame.srcdoc = page.preview || '<!doctype html><p>No preview</p>';
+      setPhase('blocks');
     };
     picker.hide = function() { box.hidden = true; picker.page = null; };
     picker.loaded = function() { return !!(picker.page && picker.page.token); };
@@ -601,9 +725,13 @@ _WIZARD_SCRIPT = r"""
     function refresh() {
       if (!picker.loaded()) return Promise.resolve(null);
       var listing = picker.listing();
-      var fields = {};
-      FIELDS.forEach(function(field) { fields[field.name] = listing[field.name] || {}; });
-      return api('/api/custom-sources/highlight', {token: picker.page.token, item_selector: listing.item, fields: fields})
+      var fields = {}, options = {};
+      FIELDS.forEach(function(field) {
+        fields[field.name] = listing[field.name] || {};
+        options[field.name] = rows[field.name].suggestions.map(function(candidate) { return candidate.spec; });
+      });
+      return api('/api/custom-sources/highlight', {token: picker.page.token, item_selector: listing.item,
+        fields: fields, options: options})
         .then(function(data) {
           if (!data.success) {
             setCount(itemCount, data.error, 'bad');
@@ -611,17 +739,19 @@ _WIZARD_SCRIPT = r"""
           }
           picker.marked = data;
           var items = data.items.length;
-          setCount(itemCount, items ? items + ' releases on this page' : 'Matches nothing on this page', items ? 'good' : 'bad');
+          // the dropdowns tell what is read; only a problem needs a line of its own
+          setCount(itemCount, !items ? 'Matches nothing on this page'
+            : (items < 2 ? 'Matches only one block; a release block repeats for every release' : ''), 'bad');
+          toDetails.disabled = !items;
           FIELDS.forEach(function(field) {
             var found = data.fields[field.name];
-            if (found && found.error) { setCount(rows[field.name].count, found.error, 'bad'); return; }
-            var count = (found || []).length;
+            var r = rows[field.name];
+            if (found && found.error) { setCount(r.count, found.error, 'bad'); return; }
             // an optional field left empty is fine; one that reads nothing is not
             var unset = !Object.keys(listing[field.name] || {}).length;
-            setCount(rows[field.name].count, !items ? '' : (unset ? 'Not used' : 'Read in ' + count + ' of ' + items + ' releases'),
-              !items || unset ? '' : (count === items ? 'good' : (count ? '' : 'bad')));
+            setCount(r.count, items && !unset && !(found || []).length ? 'Reads nothing in these releases' : '', 'bad');
           });
-          paint();
+          showRelease(picker.index < 0 || picker.index >= items ? Math.floor(items / 2) : picker.index);
           return data;
         });
     }
@@ -631,14 +761,18 @@ _WIZARD_SCRIPT = r"""
     }
     function paint() {
       var items = picker.marked.items || [];
-      tell({type: 'mark', items: items, field: (picker.marked.fields || {})[picker.activeField] || [],
-        scroll: !picker.scrolled});
+      var fields = {};
+      FIELDS.forEach(function(field) {
+        var found = (picker.marked.fields || {})[field.name];
+        if (Array.isArray(found)) fields[field.name] = found;
+      });
+      var solo = picker.phase === 'details' && items.length ? items[picker.index] : null;
+      tell({type: 'mark', items: items, fields: fields, shown: solo, scroll: !picker.scrolled});
       if (picker.ready && items.length) picker.scrolled = true;
     }
     function focusField(name) {
       picker.activeField = name;
       Object.keys(rows).forEach(function(key) { rows[key].row.classList.toggle('active', key === name); });
-      paint();
     }
     window.addEventListener('message', function(event) {
       if (event.source !== frame.contentWindow) return;
@@ -656,20 +790,15 @@ _WIZARD_SCRIPT = r"""
     function startPicking(name, button) {
       if (picker.picking === name) { picker.stopPicking(); return; }
       picker.stopPicking();
-      if (name !== 'item' && !itemInput.value.trim()) {
-        clear(notesId);
-        note(notesId, 'warn', 'Choose the release block first.');
-        return;
-      }
       picker.picking = name;
       picker.pickButton = button;
       tell({type: 'picking', on: true});
       button.classList.add('picking');
       button.textContent = 'Cancel';
       bar.classList.add('picking');
-      bar.textContent = name === 'item'
+      barText.textContent = name === 'item'
         ? 'Click anywhere inside one release. Press Esc to cancel.'
-        : 'Click the ' + rows[name].field.label.toLowerCase() + ' of any release. Press Esc to cancel.';
+        : 'Click the ' + rows[name].field.label.toLowerCase() + ' of this release. Press Esc to cancel.';
       if (name !== 'item') focusField(name);
       // on a narrow screen the preview sits below the fields
       if (window.matchMedia('(max-width: 900px)').matches) bar.scrollIntoView({behavior: 'smooth', block: 'start'});
@@ -681,7 +810,7 @@ _WIZARD_SCRIPT = r"""
       picker.pickButton.classList.remove('picking');
       picker.pickButton.textContent = 'Pick';
       bar.classList.remove('picking');
-      bar.textContent = 'Preview of the loaded page';
+      barText.textContent = picker.phase === 'details' ? 'One release of the loaded page' : 'Preview of the loaded page';
     };
     document.addEventListener('keydown', function(event) { if (event.key === 'Escape') picker.stopPicking(); });
     function choose(q) {
@@ -690,7 +819,7 @@ _WIZARD_SCRIPT = r"""
         field: name, item_selector: itemInput.value.trim()}).then(function(data) {
         if (!data.success) { clear(notesId); note(notesId, 'warn', data.error); return; }
         picker.stopPicking();
-        if (name === 'item') itemInput.value = data.selector;
+        if (name === 'item') { itemInput.value = data.selector; picker.index = -1; }
         else writeSpec(name, data.spec);
         edited();
         if (window.matchMedia('(max-width: 900px)').matches) {
@@ -776,6 +905,7 @@ _WIZARD_SCRIPT = r"""
           note('site-notes', 'warn', 'The site showed a browser check. FlareSolverr is now turned on for it.');
         }
         if (!data.success) { note('site-notes', 'error', 'Could not open the site: ' + data.error + '.'); return; }
+        state.feedSuggest = data.feeds || {};
         show('feed');
         if (!document.querySelector('#feed-rows .feed-row')) loadFeedDefaults();
       });
@@ -783,7 +913,7 @@ _WIZARD_SCRIPT = r"""
 
   // --- step 2: newest releases ----------------------------------------------------
   var feedPicker = createPicker('feed-picker', 'feed-notes', 'Release list',
-    'Blue frames are releases, yellow marks the field you are working on. Choose a suggestion, or click Pick and then the matching part of the page.');
+    'The preview marks each part in the color of the dot next to it.');
   feedPicker.onEdit = function() { setFeedTested(false); };
   var feedUrls = {};
   (draft.feeds || []).forEach(function(feed) { feedUrls[feed.category] = path(feed.url); });
@@ -801,11 +931,19 @@ _WIZARD_SCRIPT = r"""
     $('feed-next').disabled = !ok;
     $('feed-next').title = ok ? '' : 'Test the newest releases first';
   }
+  // a new site starts with the kinds its menu links to, each on its own page
   function loadFeedDefaults() {
-    if (!selectedCategories().length) { $('cat-2000').checked = true; $('cat-5000').checked = true; }
+    if (!selectedCategories().length) {
+      var suggested = Object.keys(state.feedSuggest || {});
+      suggested.forEach(function(id) {
+        $('cat-' + id).checked = true;
+        feedUrls[id] = state.feedSuggest[id];
+      });
+      if (!suggested.length) { $('cat-2000').checked = true; $('cat-5000').checked = true; }
+    }
     renderFeedRows();
-    var first = document.querySelector('#feed-rows .load-feed');
-    if (first) first.click();
+    state.autoTest = true;
+    loadFeedPage('/');
   }
   function renderFeedRows() {
     var wrap = $('feed-rows');
@@ -814,21 +952,37 @@ _WIZARD_SCRIPT = r"""
       var input = el('input', {spellcheck: 'false', placeholder: '/', 'aria-label': category.name + ' page'});
       input.value = feedUrls[category.id] || '/';
       feedUrls[category.id] = input.value;
-      input.oninput = function() { feedUrls[category.id] = input.value.trim() || '/'; setFeedTested(false); };
-      var load = el('button', {type: 'button', className: 'btn-secondary load-feed', text: 'Load page'});
-      load.onclick = function() { loadFeedPage(ensureSlash(input.value), load); };
-      wrap.appendChild(el('div', {className: 'feed-row inline'}, [el('span', {text: category.name}), input, load]));
+      input.oninput = function() { feedUrls[category.id] = input.value.trim() || '/'; setFeedTested(false); renderPageChoice(); };
+      wrap.appendChild(el('div', {className: 'feed-row inline'}, [el('span', {text: category.name}), input]));
     });
     if (selectedCategories().length) {
-      wrap.appendChild(el('p', {className: 'hint', text: 'The page listing the newest releases of each kind. One page can serve several kinds.'}));
+      wrap.appendChild(el('p', {className: 'hint', text: 'The page listing the newest releases of each kind. ' +
+        'Quasarr reads each kind from its own page, so a release lands in the right app. Use the main page only for kinds the site has no page for.'}));
     }
+    renderPageChoice();
   }
-  function loadFeedPage(url, button) {
+  // the release list is set up on one page and must read all of them alike
+  function renderPageChoice() {
+    var select = $('feed-page');
+    var current = select.value || '/';
+    select.textContent = '';
+    var pages = [['/', 'Main page']];
+    selectedCategories().forEach(function(category) {
+      var url = ensureSlash(feedUrls[category.id] || '/');
+      var known = pages.filter(function(page) { return page[0] === url; })[0];
+      if (known) known[1] += ', ' + category.name;
+      else pages.push([url, category.name + ' (' + url + ')']);
+    });
+    pages.forEach(function(page) { select.appendChild(el('option', {value: page[0], text: page[1]})); });
+    select.value = pages.some(function(page) { return page[0] === current; }) ? current : '/';
+  }
+  $('feed-page').onchange = function() { loadFeedPage($('feed-page').value); };
+  function loadFeedPage(url) {
     clear('feed-notes');
-    var done = busy(button, 'Loading…');
+    $('feed-page').disabled = true;
     api('/api/custom-sources/page', {hostname: host(), url: url, flaresolverr: $('w-flaresolverr').checked})
       .then(function(data) {
-        done();
+        $('feed-page').disabled = false;
         if (!data.success) { note('feed-notes', 'error', 'Could not load the page: ' + data.error + '.'); return; }
         state.feedIsRss = data.is_feed;
         if (data.is_feed) {
@@ -838,11 +992,16 @@ _WIZARD_SCRIPT = r"""
           return;
         }
         feedPicker.load(data);
-        var listing = (config.definition && !state.feedLoadedOnce && draft.list) || data.listing || {};
+        // switching pages keeps what is set up; it has to read the other pages too
+        var listing = state.feedLoadedOnce ? feedPicker.listing()
+          : (config.definition && draft.list) || data.listing || {};
         state.feedLoadedOnce = true;
         feedPicker.setListing(listing, data.best ? data.best.fields : {});
         if (!data.best) {
           note('feed-notes', 'warn', 'Quasarr found no release list on this page. Check the address, or click Pick next to Release block and then one release.');
+        } else if (state.autoTest) {
+          state.autoTest = false;
+          $('feed-test').click();
         }
       });
   }
@@ -850,14 +1009,22 @@ _WIZARD_SCRIPT = r"""
 
   // --- results tables -------------------------------------------------------------
   function resultsTable(target, rows, columns) {
+    // a column only some tables need stays out until a row fills it
+    columns = columns.filter(function(column) {
+      return !column.optional || rows.some(function(row) { return column.value(row); });
+    });
     var table = el('table');
     var head = el('tr');
-    columns.forEach(function(column) { head.appendChild(el('th', {scope: 'col', text: column.label})); });
+    columns.forEach(function(column) {
+      head.appendChild(el('th', {scope: 'col', text: column.label, className: column.field ? 'col-' + column.field : ''}));
+    });
     table.appendChild(el('thead', {}, [head]));
     var body = el('tbody');
     rows.forEach(function(row) {
-      var tr = el('tr');
-      columns.forEach(function(column) { tr.appendChild(el('td', {text: column.value(row)})); });
+      var tr = el('tr', {className: row.skipped ? 'skipped' : ''});
+      columns.forEach(function(column) {
+        tr.appendChild(el('td', {text: column.value(row), className: column.field ? 'col-' + column.field : ''}));
+      });
       body.appendChild(tr);
     });
     table.appendChild(body);
@@ -865,11 +1032,13 @@ _WIZARD_SCRIPT = r"""
   }
   function sizeText(mb) { return mb ? (mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb + ' MB') : 'not shown'; }
   function dateText(value) { var d = new Date(value); return isNaN(d) ? value : d.toLocaleString(); }
+  // a skipped item shows the text its fields read, and why it was left out
   var RELEASE_COLUMNS = [
-    {label: 'Name', value: function(r) { return r.title; }},
-    {label: 'Size', value: function(r) { return sizeText(r.size_mb); }},
-    {label: 'Date', value: function(r) { return dateText(r.date); }},
-    {label: 'IMDb', value: function(r) { return r.imdb_id || ''; }}
+    {label: 'Name', field: 'title', value: function(r) { return r.skipped ? r.title || '—' : r.title; }},
+    {label: 'Size', field: 'size', value: function(r) { return r.skipped ? r.size || '—' : sizeText(r.size_mb); }},
+    {label: 'Date', field: 'date', value: function(r) { return r.skipped ? r.date || '—' : dateText(r.date); }},
+    {label: 'IMDb', value: function(r) { return r.imdb_id || ''; }},
+    {label: 'Skipped', optional: true, value: function(r) { return r.skipped || ''; }}
   ];
   function skippedText(data) {
     var reasons = Object.keys(data.skipped || {}).map(function(reason) { return data.skipped[reason] + ' × ' + reason; });
@@ -926,7 +1095,7 @@ _WIZARD_SCRIPT = r"""
           return;
         }
         note('feed-results', 'ok', run.category.name + ': ' + data.parsed + ' releases read.' + skippedText(data));
-        resultsTable('feed-results', data.rows.slice(0, 10), RELEASE_COLUMNS);
+        resultsTable('feed-results', (data.table || data.rows).slice(0, 10), RELEASE_COLUMNS);
         state.feedRows = state.feedRows.concat(data.rows);
       });
       setFeedTested(allGood);
@@ -1065,7 +1234,7 @@ _WIZARD_SCRIPT = r"""
         else if (!works && data.parsed) text += ' None of them names what you searched for.';
         if (data.issue && !data.parsed) text = data.issue + '.' + skippedText(data);
         note('search-results', works ? 'ok' : 'warn', text);
-        resultsTable('search-results', data.rows.slice(0, 10), RELEASE_COLUMNS);
+        resultsTable('search-results', (data.table || data.rows).slice(0, 10), RELEASE_COLUMNS);
       });
   };
   $('search-next').onclick = function() { show('download'); };

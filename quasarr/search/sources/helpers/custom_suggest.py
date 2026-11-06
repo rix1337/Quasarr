@@ -296,11 +296,33 @@ def suggest_items(soup, page_url, hostname, min_items=MIN_ITEMS):
             }
         )
     candidates.sort(key=lambda c: c["score"], reverse=True)
-    unique = []
+    unique, seen = [], set()
     for candidate in candidates:
-        if candidate["selector"] not in [c["selector"] for c in unique]:
+        # blocks that hold the same releases, nested or not, are one choice
+        found = frozenset(
+            link_of[id(a)]
+            for block in soupsieve.select(candidate["selector"], soup)
+            for a in block.find_all("a")
+            if id(a) in link_of
+        )
+        if found not in seen:
+            seen.add(found)
             unique.append(candidate)
     return unique
+
+
+def _likely_items(candidates, min_items):
+    """The release blocks worth offering: repeated, and close to the best one.
+
+    A search for one title may find a single release, so only listing pages
+    require the block to repeat.
+    """
+    least = 2 if min_items > 1 else 1
+    repeated = [c for c in candidates if c["count"] + c["mixed"] + c["empty"] >= least]
+    if not repeated:
+        return []
+    top = repeated[0]["score"]
+    return [c for c in repeated if c["score"] >= top / 2][:MAX_CANDIDATES]
 
 
 def _narrow(selector, containers, soup, link_of, counts):
@@ -355,16 +377,18 @@ def _evaluate(items, spec, kind, page_url, hostname):
         "coverage": round(len(found) / len(items), 2),
         "distinct": round(distinct, 2),
         "samples": [str(v) for v in found[:3]],
+        # per item, to tell candidates that read the same values apart
+        "_values": values,
     }
 
 
-def _rank(results, prefer=None):
+def _rank(results, prefer=None, individual=False):
     results = [r for r in results if r]
-    unique = {}
-    for result in results:
-        unique.setdefault(repr(sorted(result["spec"].items())), result)
+    if individual and any(r["distinct"] == 1 for r in results):
+        # every release has its own name and link; a repeated one is an author or tag
+        results = [r for r in results if r["distinct"] == 1]
     ranked = sorted(
-        unique.values(),
+        results,
         key=lambda r: (
             r["coverage"] * (r["distinct"] if prefer == "distinct" else 1),
             r.get("bonus", 0)
@@ -373,7 +397,18 @@ def _rank(results, prefer=None):
         ),
         reverse=True,
     )
-    return ranked[:MAX_CANDIDATES]
+    kept, seen = [], []
+    for result in ranked:
+        values = result.pop("_values")
+        # the same values under another selector are no second choice
+        if any(
+            all(v is None or v == k for v, k in zip(values, other, strict=True))
+            for other in seen
+        ):
+            continue
+        kept.append(result)
+        seen.append(values)
+    return kept[:MAX_CANDIDATES]
 
 
 def _count_selectors(items, finder):
@@ -465,8 +500,8 @@ def suggest_title_link(items, page_url, hostname):
             if other is not result and all(a != b and a in b for a, b in pairs):
                 result["bonus"] += 1
     return {
-        "title": _rank(title_results, prefer="distinct"),
-        "link": _rank(link_results, prefer="distinct"),
+        "title": _rank(title_results, prefer="distinct", individual=True),
+        "link": _rank(link_results, prefer="distinct", individual=True),
     }
 
 
@@ -564,7 +599,9 @@ def suggest_listing(
     if is_feed_markup(markup):
         return _suggest_feed_listing(markup, page_url, hostname)
     soup = BeautifulSoup(markup, "html.parser")
-    item_candidates = suggest_items(soup, page_url, hostname, min_items)
+    item_candidates = _likely_items(
+        suggest_items(soup, page_url, hostname, min_items), min_items
+    )
     if item_selector:
         chosen = [{"selector": item_selector}]
     else:
@@ -592,7 +629,7 @@ def suggest_listing(
             best = {"item": candidate["selector"], "fields": fields, "quality": quality}
 
     return {
-        "items": item_candidates[:MAX_CANDIDATES],
+        "items": item_candidates,
         "best": best,
         "search": suggest_search_url(soup, page_url, hostname),
     }
@@ -679,6 +716,77 @@ def _candidate(url, method="get", body=None):
     if body:
         candidate["body"] = body
     return candidate
+
+
+# menu words for each kind of release, in English and German
+_FEED_WORDS = {
+    2000: ("movies", "movie", "films", "film", "filme", "kino"),
+    5000: (
+        "tv shows",
+        "tv",
+        "series",
+        "serien",
+        "serie",
+        "shows",
+        "episoden",
+        "staffeln",
+    ),
+    3000: ("music", "musik", "audio", "mp3", "albums", "alben"),
+    7000: (
+        "books",
+        "ebooks",
+        "e-books",
+        "ebook",
+        "e-book",
+        "bücher",
+        "buecher",
+        "magazines",
+        "zeitschriften",
+    ),
+    6000: ("xxx", "adult", "erotik", "porn"),
+}
+
+
+def suggest_feeds(soup, page_url, hostname):
+    """Pages for each kind of release, found by their menu links.
+
+    Returns {category: path}. A link counts when its whole text is one of the
+    words, or starts with it, so release names that contain one do not.
+    """
+    found = {}
+    kinds_of = {}
+    for anchor in soup.find_all("a", href=True):
+        text = " ".join(anchor.get_text(" ", strip=True).lower().split())
+        if not text or len(text) > 30:
+            continue
+        link = _resolve_link(page_url, anchor["href"], hostname)
+        if not link or not is_on_host(link, hostname):
+            continue
+        parsed = urlparse(link)
+        path = parsed.path or "/"
+        if path == "/":
+            continue
+        if parsed.query:
+            path += "?" + parsed.query
+        for category, words in _FEED_WORDS.items():
+            for rank, word in enumerate(words):
+                if text == word:
+                    score = (0, rank)
+                elif re.match(rf"{re.escape(word)}\b", text):
+                    score = (1, rank)
+                else:
+                    continue
+                score += (path.count("/"), len(path))
+                kinds_of.setdefault(path, set()).add(category)
+                if category not in found or score < found[category][0]:
+                    found[category] = (score, path)
+                break
+    # a page linked as several kinds is a mixed list, not a kind of its own
+    return {
+        category: path
+        for category, (_, path) in found.items()
+        if len(kinds_of[path]) == 1
+    }
 
 
 def suggest_search_url(soup, page_url, hostname):
@@ -1125,6 +1233,35 @@ def export_template(shared_state, definition):
     }
 
 
+def report_table(markup, page_url, listing, hostname, report, limit=25):
+    """Releases and skipped items in page order, for the wizard's result table.
+
+    A skipped item shows what its fields read as plain text, with the reason.
+    """
+    skipped = dict(report["skipped_at"])
+    if not skipped:
+        return report["rows"][:limit]
+    soup = BeautifulSoup(normalize_feed_markup(markup), "html.parser")
+    items = listing["item"].select(soup)
+    rows = iter(report["rows"])
+    table = []
+    for index, item in enumerate(items[: len(report["rows"]) + len(skipped)]):
+        if len(table) >= limit:
+            break
+        if index not in skipped:
+            table.append(next(rows))
+            continue
+        cells = {"skipped": skipped[index]}
+        for name in ("title", "size", "date"):
+            try:
+                raw = extract_field(item, listing[name]) if listing[name] else None
+            except Exception:
+                raw = None
+            cells[name] = " ".join(str(raw or "").split())[:200]
+        table.append(cells)
+    return table
+
+
 # --- Page picker ------------------------------------------------------------------
 
 # elements that run code, embed other pages or submit data: never shown in a preview
@@ -1178,25 +1315,53 @@ PREVIEW_CSP = (
     "default-src 'none'; script-src 'nonce-{nonce}'; style-src http: https: 'unsafe-inline'; "
     "img-src http: https: data:; font-src http: https: data:; form-action 'none'"
 )
-_PREVIEW_STYLE = """
-.q-picking [data-q]{cursor:crosshair}
-.q-hover{outline:2px dashed #f59f00 !important;outline-offset:1px}
-.q-item{outline:2px solid #0d6efd !important;outline-offset:2px}
-.q-field{background:rgba(255,193,7,.35) !important;box-shadow:0 0 0 2px #f59f00 inset}
-.q-picked{background:rgba(25,135,84,.35) !important;box-shadow:0 0 0 2px #198754 inset}
-"""
+# one color per part, shared by the preview, the field rows and the result tables
+FIELD_COLORS = {
+    "item": "#0d6efd",
+    "title": "#d63384",
+    "link": "#6f42c1",
+    "size": "#198754",
+    "date": "#fd7e14",
+}
+
+_PREVIEW_STYLE = (
+    ".q-picking [data-q]{cursor:crosshair}"
+    # one release on its own: everything else is hidden
+    ".q-solo body *:not(.q-keep):not(.q-shown):not(.q-shown *){display:none !important}"
+    ".q-hover{outline:2px dashed #0dcaf0 !important;outline-offset:1px}"
+    f".q-item{{outline:2px solid {FIELD_COLORS['item']} !important;outline-offset:2px}}"
+    # the link often is the name too, so it gets an outline instead of a fill
+    f".q-link{{outline:2px solid {FIELD_COLORS['link']} !important;outline-offset:1px}}"
+    + "".join(
+        f".q-{name}{{background:{color}40 !important;box-shadow:0 0 0 2px {color} inset}}"
+        for name, color in FIELD_COLORS.items()
+        if name in ("title", "size", "date")
+    )
+)
 
 # Runs inside the sandboxed preview, which has no access to the wizard page.
 # It never follows links and only reports which numbered element was clicked.
 _PREVIEW_SCRIPT = """
 (function() {
-  var picking = false, hovered = null;
+  var picking = false, hovered = null, shown = null;
   function post(message) { parent.postMessage(message, '*'); }
   function numbered(node) { return node && node.closest ? node.closest('[data-q]') : null; }
   function hover(node) {
     if (hovered) hovered.classList.remove('q-hover');
     hovered = node;
     if (node) node.classList.add('q-hover');
+  }
+  // shows only one release, so details can only be picked inside it
+  function solo(q) {
+    document.querySelectorAll('.q-keep, .q-shown').forEach(function(node) {
+      node.classList.remove('q-keep', 'q-shown');
+    });
+    shown = q === null || q === undefined
+      ? null : document.querySelector('[data-q="' + Number(q) + '"]');
+    document.documentElement.classList.toggle('q-solo', !!shown);
+    if (!shown) return;
+    shown.classList.add('q-shown');
+    for (var node = shown.parentElement; node; node = node.parentElement) node.classList.add('q-keep');
   }
   function mark(name, list) {
     document.querySelectorAll('.' + name).forEach(function(node) { node.classList.remove(name); });
@@ -1210,9 +1375,12 @@ _PREVIEW_SCRIPT = """
     var message = event.data || {};
     if (message.type === 'mark') {
       mark('q-item', message.items);
-      mark('q-field', message.field);
-      var first = message.scroll && document.querySelector('.q-item');
-      if (first) first.scrollIntoView({block: 'center'});
+      ['title', 'link', 'size', 'date'].forEach(function(name) {
+        mark('q-' + name, (message.fields || {})[name]);
+      });
+      solo(message.shown);
+      var first = shown || (message.scroll && document.querySelector('.q-item'));
+      if (first) first.scrollIntoView({block: shown ? 'start' : 'center'});
     } else if (message.type === 'picking') {
       picking = !!message.on;
       document.documentElement.classList.toggle('q-picking', picking);
@@ -1226,6 +1394,7 @@ _PREVIEW_SCRIPT = """
     event.preventDefault();
     event.stopPropagation();
     var node = picking && numbered(event.target);
+    if (shown && !shown.contains(event.target)) node = null;
     if (node) post({type: 'pick', q: Number(node.getAttribute('data-q'))});
   }, true);
   document.addEventListener('keydown', function(event) {
@@ -1326,9 +1495,9 @@ def pick_item(soup, q, page_url, hostname, min_items=1):
             matches = soupsieve.select(candidate["selector"], soup)
         except Exception:
             continue
-        if any(_contains(match, element) for match in matches):
+        if len(matches) >= 2 and any(_contains(match, element) for match in matches):
             return {"selector": candidate["selector"], "count": len(matches)}
-    # no repeating container: use the clicked element's own stable selector
+    # no suggested block: the closest repeated container around the click
     for node in [element, *element.parents]:
         if not isinstance(node, Tag) or node.name in ("body", "html", "[document]"):
             break
@@ -1336,11 +1505,70 @@ def pick_item(soup, q, page_url, hostname, min_items=1):
             matches = soupsieve.select(selector, soup)
             if len(matches) >= 2 and node in matches:
                 return {"selector": selector, "count": len(matches)}
-    return {"selector": build_selector(element, soup), "count": 1}
+    return {
+        "error": "Nothing around this repeats like a release does. Click inside one release."
+    }
+
+
+def _around(element, container):
+    """Elements near a click inside one release, closest first."""
+    nodes = [element, *element.find_all(True)]
+    for node in element.parents:
+        if node is container:
+            break
+        nodes.append(node)
+    nodes += container.find_all(True)
+    seen, ordered = set(), []
+    for node in nodes:
+        if id(node) not in seen:
+            seen.add(id(node))
+            ordered.append(node)
+    return ordered
+
+
+def _field_spec(target, container, field):
+    spec = {}
+    if field in ("link", "source"):
+        spec["attr"] = "href"
+    elif field == "date" and target.get("datetime"):
+        spec["attr"] = "datetime"
+    selector = build_selector(target, container)
+    if selector:
+        spec["selector"] = selector
+    return spec
+
+
+def _value_in(container, spec, field, page_url, hostname):
+    from quasarr.search.sources.helpers.custom_source import _compile_field
+
+    try:
+        compiled = _compile_field(spec, field, "href" if field == "link" else "text")
+        value = _reads(container, compiled, field, page_url, hostname)
+    except Exception:
+        return None
+    # a whole block of text is not a release name
+    if field == "title" and value is not None and len(str(value)) > 200:
+        return None
+    return value
+
+
+def _field_suggestions(items, field, page_url, hostname):
+    if field in ("title", "link"):
+        return suggest_title_link(items, page_url, hostname)[field]
+    if field == "size":
+        return suggest_size(items, page_url, hostname)
+    if field == "date":
+        return suggest_date(items, page_url, hostname)
+    return []
 
 
 def pick_field(soup, q, item_selector, field, page_url, hostname):
-    """A field selector, relative to its release, built from one click."""
+    """A field selector, relative to its release, built from one click.
+
+    A click that misses, such as on the space next to a link, takes the
+    nearest element that reads as the field. When a suggestion reads the same
+    value in that release and in more releases, the suggestion wins.
+    """
     element = element_by_q(soup, q)
     if element is None:
         return {"error": "The page changed. Load it again."}
@@ -1351,70 +1579,114 @@ def pick_field(soup, q, item_selector, field, page_url, hostname):
     container = next((item for item in items if _contains(item, element)), None)
     if container is None:
         return {"error": "Click inside one of the highlighted releases."}
-    target = element
-    spec = {}
-    if field in ("link", "source"):
-        target = element if element.name == "a" else element.find_parent("a")
-        if target is None or not _contains(container, target):
-            target = element.find("a", href=True) or None
-        if target is None:
-            return {"error": "That is not a link. Click the release name or its link."}
-        spec["attr"] = "href"
-    elif field == "date" and element.get("datetime"):
-        spec["attr"] = "datetime"
-    selector = build_selector(target, container)
-    if selector:
-        spec["selector"] = selector
-    result = _evaluate(items[:SAMPLE_ITEMS], spec, field, page_url, hostname)
-    return {"spec": spec, "result": result}
+    spec, value = None, None
+    for target in _around(element, container):
+        if field in ("link", "source") and not (
+            target.name == "a" and target.get("href")
+        ):
+            continue
+        candidate = _field_spec(target, container, field)
+        value = _value_in(container, candidate, field, page_url, hostname)
+        if value is not None:
+            spec = candidate
+            break
+    if spec is None:
+        return {"error": "Nothing in this release reads as that. Click it directly."}
+    sample = items[:SAMPLE_ITEMS]
+    result = _evaluate(sample, spec, field, page_url, hostname)
+    for suggestion in _field_suggestions(sample, field, page_url, hostname):
+        if (
+            suggestion["spec"]
+            and suggestion["coverage"] >= (result or {}).get("coverage", 0)
+            and _value_in(container, suggestion["spec"], field, page_url, hostname)
+            == value
+        ):
+            spec, result = suggestion["spec"], suggestion
+            break
+    if result:
+        result.pop("_values", None)
+    return {"spec": spec, "result": result, "value": str(value)}
 
 
-def highlight(soup, item_selector, fields, page_url="", hostname=""):
+def highlight(soup, item_selector, fields, page_url="", hostname="", options=None):
     """Element numbers a listing reads, to outline them in the preview.
 
     A field only counts where its value also reads as that kind of value, so
-    a size picked on a date shows up as missing instead of as found.
+    a size picked on a date shows up as missing instead of as found. "values"
+    holds what each field reads per release, and "options" the same for each
+    suggested spec, so the wizard can show them for whichever release it shows.
     """
-    from quasarr.search.sources.helpers.custom_source import _compile_field
-
     try:
         items = soupsieve.select(item_selector, soup) if item_selector else []
     except Exception:
         return {"error": "The release block selector is not valid."}
-    marked = {"items": [q_of(item) for item in items], "fields": {}}
+    marked = {
+        "items": [q_of(item) for item in items],
+        "fields": {},
+        "values": {},
+        "options": {},
+    }
     for name, spec in (fields or {}).items():
         try:
             field = _compile_field(spec, name, "href" if name == "link" else "text")
         except Exception as e:
             marked["fields"][name] = {"error": str(e)}
             continue
-        found = []
+        found, values = [], []
         for item in items:
             base = field["within"].closest(item) if field.get("within") else item
-            if base is None:
-                continue
-            element = field["selector"].select_one(base) if field["selector"] else base
-            if element is None or not q_of(element):
-                continue
-            if _reads(item, field, name, page_url, hostname):
+            element = None
+            if base is not None:
+                element = (
+                    field["selector"].select_one(base) if field["selector"] else base
+                )
+            value = (
+                _reads(item, field, name, page_url, hostname)
+                if element is not None and q_of(element)
+                else None
+            )
+            if value is not None:
                 found.append(q_of(element))
+            values.append(None if value is None else str(value))
         marked["fields"][name] = found
+        marked["values"][name] = values
+    for name, specs in (options or {}).items():
+        marked["options"][name] = [
+            _values_of(items, spec, name, page_url, hostname)
+            for spec in list(specs)[: MAX_CANDIDATES * 2]
+        ]
     return marked
 
 
+def _values_of(items, spec, name, page_url, hostname):
+    try:
+        field = _compile_field(spec, name, "href" if name == "link" else "text")
+    except Exception:
+        return [None] * len(items)
+    values = []
+    for item in items:
+        try:
+            value = _reads(item, field, name, page_url, hostname)
+        except Exception:
+            value = None
+        values.append(None if value is None else str(value))
+    return values
+
+
 def _reads(item, field, name, page_url, hostname):
+    """The value a field reads in one release, or None if it reads nothing usable."""
     raw = extract_field(item, field)
     if not raw:
-        return False
+        return None
     if name == "size":
-        return parse_size(raw, field["unit"]) is not None
+        return parse_size(raw, field["unit"])
     if name == "date":
-        return parse_date(raw, field["format"]) is not None
+        return parse_date(raw, field["format"])
     if name == "link":
-        return _resolve_link(page_url, raw, hostname) is not None
+        return _resolve_link(page_url, raw, hostname)
     if name == "imdb":
-        return parse_imdb_id(raw) is not None
-    return True
+        return parse_imdb_id(raw)
+    return raw
 
 
 def _template_from_module(text):

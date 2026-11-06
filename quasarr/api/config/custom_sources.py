@@ -38,8 +38,10 @@ from quasarr.search.sources.helpers.custom_suggest import (
     pick_field,
     pick_item,
     preview_html,
+    report_table,
     search_quality,
     suggest_download,
+    suggest_feeds,
     suggest_listing,
 )
 from quasarr.storage.custom_sources import (
@@ -243,6 +245,9 @@ def setup_custom_source_routes(app, shared_state):
             "url": url,
             "suggest_flaresolverr": suggest,
             **_report_payload(report),
+            "table": report_table(
+                fetched.markup, url, listing, source.hostname, report
+            ),
         }
         if data.get("step") == "search":
             payload["quality"] = search_quality(query, report["rows"])
@@ -361,6 +366,7 @@ def setup_custom_source_routes(app, shared_state):
             listing_from_suggestion(suggestion["best"]) if suggestion["best"] else None
         )
         if purpose == "listing":
+            result["feeds"] = suggest_feeds(soup, url, hostname)
             result["templates"] = detect_templates(
                 shared_state, fetched.markup, url, hostname
             )
@@ -383,6 +389,8 @@ def setup_custom_source_routes(app, shared_state):
             picked = pick_item(page["soup"], q, page["url"], page["hostname"])
             if picked is None:
                 return _fail("The page changed. Load it again.")
+            if picked.get("error"):
+                return _fail(picked["error"])
             marked = highlight(page["soup"], picked["selector"], {})
             return {"success": True, **picked, "marked": marked}
         field = str(data.get("field") or "")
@@ -410,7 +418,8 @@ def setup_custom_source_routes(app, shared_state):
         if page is None:
             return _fail("The page expired. Load it again.", 410)
         fields = data.get("fields") or {}
-        if not isinstance(fields, dict):
+        options = data.get("options") or {}
+        if not isinstance(fields, dict) or not isinstance(options, dict):
             return _fail("Fields must be an object")
         marked = highlight(
             page["soup"],
@@ -418,6 +427,7 @@ def setup_custom_source_routes(app, shared_state):
             fields,
             page["url"],
             page["hostname"],
+            options,
         )
         if marked.get("error"):
             return _fail(marked["error"])
