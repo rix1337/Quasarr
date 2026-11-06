@@ -455,7 +455,14 @@ _WIZARD_SCRIPT = r"""
     return box;
   }
   function clear(target) { (typeof target === 'string' ? $(target) : target).textContent = ''; }
+  // a slow site that timed out once gets a second chance before a step gives up on it
   function api(path, body, method) {
+    return request(path, body, method).then(function(data) {
+      if (data && !data.success && /timed? ?out/i.test(String(data.error || ''))) return request(path, body, method);
+      return data;
+    });
+  }
+  function request(path, body, method) {
     return quasarrApiFetch(path, {
       method: method || 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -1197,7 +1204,13 @@ _WIZARD_SCRIPT = r"""
         feedPicker.setListing(listing, data.best ? data.best.fields : {});
         if (!data.best) {
           lockStep('feed', false);
-          note('feed-notes', 'warn', 'Quasarr found no release list on this page. Check the address, or click Pick next to Release block and then one release.');
+          note('feed-notes', 'warn', data.unreadable === 'login'
+            ? 'This page asks for a login before it shows releases. Sites that need a login cannot be set up here: ' +
+              'they need Python code, contributed as a pull request.'
+            : data.unreadable === 'javascript'
+            ? 'This page fills in its releases with JavaScript in the browser, so Quasarr sees an empty page. ' +
+              'Try another page of the site, or its RSS feed if it has one.'
+            : 'Quasarr found no release list on this page. Check the address, or click Pick next to Release block and then one release.');
         } else if (state.autoTest) {
           state.autoTest = false;
           state.autoRun = true;
@@ -1263,16 +1276,38 @@ _WIZARD_SCRIPT = r"""
       list: Object.assign({}, draft.list || {}, feedListing())
     });
     if (draft.key) result.key = draft.key;
+    // Magazarr reads magazine issues only by a few date spellings; book names have no dates to change
+    if (result.magazine_titles === undefined && result.feeds.some(function(feed) { return feed.category === 7000; })) {
+      result.magazine_titles = true;
+    }
+    // dates the site shows in its own time without saying so
+    if (state.utcOffset) result.list = withOffset(result.list, state.utcOffset);
     var search = searchSettings();
     if (search) {
       result.search = Object.assign({}, draft.search || {}, search);
       var own = searchLayout();
       if (own) result.search_list = Object.assign({}, draft.search_list || {}, own);
+      if (own && state.utcOffset) result.search_list = withOffset(result.search_list, state.utcOffset);
     }
     result.download = Object.assign({}, draft.download || {}, downloadSettings());
     return result;
   }
 
+  function withOffset(listing, hours) {
+    if (!listing || !listing.date) return listing;
+    var ways = Array.isArray(listing.date) ? listing.date : [listing.date];
+    var shifted = ways.map(function(way) { return way.utc_offset === undefined ? Object.assign({}, way, {utc_offset: hours}) : way; });
+    return Object.assign({}, listing, {date: Array.isArray(listing.date) ? shifted : shifted[0]});
+  }
+  // a newest release dated in the future means the site shows its own local time as UTC
+  function futureShift(rows) {
+    var now = Date.now();
+    var newest = rows.map(function(row) { return Date.parse(row.date); })
+      .filter(function(time) { return !isNaN(time); })
+      .reduce(function(a, b) { return Math.max(a, b); }, 0);
+    var ahead = (newest - now) / 3600000;
+    return ahead > 0.6 && ahead < 14.5 ? Math.round(ahead) : 0;
+  }
   $('feed-test').onclick = function() {
     clear('feed-results');
     var categories = selectedCategories();
@@ -1316,12 +1351,24 @@ _WIZARD_SCRIPT = r"""
         state.feedByKind[run.category.id] = data.rows;
       });
       if (leaveOut && failing.length) renderFeedRows();
+      var shift = !state.feedIsRss && !state.utcOffset && auto ? futureShift(state.feedRows) : 0;
+      if (shift) {
+        // read the dates again in the site's time, then tell the user
+        state.utcOffset = shift;
+        state.autoRun = true;
+        lockStep('feed', true);
+        $('feed-test').click();
+        state.offsetNote = 'The newest releases were dated ' + shift + (shift === 1 ? ' hour' : ' hours') +
+          ' in the future, so Quasarr reads the site\'s times as UTC+' + shift + '.';
+        return;
+      }
       setFeedTested(allGood);
       if (auto) lockStep('feed', false);
       if (allGood && auto) {
         // a summary at the top informs without stopping the user
         var read = results.filter(function(run) { return failing.indexOf(run) < 0; })
           .map(function(run) { return run.category.name + ' ' + run.data.parsed; });
+        if (state.offsetNote) { note('feed-notes', 'ok', state.offsetNote); state.offsetNote = null; }
         note('feed-notes', 'ok', 'Quasarr set this up on its own: it found a page for each kind in the site menu, ' +
           'chose the release list and read releases from every page (' + read.join(', ') + '). ' +
           'Nothing is saved yet. Check its choices and the results below, then continue.');
@@ -1443,22 +1490,36 @@ _WIZARD_SCRIPT = r"""
     var name = title.split(RELEASE_TAGS)[0].replace(/-[A-Za-z0-9]+$/, '');
     return name.replace(/[._]+/g, ' ').trim().split(/\s+/).slice(0, 6).join(' ');
   }
+  // up to three newest releases per kind: a site may not find the first, or it is no movie or show
   function examplesFromFeed() {
     var withId = false;
+    state.examples = {};
     return Promise.all(selectedCategories().map(function(category) {
-      var row = (state.feedByKind[category.id] || [])[0];
-      var name = row ? feedName(row.title) : '';
-      if (!name) return null;
-      if (!isVideo(category)) { searchQueries[category.id] = name; return null; }
-      if (row.imdb_id) { withId = true; searchQueries[category.id] = row.imdb_id; return null; }
-      return api('/api/custom-sources/imdb-lookup', {term: name, kind: category.id === 5000 ? 'tv' : 'movie'})
-        .then(function(data) {
-          // the release year tells apart movies of the same name
-          var year = (row.title.match(/[ ._-]((?:19|20)\d{2})(?:[ ._-]|$)/) || [])[1];
-          var results = data.success ? data.results : [];
-          var hit = results.filter(function(r) { return year && String(r.year) === year; })[0] || results[0];
-          if (hit) searchQueries[category.id] = hit.imdb_id;
-        });
+      var rows = (state.feedByKind[category.id] || []).filter(function(row) { return feedName(row.title); });
+      if (isVideo(category)) {
+        rows = rows.filter(function(row) { return VIDEO_RELEASE.test(row.title); })
+          .concat(rows.filter(function(row) { return !VIDEO_RELEASE.test(row.title); }));
+      }
+      rows = rows.slice(0, 3);
+      if (!rows.length) return null;
+      var names = rows.map(function(row) { return feedName(row.title); });
+      if (!isVideo(category)) { state.examples[category.id] = names; searchQueries[category.id] = names[0]; return null; }
+      return Promise.all(rows.map(function(row, index) {
+        if (row.imdb_id) return row.imdb_id;
+        return api('/api/custom-sources/imdb-lookup', {term: names[index], kind: category.id === 5000 ? 'tv' : 'movie'})
+          .then(function(data) {
+            // the release year tells apart movies of the same name
+            var year = (row.title.match(/[ ._-]((?:19|20)\d{2})(?:[ ._-]|$)/) || [])[1];
+            var results = data.success ? data.results : [];
+            var hit = results.filter(function(r) { return year && String(r.year) === year; })[0] || results[0];
+            return hit ? hit.imdb_id : null;
+          });
+      })).then(function(ids) {
+        ids = ids.filter(Boolean);
+        if (rows.some(function(row) { return row.imdb_id; })) withId = true;
+        state.examples[category.id] = ids.length ? ids : names;
+        searchQueries[category.id] = state.examples[category.id][0];
+      });
     })).then(function() {
       // IMDb is tried first whenever an ID is known, from the feed or through Radarr and Sonarr;
       // without any, the site is searched by title
@@ -1511,6 +1572,7 @@ _WIZARD_SCRIPT = r"""
     };
     if (settings.method === 'post') settings.body = $('w-search-body').value.trim();
     if (state.searchFollow) settings.follow = state.searchFollow;
+    if (state.kindLink) settings.kind_link = true;
     if (state.searchSections) {
       settings.urls = {};
       Object.keys(state.searchSections).forEach(function(id) {
@@ -1732,6 +1794,44 @@ _WIZARD_SCRIPT = r"""
           });
         });
     }).then(function(results) {
+      // one search over all kinds: results that link their kind's page are kept for that kind only
+      var worked = results.filter(searchWorked);
+      if (state.kindLink || state.searchSections || selectedCategories().length < 2 || !worked.length) return results;
+      state.kindLink = true;
+      return runSearches(worked.map(function(run) { return run.category; }), progress('checking which kind each result is for'))
+        .then(function(narrowed) {
+          var sorted = narrowed.every(searchWorked) && narrowed.some(function(run) {
+            return (run.data.skipped || {})['other kind'];
+          });
+          if (!sorted) { state.kindLink = false; return results; }
+          note('search-results', 'ok', 'The site searches all kinds at once and names each result\'s kind, ' +
+            'so Quasarr keeps only the results of the kind searched for.');
+          return results.map(function(run) {
+            return narrowed.filter(function(again) { return again.category === run.category; })[0] || run;
+          });
+        });
+    }).then(function(results) {
+      // a kind that found nothing tries its next example, one after the other
+      var retry = results.filter(function(run) {
+        return !searchWorked(run) && ((state.examples || {})[run.category.id] || []).length > 1;
+      });
+      return retry.reduce(function(chain, run) {
+        var next = state.examples[run.category.id].slice(1);
+        return next.reduce(function(inner, example) {
+          return inner.then(function(found) {
+            if (found && searchWorked(found)) return found;
+            searchQueries[run.category.id] = example;
+            return runSearches([run.category], progress('trying another example for')).then(function(again) { return again[0]; });
+          });
+        }, Promise.resolve(null)).then(function(found) {
+          if (found && searchWorked(found)) {
+            results = results.map(function(other) { return other === run ? found : other; });
+          } else {
+            searchQueries[run.category.id] = state.examples[run.category.id][0];
+          }
+        });
+      }, Promise.resolve()).then(function() { renderSearchQueries(); return results; });
+    }).then(function(results) {
       done();
       results.forEach(function(run) { showSearch(run); });
       var worked = results.filter(searchWorked)[0];
@@ -1818,8 +1918,12 @@ _WIZARD_SCRIPT = r"""
     var keep = select.value;
     select.textContent = '';
     var pages = state.feedRows.filter(function(row) { return onSite(row.link); });
-    if (state.feedRows.length && !pages.length) {
-      note('download-notes', 'ok', 'The releases link straight to their download containers, so there is nothing to set up here.');
+    // posts holding several releases link each one to its own container; a stray post link
+    // would collect the links of all of them
+    if (state.feedRows.length && pages.length <= state.feedRows.length / 3) {
+      note('download-notes', 'ok', 'The releases link straight to their download containers, so there is nothing to set up here.' +
+        (pages.length ? ' ' + pages.length + ' of ' + state.feedRows.length + ' link a page on the site instead; ' +
+          'check the release block on the Feed step if that is wrong.' : ''));
       $('download-setup').hidden = true;
       return;
     }
@@ -1973,7 +2077,8 @@ _WIZARD_SCRIPT = r"""
     state.downloadAutoTest = false;
     api('/api/custom-sources/test-download', {definition: definition(), url: url}).then(function(data) {
       done();
-      if (auto) lockStep('download', false);
+      if (auto && data.success) checkMoreReleases(url);
+      else if (auto) lockStep('download', false);
       if (!data.success) { note('download-results', 'error', (data.error || 'No links found') + '.'); return; }
       var groups = data.classified || {};
       note('download-results', 'ok', data.links.length + ' links: ' + (groups.protected || []).length + ' need a CAPTCHA, ' +
@@ -1984,6 +2089,28 @@ _WIZARD_SCRIPT = r"""
       ]);
     });
   };
+  // links chosen on one release must work on the others too
+  function checkMoreReleases(tested) {
+    var others = Array.prototype.map.call($('download-release').options, function(option) { return option.value; })
+      .filter(function(value) { return value && value !== tested; }).slice(0, 2);
+    if (!others.length) { lockStep('download', false); return; }
+    var current = definition();
+    var waiting = note('download-results', 'busy', 'Checking the links on ' + others.length + ' more releases…');
+    Promise.all(others.map(function(url) {
+      return api('/api/custom-sources/test-download', {definition: current, url: url});
+    })).then(function(results) {
+      waiting.remove();
+      lockStep('download', false);
+      var empty = results.filter(function(data) { return !data.success || !data.links.length; }).length;
+      var count = others.length + 1;
+      if (!empty) {
+        note('download-results', 'ok', 'The same links were found on all ' + count + ' releases checked.');
+      } else {
+        note('download-results', 'warn', 'The links were found on ' + (count - empty) + ' of ' + count +
+          ' releases checked. Choose another release above and Pick its links if they sit elsewhere.');
+      }
+    });
+  }
   $('download-next').onclick = function() { show('save'); };
 
   // --- step 5: save ----------------------------------------------------------------------

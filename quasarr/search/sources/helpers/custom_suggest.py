@@ -921,6 +921,26 @@ def page_language(soup):
     return "de" if german > english else "en"
 
 
+def unreadable_reason(soup):
+    """Why a page shows no releases Quasarr can read, when the page itself says so.
+
+    A login form or a page that only fills in through JavaScript cannot be set
+    up without code.
+    """
+    body = soup.find("body") or soup
+    text = " ".join(body.get_text(" ", strip=True).split())
+    if (
+        soup.find("input", attrs={"type": "password"})
+        and len(body.find_all("a", href=True)) < 15
+    ):
+        return "login"
+    scripts = len(soup.find_all("script"))
+    app_root = soup.find(id=re.compile(r"^(app|root|__next|__nuxt)$"))
+    if len(text) < 300 and (scripts >= 3 or app_root is not None):
+        return "javascript"
+    return None
+
+
 def page_rss(soup, page_url, hostname):
     """The RSS feed of this very page, as an alternate link or an RSS button.
 
@@ -1048,8 +1068,13 @@ def search_quality(query, rows, feed_rows=(), imdb_id=None):
 def _hoster_named(anchor):
     from quasarr.constants import SHARE_HOSTERS_LOWERCASE
 
+    # image buttons name the hoster only in their address, as /go/rapidgator
     text = " ".join(
-        [anchor.get_text(" ", strip=True), *(anchor.get("class") or [])]
+        [
+            anchor.get_text(" ", strip=True),
+            *(anchor.get("class") or []),
+            urlparse(anchor.get("href") or "").path,
+        ]
     ).lower()
     return any(hoster.split(".")[0] in text for hoster in SHARE_HOSTERS_LOWERCASE)
 
@@ -1104,16 +1129,29 @@ def _download_link(url):
     )
 
 
+# on-site buttons that forward to a hoster or crypter
+_REDIRECT_PATH = re.compile(r"/(go|out|redirect|link)/[^/]+")
+# a crypter link for a sample or trailer is no download of the release
+_EXTRA_LINK = re.compile(r"\b(sample|trailer|probe|vorschau)\b", re.I)
+
+
 def _download_candidates(soup, page_url, hostname=None):
     anchors = soup.find_all("a", href=True)
-    known = [a for a in anchors if _download_link(urljoin(page_url, a["href"]))]
+    known = [
+        a
+        for a in anchors
+        if _download_link(urljoin(page_url, a["href"]))
+        and not _EXTRA_LINK.search(a.get_text(" ", strip=True))
+    ]
     redirects = False
     if not known and hostname:
         # on-site buttons named after hosters redirect to the real links
         known = [
             a
             for a in anchors
-            if is_on_host(urljoin(page_url, a["href"]), hostname) and _hoster_named(a)
+            if is_on_host(urljoin(page_url, a["href"]), hostname)
+            and (_hoster_named(a) or _REDIRECT_PATH.match(urlparse(a["href"]).path))
+            and not _is_noise(a)
         ]
         redirects = bool(known)
     if not known:

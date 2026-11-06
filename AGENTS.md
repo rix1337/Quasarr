@@ -44,6 +44,7 @@ Trail's code map lives in gitignored `.trail/cache/`; only curated `.trail/learn
 | Run | `uv run Quasarr.py` |
 | Dev services | `CONFIG_VOLUMES=/path/to/config docker compose -f docker/dev-services-compose.yml up` |
 | Live integration | `uv run cli_tester.py` |
+| Live wizard check | `uv run --with playwright python wizard_tester.py` |
 | Tests | `uv run python -X utf8 -m unittest discover -s tests` |
 | Lint | `uv run ruff check .` |
 | Privacy gate | `uv run python check_trail.py` |

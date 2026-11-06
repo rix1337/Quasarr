@@ -48,6 +48,7 @@ from quasarr.search.sources.helpers.custom_suggest import (
     suggest_download,
     suggest_feeds,
     suggest_listing,
+    unreadable_reason,
 )
 from quasarr.storage.custom_sources import (
     delete_definition,
@@ -260,7 +261,14 @@ def setup_custom_source_routes(app, shared_state):
             listing = spec["list"]
             timeout = FEED_REQUEST_TIMEOUT_SECONDS
 
-        report, fetched = source.load_listing(shared_state, url, listing, timeout, form)
+        report, fetched = source.load_listing(
+            shared_state,
+            url,
+            listing,
+            timeout,
+            form,
+            source.kind_path(category) if data.get("step") == "search" else None,
+        )
         # suggest the toggle so the site does not depend on a 24h fallback
         suggest = fetched.blocked and not spec["flaresolverr"]
         if fetched.error:
@@ -433,6 +441,7 @@ def setup_custom_source_routes(app, shared_state):
         result["listing"] = (
             listing_from_suggestion(suggestion["best"]) if suggestion["best"] else None
         )
+        result["unreadable"] = None if suggestion["best"] else unreadable_reason(soup)
         if purpose == "listing":
             result["feeds"] = suggest_feeds(
                 soup, url, hostname, str(data.get("language") or "")

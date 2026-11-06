@@ -151,6 +151,55 @@ class ListingSuggestionTests(unittest.TestCase):
         )
 
 
+class SearchKindTests(unittest.TestCase):
+    def test_results_of_other_kinds_are_left_out(self):
+        definition = {
+            "key": "c1",
+            "name": "Synthetic",
+            "hostname": HOST,
+            "language": "en",
+            "feeds": [{"category": 3000, "url": "https://{host}/media/music/rss.xml"}],
+            "list": {
+                "item": "div.r",
+                "title": {"selector": "h2 a"},
+                "link": {"selector": "h2 a", "attr": "href"},
+            },
+            "search": {
+                "mode": "title",
+                "phrase": True,
+                "url": "https://{host}/?s={q}",
+                "categories": [3000],
+                "kind_link": True,
+            },
+        }
+        markup = """<div class="r"><h2><a href="/1.html">Artist-Album-2026-GRP</a></h2><a href="/media/music/">Music</a></div>
+            <div class="r"><h2><a href="/2.html">Movie.2026.1080p.WEB.x264-GRP</a></h2><a href="/media/videos/">Videos</a></div>"""
+        source = CustomSource(definition)
+        report = parse_listing(
+            markup,
+            URL,
+            source.spec["search_list"],
+            HOST,
+            kind_path=source.kind_path(3000),
+        )
+        self.assertEqual(
+            ["Artist-Album-2026-GRP"], [r["title"] for r in report["rows"]]
+        )
+        self.assertEqual({"other kind": 1}, report["skipped"])
+
+    def test_quotes_around_a_name_are_dropped(self):
+        report = parse(
+            '<div class="r"><a href="/1/">»Movie.2026.1080p.WEB.x264-GRP«</a></div>',
+            {
+                "item": "div.r",
+                "title": {"selector": "a"},
+                "link": {"selector": "a", "attr": "href"},
+                "title_cleanup": "dots",
+            },
+        )
+        self.assertEqual("Movie.2026.1080p.WEB.x264-GRP", report["rows"][0]["title"])
+
+
 class TagLinkTests(unittest.TestCase):
     def test_a_tag_link_in_every_post_does_not_split_it(self):
         posts = "".join(
@@ -329,6 +378,14 @@ class DownloadSuggestionTests(unittest.TestCase):
         self.assertEqual("rapidgator", best["names"]["hoster_name"])
         self.assertEqual(2, best["known"])
         self.assertNotIn("redirects", best["spec"])
+
+    def test_sample_links_are_no_downloads_and_redirect_buttons_are(self):
+        markup = """<p><a href="https://filecrypt.cc/Container/S.html">Sample</a></p>
+            <ul class="mirrors"><li><a href="/go/hoster-one"><img alt=""></a></li>
+            <li><a href="/go/rapidgator"><img alt=""></a></li></ul>"""
+        best = suggest_download(markup, f"https://{HOST}/r/", HOST)[0]
+        self.assertEqual(2, best["known"])
+        self.assertTrue(best["spec"]["redirects"])
 
     def test_a_click_on_a_link_picks_its_links_and_choices_do_not_repeat(self):
         from quasarr.search.sources.helpers.custom_suggest import (

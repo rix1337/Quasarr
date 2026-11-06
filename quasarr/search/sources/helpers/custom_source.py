@@ -598,6 +598,8 @@ def compile_definition(definition, bundled=False):
     episode_query = _require_bool(
         search.get("episode_query", False), "search.episode_query"
     )
+    # results of every kind on one page: keep those linking the kind's own page
+    kind_link = _require_bool(search.get("kind_link", False), "search.kind_link")
     # result pages that hold the releases, opened from the search page
     follow = search.get("follow") or None
     if follow is not None:
@@ -757,6 +759,7 @@ def compile_definition(definition, bundled=False):
         "imdb_identity": imdb_identity,
         "search_match": search_match,
         "search_follow": follow,
+        "search_kind_link": kind_link,
         "search_append_year": append_year,
         "search_episode_query": episode_query,
         "feed_bodies": feed_bodies,
@@ -1120,11 +1123,14 @@ def _parse_item(item, page_url, listing, hostname, now):
     elif listing["title_cleanup"] == "sanitize":
         title = sanitize_title(title)
     elif listing["title_cleanup"] == "spaces":
-        title = title.replace(" ", ".")
+        title = title.strip().strip(_NAME_QUOTES).replace(" ", ".")
     elif listing["title_cleanup"] == "dots":
-        # "Name - Group (2026)" -> "Name-Group.2026"
+        # "Name - Group (2026)" -> "Name-Group.2026"; quotes around it ("»Name«") go
         title = (
-            title.replace(" - ", "-")
+            title.strip()
+            .strip(_NAME_QUOTES)
+            .strip()
+            .replace(" - ", "-")
             .replace(" ", ".")
             .replace("(", "")
             .replace(")", "")
@@ -1236,8 +1242,12 @@ def normalize_feed_markup(markup):
     )
 
 
-def parse_listing(markup, page_url, listing, hostname, now=None):
-    """Parse every item on its own so one broken item cannot hide the others."""
+def parse_listing(markup, page_url, listing, hostname, now=None, kind_path=None):
+    """Parse every item on its own so one broken item cannot hide the others.
+
+    With ``kind_path``, only items linking that page count: search results that
+    list every kind name their own by a link to its page.
+    """
     now = now or datetime.now(timezone.utc)
     soup = BeautifulSoup(normalize_feed_markup(markup), "html.parser")
     items = listing["item"].select(soup)
@@ -1249,6 +1259,14 @@ def parse_listing(markup, page_url, listing, hostname, now=None):
     seen_links = set()
 
     for index, item in enumerate(items):
+        if kind_path and not any(
+            (urlparse(urljoin(page_url, a["href"])).path.rstrip("/") or "/")
+            == kind_path
+            for a in item.find_all("a", href=True)
+        ):
+            skipped["other kind"] += 1
+            skipped_at.append((index, "other kind"))
+            continue
         try:
             row, reason = _parse_item(item, page_url, listing, hostname, now)
         except Exception as e:
@@ -1639,15 +1657,28 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             return normalize_magazine_title(title)
         return title
 
-    def load_listing(self, shared_state, url, listing, timeout, data=None):
+    def load_listing(
+        self, shared_state, url, listing, timeout, data=None, kind_path=None
+    ):
         """Fetch and parse one listing page; returns (report, fetch result)."""
         fetched = fetch_markup(
             shared_state, url, timeout, self.spec["flaresolverr"], data
         )
         if fetched.error:
             return None, fetched
-        report = parse_listing(fetched.markup, url, listing, self.hostname)
+        report = parse_listing(
+            fetched.markup, url, listing, self.hostname, kind_path=kind_path
+        )
         return report, fetched
+
+    def kind_path(self, category):
+        """The page of a kind that its search results link, when the search needs it."""
+        template = self.spec["feeds"].get(int(category))
+        if not self.spec["search_kind_link"] or not template:
+            return None
+        path = urlparse(self._url(template)).path
+        path = re.sub(r"(feed/?|rss(\.xml)?/?)$", "", path).rstrip("/")
+        return path or None
 
     def _log(self, area):
         """The logger a site module of this key had: its label names the site."""
@@ -1814,6 +1845,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                             self.spec["search_list"],
                             SEARCH_REQUEST_TIMEOUT_SECONDS,
                             request[1],
+                            self.kind_path(category),
                         ),
                         requests_,
                     )

@@ -201,6 +201,24 @@ class PreviewSafetyTests(unittest.TestCase):
             suggest_feeds(generic, "https://source.invalid/", "source.invalid", "de"),
         )
 
+    def test_login_and_script_pages_are_explained(self):
+        from bs4 import BeautifulSoup
+
+        from quasarr.search.sources.helpers.custom_suggest import unreadable_reason
+
+        login = BeautifulSoup(
+            '<form><input name="u"><input type="password"></form>', "html.parser"
+        )
+        app = BeautifulSoup(
+            '<body><div id="app"></div><script></script></body>', "html.parser"
+        )
+        page = BeautifulSoup(
+            "<body><p>" + "Some text " * 50 + "</p></body>", "html.parser"
+        )
+        self.assertEqual("login", unreadable_reason(login))
+        self.assertEqual("javascript", unreadable_reason(app))
+        self.assertIsNone(unreadable_reason(page))
+
     def test_a_page_offers_its_own_feed_and_language(self):
         from bs4 import BeautifulSoup
 

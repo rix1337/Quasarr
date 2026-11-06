@@ -45,6 +45,14 @@ uv run cli_tester.py
 
 This tool allows you to test searches, feeds, and downloads without needing the full stack of services running.
 
+After changing the site wizard or its suggestions, check that it still sets up every configured built-in site that
+needs no code on its own. It drives the wizard in WebKit (run `uv run --with playwright playwright install webkit`
+once) and needs `USER`, `PASS` and `QUASARR_API_KEY` in `.env`:
+
+```bash
+uv run --with playwright python wizard_tester.py
+```
+
 ---
 
 ### Code Quality & Maintenance
