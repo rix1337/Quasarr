@@ -15,6 +15,7 @@ from quasarr.constants import (
     SEARCH_REQUEST_TIMEOUT_SECONDS,
 )
 from quasarr.providers.auth import require_api_key
+from quasarr.providers.utils import is_imdb_id
 from quasarr.search.sources.helpers.custom_source import (
     CustomSource,
     DefinitionError,
@@ -36,6 +37,8 @@ from quasarr.search.sources.helpers.custom_suggest import (
     import_template,
     is_feed_markup,
     listing_from_suggestion,
+    page_language,
+    page_rss,
     pick_download,
     pick_field,
     pick_item,
@@ -225,7 +228,26 @@ def setup_custom_source_routes(app, shared_state):
                     if spec["search_mode"] == "imdb"
                     else "Quasarr could not find a title for this IMDb ID"
                 )
-            url, form = source.search_request(query)
+            # a kind with its own search section is asked there
+            url, form = source.search_requests(query, category)[0]
+            if spec["search_follow"]:
+                # the results link the posts that hold the releases, as a real search opens them
+                followed = source._followed_pages(shared_state, [(url, form)])
+                if not followed:
+                    return {
+                        "success": True,
+                        "url": url,
+                        "items": 0,
+                        "rows": [],
+                        "parsed": 0,
+                        "skipped": {},
+                        "warnings": [],
+                        "issue": None,
+                        "table": [],
+                        "quality": search_quality(query, []),
+                        "query": query,
+                    }
+                url, form = followed[0]
             listing = spec["search_list"]
             timeout = SEARCH_REQUEST_TIMEOUT_SECONDS
         else:
@@ -284,7 +306,17 @@ def setup_custom_source_routes(app, shared_state):
             "table": table,
         }
         if data.get("step") == "search":
-            payload["quality"] = search_quality(query, report["rows"])
+            # names never carry the IMDb ID: its title tells whether a result is the one
+            named = query
+            if spec["search_mode"] == "imdb" and is_imdb_id(query):
+                from quasarr.providers.imdb_metadata import get_localized_title
+
+                named = (
+                    get_localized_title(shared_state, query, spec["language"], category)
+                    or get_localized_title(shared_state, query, "en", category)
+                    or query
+                )
+            payload["quality"] = search_quality(named, report["rows"], imdb_id=query)
             # what the site was asked for, as a title looked up from an IMDb ID
             payload["query"] = query
         return payload
@@ -405,6 +437,8 @@ def setup_custom_source_routes(app, shared_state):
             result["feeds"] = suggest_feeds(
                 soup, url, hostname, str(data.get("language") or "")
             )
+            result["rss"] = None if feed else page_rss(soup, url, hostname)
+            result["language"] = None if feed else page_language(soup)
             result["templates"] = detect_templates(
                 shared_state, fetched.markup, url, hostname
             )

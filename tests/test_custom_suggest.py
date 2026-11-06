@@ -151,6 +151,34 @@ class ListingSuggestionTests(unittest.TestCase):
         )
 
 
+class TagLinkTests(unittest.TestCase):
+    def test_a_tag_link_in_every_post_does_not_split_it(self):
+        posts = "".join(
+            f"""<div class="post"><h1><a href="/r/{i}/">Show.{i}.S01.German.1080p.WEB.x264-GRP</a></h1>
+            <p>Größe: {i} GB</p><a href="/c/hd/">HD - 720p</a></div>"""
+            for i in range(1, 6)
+        )
+        suggestion, listing = listing_for(
+            f"<html><body><main>{posts}</main></body></html>"
+        )
+        self.assertEqual("div.post", listing["item"])
+        self.assertIn("size", listing)
+
+    def test_a_release_name_in_the_text_falls_back_to_the_link(self):
+        listing = listing_from_suggestion(
+            {
+                "item": "li",
+                "fields": {
+                    "title": [{"spec": {"selector": "p", "find": "release"}}],
+                    "link": [{"spec": {"selector": "a", "attr": "href"}}],
+                },
+            }
+        )
+        self.assertEqual(
+            [{"selector": "p", "find": "release"}, {"selector": "a"}], listing["title"]
+        )
+
+
 class SearchDiscoveryTests(unittest.TestCase):
     LISTING = {
         "item": "article.post",
@@ -276,6 +304,13 @@ class SearchQualityTests(unittest.TestCase):
         result = search_quality("Movie Two", feed, feed)
         self.assertTrue(result["same_as_feed"])
         self.assertFalse(result["works"])
+
+    def test_imdb_searches_match_by_title_or_id(self):
+        rows = [{"title": "Other.Name.2026-GRP", "link": "x", "imdb_id": "tt0000001"}]
+        self.assertTrue(search_quality("Movie Two", rows, imdb_id="tt0000001")["works"])
+        self.assertFalse(
+            search_quality("Movie Two", rows, imdb_id="tt0000002")["works"]
+        )
 
     def test_one_match_among_hundreds_does_not_work(self):
         rows = self.rows("Movie.Two.2026-GRP", *[f"X{i}.2026-GRP" for i in range(200)])

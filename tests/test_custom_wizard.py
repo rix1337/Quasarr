@@ -172,6 +172,58 @@ class PreviewSafetyTests(unittest.TestCase):
             suggest_feeds(split, "https://source.invalid/", "source.invalid", "de"),
         )
 
+    def test_genres_and_post_titles_are_no_kind_pages(self):
+        from bs4 import BeautifulSoup
+
+        from quasarr.search.sources.helpers.custom_suggest import suggest_feeds
+
+        page = BeautifulSoup(
+            '<nav><ul><li><a href="/c/filme/">Filme</a><ul>'
+            '<li><a href="/c/filme/film-noir/">Film-Noir</a></li>'
+            '<li><a href="/c/filme/music/">Music</a></li></ul></li>'
+            '<li><a href="/c/serien/">Serien</a></li>'
+            '<li><a href="/c/new/">+++ Neuerscheinungen +++</a></li></ul></nav>'
+            '<article><a href="/2026/01/01/x/">Der Film (2026)</a>'
+            '<a href="/c/musik/">Musik</a></article>',
+            "html.parser",
+        )
+        self.assertEqual(
+            {2000: "/c/filme/", 5000: "/c/serien/"},
+            suggest_feeds(page, "https://source.invalid/", "source.invalid", "de"),
+        )
+        # without a movie page, the newest releases carry the movies
+        generic = BeautifulSoup(
+            '<nav><a href="/c/serie/">Serie</a><a href="/c/new/">Neuerscheinungen</a></nav>',
+            "html.parser",
+        )
+        self.assertEqual(
+            {5000: "/c/serie/", 2000: "/c/new/"},
+            suggest_feeds(generic, "https://source.invalid/", "source.invalid", "de"),
+        )
+
+    def test_a_page_offers_its_own_feed_and_language(self):
+        from bs4 import BeautifulSoup
+
+        from quasarr.search.sources.helpers.custom_suggest import (
+            page_language,
+            page_rss,
+        )
+
+        page = BeautifulSoup(
+            '<html lang="en-US"><head><link rel="alternate" type="application/rss+xml" '
+            'href="/feed/"></head><body><a class="rss-btn" href="/music/feed/">x</a>'
+            '<a href="/music/comments/feed/" title="RSS">c</a></body></html>',
+            "html.parser",
+        )
+        url = "https://source.invalid/music/"
+        self.assertEqual("/music/feed/", page_rss(page, url, "source.invalid"))
+        self.assertEqual("en", page_language(page))
+        german = BeautifulSoup(
+            "<p>" + "Der Film und die Serie mit dem Ton ist neu. " * 5 + "</p>",
+            "html.parser",
+        )
+        self.assertEqual("de", page_language(german))
+
     def test_release_names_inside_post_texts_are_found_and_headlines_flagged(self):
         from quasarr.search.sources.helpers.custom_source import find_release_name
 

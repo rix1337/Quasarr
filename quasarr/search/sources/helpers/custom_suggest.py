@@ -218,6 +218,10 @@ def _release_anchors(soup, page_url, hostname, min_items=MIN_ITEMS):
         link = _resolve_link(page_url, anchor["href"], hostname)
         if link and text:
             anchors.append((anchor, link, release_likeness(text)))
+    # a tag or category link ("720p") repeats across releases; a release
+    # link shows up once or twice (headline, comments)
+    repeats = Counter(a[1] for a in anchors)
+    anchors = [a for a in anchors if repeats[a[1]] < 3]
     strong = [a for a in anchors if a[2] >= 2]
     if len({a[1] for a in strong}) >= min_items:
         return strong
@@ -727,6 +731,7 @@ def _suggest_feed_listing(markup, page_url, hostname):
             ]
         )
         fields["size"] = suggest_size(items, page_url, hostname)
+        fields["imdb"] = suggest_imdb(items, page_url, hostname)
     best = {"item": item, "fields": fields, "quality": len(items)} if items else None
     return {
         "items": [{"selector": item, "count": len(items), "score": len(items)}]
@@ -742,9 +747,15 @@ def _suggest_feed_listing(markup, page_url, hostname):
 def listing_from_suggestion(best):
     """Turn the top suggestion of every field into a definition listing."""
     listing = {"item": best["item"]}
-    for field in ("title", "link", "size", "date"):
+    for field in ("title", "link", "size", "date", "imdb"):
         if best["fields"].get(field):
             listing[field] = best["fields"][field][0]["spec"]
+    # a release name read from the post text falls back to the link text for
+    # releases that name none, as albums and books often do
+    title, link = listing.get("title"), listing.get("link")
+    if isinstance(title, dict) and title.get("find") and isinstance(link, dict):
+        fallback = {"selector": link["selector"]} if link.get("selector") else {}
+        listing["title"] = [title, fallback]
     return listing
 
 
@@ -801,6 +812,8 @@ _FEED_WORDS = {
         "zeitschriften",
     ),
 }
+# menu words for the newest releases of every kind
+_NEW_WORDS = ("new releases", "latest releases", "neuerscheinungen", "neu erschienen")
 # how menus name a language, to prefer the site's own over the others
 _LANGUAGE_WORDS = {
     "de": ("german", "deutsch", "deutsche"),
@@ -823,9 +836,13 @@ def suggest_feeds(soup, page_url, hostname, language=None):
     ]
     found = {}
     kinds_of = {}
+    generic = []
     for anchor in soup.find_all("a", href=True):
         text = " ".join(anchor.get_text(" ", strip=True).lower().split())
         if not text or len(text) > 30 or release_likeness(text) >= 2:
+            continue
+        # a title with its year is a post ("Der Film (2026)"), not a menu entry
+        if re.search(r"\b(19|20)\d\d\b", text):
             continue
         link = _resolve_link(page_url, anchor["href"], hostname)
         if not link or not is_on_host(link, hostname):
@@ -836,6 +853,8 @@ def suggest_feeds(soup, page_url, hostname, language=None):
             continue
         if parsed.query:
             path += "?" + parsed.query
+        if any(re.search(rf"\b{w}\b", text) for w in _NEW_WORDS):
+            generic.append(((0 if _in_menu(anchor) else 1, len(path)), path))
         for category, words in _FEED_WORDS.items():
             for rank, word in enumerate(words):
                 if text == word:
@@ -855,15 +874,95 @@ def suggest_feeds(soup, page_url, hostname, language=None):
                 # the word decides first; language only between links of one word
                 score = (rank, spoken, match, path.count("/"), len(path))
                 kinds_of.setdefault(path, set()).add(category)
-                found.setdefault(category, []).append((score, path))
+                found.setdefault(category, []).append((score, path, _in_menu(anchor)))
                 break
+
+    # a page below another kind page is a genre of it ("Filme > Musical"),
+    # not a kind of its own
+    def nested(path):
+        return any(other != path and path.startswith(other) for other in kinds_of)
+
+    # post titles name kinds too ("… Der Film (2026)"): with a menu, only it counts
+    menu = any(link[2] for links in found.values() for link in links)
     # a page linked as several kinds is a mixed list, not a kind of its own
     chosen = {}
     for category, links in found.items():
-        own_pages = [link for link in links if len(kinds_of[link[1]]) == 1]
+        own_pages = [
+            link[:2]
+            for link in links
+            if len(kinds_of[link[1]]) == 1
+            and not nested(link[1])
+            and (link[2] or not menu)
+        ]
         if own_pages:
             chosen[category] = min(own_pages)[1]
+    # "New releases" carries the movies when the menu has no movie page
+    if 2000 not in chosen and generic:
+        chosen[2000] = min(generic)[1]
     return chosen
+
+
+_GERMAN_WORDS = re.compile(r"\b(und|der|die|das|mit|nicht|für|ist|auch|neu)\b")
+_ENGLISH_WORDS = re.compile(r"\b(and|the|with|not|for|is|also|new)\b")
+
+
+def page_language(soup):
+    """The page's language code: its lang attribute, else German or English
+    by their most common words. None when neither shows."""
+    root = soup.find("html")
+    code = str(root.get("lang") or "").strip().lower()[:2] if root else ""
+    if code.isalpha() and len(code) == 2:
+        return code
+    text = soup.get_text(" ", strip=True).lower()
+    german = len(_GERMAN_WORDS.findall(text))
+    english = len(_ENGLISH_WORDS.findall(text))
+    if max(german, english) < 10:
+        return None
+    return "de" if german > english else "en"
+
+
+def page_rss(soup, page_url, hostname):
+    """The RSS feed of this very page, as an alternate link or an RSS button.
+
+    Feeds carry the names, links and dates in fixed fields, so they read more
+    reliably than the page. A site-wide feed only counts for the main page.
+    """
+    page_path = urlparse(page_url).path or "/"
+    found = []
+    for node in soup.find_all(["link", "a"], href=True):
+        if node.name == "link":
+            kind = str(node.get("type") or "").lower()
+            if "rss" not in kind and "atom" not in kind:
+                continue
+        else:
+            names = " ".join(
+                [*(node.get("class") or []), str(node.get("title") or "")]
+            ).lower()
+            if "rss" not in names and node.get_text(strip=True).lower() != "rss":
+                continue
+        link = _resolve_link(page_url, node["href"], hostname)
+        if not link or not is_on_host(link, hostname):
+            continue
+        path = urlparse(link).path or "/"
+        if path != page_path and path.startswith(page_path) and "comments" not in path:
+            found.append((len(path), path))
+    return min(found)[1] if found else None
+
+
+_MENU_HINT = re.compile(r"\b(menu|nav|navbar|navigation)\b", re.I)
+
+
+def _in_menu(anchor):
+    """Whether a link sits in the site navigation rather than in a post."""
+    for parent in list(anchor.parents)[:8]:
+        if parent.name in ("nav", "header"):
+            return True
+        if parent.name in ("article", "main"):
+            return False
+        names = " ".join(parent.get("class") or []) + " " + str(parent.get("id") or "")
+        if _MENU_HINT.search(names.replace("-", " ").replace("_", " ")):
+            return True
+    return False
 
 
 def suggest_search_url(soup, page_url, hostname):
@@ -918,11 +1017,17 @@ def suggest_search_url(soup, page_url, hostname):
     return unique
 
 
-def search_quality(query, rows, feed_rows=()):
-    """How well search results answer the query; judges a template in preview."""
+def search_quality(query, rows, feed_rows=(), imdb_id=None):
+    """How well search results answer the query; judges a template in preview.
+
+    A search by IMDb ID passes the ID's title as the query: a result matches
+    when it names the title or carries the ID.
+    """
     words = [w.lower() for w in re.split(r"[\W_]+", query) if len(w) > 2]
 
     def matches_query(row):
+        if imdb_id and row.get("imdb_id") == imdb_id:
+            return True
         return all(w in row["title"].lower() for w in words)
 
     matches = sum(map(matches_query, rows))

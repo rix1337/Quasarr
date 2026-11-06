@@ -51,12 +51,14 @@ hostnames
 When no built-in template matches a hostname, Quasarr says so and offers **Set it up yourself**: a guided setup for
 experienced users that works on desktop and phones and needs no code.
 
-1. **Site:** hostname, a name and the language of its releases. You can also import a template someone shared.
-2. **Feed:** Quasarr finds the page for each kind in the site menu, picks the release block and the release name,
-   link, size and date, and tests every page. A preview shows what it read; pick a dropdown entry or click the page
-   to change it.
+1. **Site:** hostname, a name and the language of its releases, read from the site. You can also import a template
+   someone shared.
+2. **Feed:** Quasarr finds the page for each kind in the site menu, uses its RSS feed when the page offers one, picks
+   the release block and the release name, link, size and date, and tests every page. A kind that reads nothing is
+   left out. A preview shows what it read; pick a dropdown entry or click the page to change it.
 3. **Search:** Quasarr finds the site's search and tests it with each kind's newest release, by IMDb ID or, when the
-   site cannot find IDs, by title. Results laid out differently from the feed get their own fields.
+   site cannot find IDs, by title. Results that only link posts are opened, and a site that searches all kinds at
+   once is searched in each kind's section. Results laid out differently from the feed get their own fields.
 4. **Downloads:** Quasarr opens a release page and frames its download or crypter links. When there are none, the
    site needs a userscript.
 5. **Save:** a summary of everything set up, and the template to export.

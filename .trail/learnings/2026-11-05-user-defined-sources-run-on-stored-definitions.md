@@ -52,10 +52,14 @@ Shared templates import as JSON or as the exported module, read as a Python lite
 
 Release pages that only reveal links in a browser can go to the user's own userscript: the definition turns on the `userscript` download option, the release goes to the CAPTCHA queue unfetched, and the CAPTCHA page offers a readable template with fixed input and output stubs. The template has no update URL, so Quasarr never overwrites the user's code, and it works only after the user writes that code.
 
+The wizard must set up every shipped site that needs no code (DT, FX, MB, NK, SL) on its own; rerun it against them after changing detection. Menu pages count only from the site navigation when it has one, since post titles name kinds too, and a page below another kind page is a genre of it. A "new releases" page carries the movies when the menu has none. A page's own RSS feed replaces it, as feeds read more reliably. The site language comes from the page (lang attribute, else common German or English words) because title searches depend on it. IMDb is tried whenever Radarr or Sonarr know an ID for the example, even if the feed shows none, and a result counts when it names the ID's title or carries the ID. Search results that only link posts are followed to the first post and read like the feed. A site that searches all kinds at once is searched per kind in the kind's section. In an automatic run a kind that reads nothing is left out with a note instead of blocking the others.
+
 ## Tried and ruled out
 
 Editing built-in sites in the guided wizard: it rebuilds definitions from its own fields and silently drops filters, labels, parts and cleanups.
 
+
+Taking every link that reads like a release as one: a tag link such as "720p" in every post made each post hold two releases, so the headline won as the block and size and date were lost. Links whose target repeats three or more times on a page are no release links.
 
 Grouping repeated elements by their full class list missed real lists. Rows alternate classes, and posts carry per-post and per-genre classes, so no two items share a signature. Single stable classes per container fixed it.
 

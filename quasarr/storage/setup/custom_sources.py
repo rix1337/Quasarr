@@ -1051,6 +1051,14 @@ _WIZARD_SCRIPT = r"""
           return;
         }
         if (!data.success) { note('site-notes', 'error', 'Could not open the site: ' + data.error + '.'); return; }
+        // the site's own language, unless the user chose one; menus and title searches depend on it
+        if (data.language && !state.languageChosen && !config.definition &&
+            $('w-language').querySelector('option[value="' + data.language + '"]') && $('w-language').value !== data.language) {
+          $('w-language').value = data.language;
+          $('w-language').dispatchEvent(new Event('change'));
+          $('site-next').click();
+          return;
+        }
         state.feedSuggest = data.feeds || {};
         // a matching template is shown first; the next click sets the site up anyway
         var matched = (data.builtin && data.builtin.length) || (data.templates && data.templates.length);
@@ -1149,12 +1157,31 @@ _WIZARD_SCRIPT = r"""
           note('feed-notes', 'error', 'Could not load the page: ' + data.error + '.');
           return;
         }
+        // the page offers its own RSS feed: every kind moves to its feed, which reads more reliably
+        if (data.rss && !state.rssTried) {
+          state.rssTried = true;
+          var suffix = data.rss.indexOf(url) === 0 ? data.rss.slice(url.length) : '';
+          selectedCategories().forEach(function(category) {
+            var page = ensureSlash(feedUrls[category.id] || '/');
+            if (page === url) feedUrls[category.id] = data.rss;
+            else if (suffix && page !== '/') feedUrls[category.id] = page + suffix;
+          });
+          renderFeedRows();
+          loadFeedPage(data.rss);
+          return;
+        }
         state.feedIsRss = data.is_feed;
         if (data.is_feed) {
           feedPicker.hide();
           state.rssListing = data.listing;
-          lockStep('feed', false);
           note('feed-notes', 'ok', 'This is an RSS feed. Quasarr reads its names, links and dates on its own.');
+          if (state.autoTest) {
+            state.autoTest = false;
+            state.autoRun = true;
+            $('feed-test').click();
+          } else {
+            lockStep('feed', false);
+          }
           return;
         }
         feedPicker.load(data);
@@ -1265,10 +1292,20 @@ _WIZARD_SCRIPT = r"""
       waiting.remove();
       var allGood = true;
       state.feedRows = [];
+      var failing = results.filter(function(run) { return !run.data.success || run.data.issue; });
+      // a kind Quasarr chose on its own that reads nothing is left out instead of blocking the others
+      var leaveOut = auto && failing.length < results.length;
       results.forEach(function(run) {
         var data = run.data;
         var problem = !data.success ? (data.error || 'the test failed') : data.issue;
         if (problem) {
+          if (leaveOut) {
+            $('cat-' + run.category.id).checked = false;
+            delete feedUrls[run.category.id];
+            note('feed-results', 'warn', run.category.name + ': ' + problem + '.' + (data.success ? skippedText(data) : '') +
+              ' Quasarr left ' + run.category.name + ' out. Choose it again above to set it up yourself.');
+            return;
+          }
           allGood = false;
           note('feed-results', 'error', run.category.name + ': ' + problem + '.' + (data.success ? skippedText(data) : ''));
           return;
@@ -1278,11 +1315,13 @@ _WIZARD_SCRIPT = r"""
         state.feedRows = state.feedRows.concat(data.rows);
         state.feedByKind[run.category.id] = data.rows;
       });
+      if (leaveOut && failing.length) renderFeedRows();
       setFeedTested(allGood);
       if (auto) lockStep('feed', false);
       if (allGood && auto) {
         // a summary at the top informs without stopping the user
-        var read = results.map(function(run) { return run.category.name + ' ' + run.data.parsed; });
+        var read = results.filter(function(run) { return failing.indexOf(run) < 0; })
+          .map(function(run) { return run.category.name + ' ' + run.data.parsed; });
         note('feed-notes', 'ok', 'Quasarr set this up on its own: it found a page for each kind in the site menu, ' +
           'chose the release list and read releases from every page (' + read.join(', ') + '). ' +
           'Nothing is saved yet. Check its choices and the results below, then continue.');
@@ -1421,9 +1460,11 @@ _WIZARD_SCRIPT = r"""
           if (hit) searchQueries[category.id] = hit.imdb_id;
         });
     })).then(function() {
-      // a site that shows no IMDb IDs on its releases most likely searches by title
-      var video = selectedCategories().some(isVideo);
-      state.titleFromFeed = video && !withId;
+      // IMDb is tried first whenever an ID is known, from the feed or through Radarr and Sonarr;
+      // without any, the site is searched by title
+      var video = selectedCategories().filter(isVideo);
+      withId = withId || video.some(function(category) { return /^tt\d+$/.test(searchQueries[category.id] || ''); });
+      state.titleFromFeed = video.length > 0 && !withId;
       if (state.titleFromFeed) document.querySelector('input[name="w-mode"][value="title"]').checked = true;
       renderSearchQueries();
     });
@@ -1436,7 +1477,10 @@ _WIZARD_SCRIPT = r"""
     $('w-search-language').appendChild(el('option', {value: option.value, text: option.textContent}));
   });
   $('w-search-language').onchange = function() { $('w-language').value = $('w-search-language').value; };
-  $('w-language').addEventListener('change', function() { $('w-search-language').value = $('w-language').value; });
+  $('w-language').addEventListener('change', function(event) {
+    if (event.isTrusted) state.languageChosen = true;
+    $('w-search-language').value = $('w-language').value;
+  });
 
   function setLayout(value) {
     $('search-layouts').hidden = false;
@@ -1466,6 +1510,13 @@ _WIZARD_SCRIPT = r"""
       categories: selectedCategories().map(function(category) { return category.id; })
     };
     if (settings.method === 'post') settings.body = $('w-search-body').value.trim();
+    if (state.searchFollow) settings.follow = state.searchFollow;
+    if (state.searchSections) {
+      settings.urls = {};
+      Object.keys(state.searchSections).forEach(function(id) {
+        if (settings.categories.indexOf(Number(id)) >= 0) settings.urls[id] = [state.searchSections[id]];
+      });
+    }
     return settings;
   }
 
@@ -1616,6 +1667,24 @@ _WIZARD_SCRIPT = r"""
       };
     }
     runSearches(runs, progress('searching')).then(function(results) {
+      // results that only link posts: the releases are on the post, read like the feed
+      var failed = results.filter(function(run) { return isVideo(run.category) && !searchWorked(run); });
+      var list = state.searchList;
+      var linked = failed.filter(function(run) { return run.data.success && (run.data.table || run.data.rows || []).length; });
+      if (state.searchFollow || !linked.length || !list || !list.item || !list.link || !list.link.selector) return results;
+      var layout = document.querySelector('input[name="w-layout"]:checked').value;
+      state.searchFollow = {selector: list.item + ' ' + list.link.selector, limit: 1};
+      setLayout('same');
+      return runSearches(linked.map(function(run) { return run.category; }), progress('opening the first result for'))
+        .then(function(retried) {
+          if (!retried.some(searchWorked)) { state.searchFollow = null; setLayout(layout); return results; }
+          note('search-results', 'ok', 'The results link to posts that hold the releases, so Quasarr opens the first result ' +
+            'and reads its releases like the feed.');
+          return results.map(function(run) {
+            return retried.filter(function(again) { return again.category === run.category; })[0] || run;
+          });
+        });
+    }).then(function(results) {
       var failed = results.filter(function(run) { return isVideo(run.category) && !searchWorked(run); });
       if (mode() !== 'imdb' || !failed.length) return results;
       // the site does not find IMDb IDs: titles in the site's language may work
@@ -1637,6 +1706,31 @@ _WIZARD_SCRIPT = r"""
           return retried.filter(function(again) { return again.category === run.category; })[0] || run;
         });
       });
+    }).then(function(results) {
+      // a search over all sections finds other kinds; the kind's own section may search just it
+      var mixed = results.filter(function(run) {
+        return isVideo(run.category) && !searchWorked(run) && run.data.success &&
+          Object.keys(run.data.skipped || {}).some(function(reason) { return /^not a /.test(reason); });
+      });
+      var address = $('w-search-url').value.trim();
+      var query = address.indexOf('?') >= 0 ? address.slice(address.indexOf('?')) : '';
+      if (state.searchSections || !mixed.length || $('w-method').value !== 'get' || !query ||
+          ensureSlash(address.split('?')[0]) !== '/') return results;
+      var sections = {};
+      selectedCategories().forEach(function(category) {
+        var page = ensureSlash(feedUrls[category.id] || '/').replace(/(feed\/?|rss(\.xml)?\/?)$/, '');
+        if (page !== '/') sections[category.id] = 'https://{host}' + page + query;
+      });
+      if (!Object.keys(sections).length) return results;
+      state.searchSections = sections;
+      return runSearches(mixed.map(function(run) { return run.category; }), progress('searching only its own section for'))
+        .then(function(retried) {
+          if (!retried.some(searchWorked)) { state.searchSections = null; return results; }
+          note('search-results', 'ok', 'The site searches all kinds at once, so Quasarr searches each kind in its own section.');
+          return results.map(function(run) {
+            return retried.filter(function(again) { return again.category === run.category; })[0] || run;
+          });
+        });
     }).then(function(results) {
       done();
       results.forEach(function(run) { showSearch(run); });
@@ -1664,7 +1758,7 @@ _WIZARD_SCRIPT = r"""
         note('search-notes', 'ok', 'Quasarr set up the search on its own. ' +
           (state.videoFound === false ? 'No example movie or show was found, by IMDb ID or by title. '
             : mode() === 'imdb' ? 'Movies and shows are found by IMDb ID. '
-            : state.titleFromFeed ? 'The feed shows no IMDb IDs, so movies and shows are searched by title. '
+            : state.titleFromFeed ? 'No IMDb ID was found for the examples, so movies and shows are searched by title. '
             : 'Searching by IMDb ID found nothing, so movies and shows are searched by title. ') +
           'Music and books are searched by name. Results: ' + read.join(', ') + '. ' +
           'Nothing is saved yet. Check the results below, change an example if the site does not list it, then continue.');
