@@ -92,6 +92,9 @@ def run_wizard(page, base, hostname):
     )
     page.click("#download-next")
     page.wait_for_timeout(1000)
+    # the name and hostname lines would name the site
+    summary = _text(page, "#summary")
+    result["save"] = summary[summary.find("Feed") :] if "Feed" in summary else summary
     template = json.loads(
         page.eval_on_selector("#w-template", "e => e.value") or "null"
     )
@@ -165,7 +168,8 @@ def main():
             seconds = round(time.time() - started)
             print(f"{key}: {'OK' if not problems else 'PROBLEMS'} in {seconds} s")
             for step, text in steps.items():
-                summary = " ".join(text.replace(hosts[key], "{host}").split())[:300]
+                limit = 1500 if step == "save" else 300
+                summary = " ".join(text.replace(hosts[key], "{host}").split())[:limit]
                 print(f"  {step}: {summary}")
             for problem in problems:
                 print(f"  ! {problem}")

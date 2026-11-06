@@ -1470,6 +1470,8 @@ def discover_search(shared_state, hostname, feed_url, listing, fetch=None):
         # a template that finds text finds music and books too
         "phrase": True,
         "attempts": attempts,
+        # the other addresses, for a kind the found one cannot search
+        "alternatives": [c for c in candidates if c != found["search"]],
     }
 
 

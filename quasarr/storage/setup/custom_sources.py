@@ -1616,6 +1616,9 @@ _WIZARD_SCRIPT = r"""
         $('w-search-body').value = data.search.body || '';
         // the mode is not taken from the feed: the test tries IMDb IDs first
         state.searchList = data.search_list;
+        // other GET addresses of the site, tried for a kind the found one cannot search
+        state.searchAlternatives = (data.alternatives || []).filter(function(c) { return c.method === 'get'; })
+          .map(function(c) { return c.url; });
         setLayout(data.search_list ? 'own' : 'same');
         note('search-notes', 'ok', 'Found the search: searching for “' + data.query + '” returned that release.');
         if (!auto) { done(); waiting.remove(); loadResults(data.query); return; }
@@ -1845,7 +1848,48 @@ _WIZARD_SCRIPT = r"""
         });
       }, Promise.resolve()).then(function() { renderSearchQueries(); return results; });
     }).then(function(results) {
+      // a kind the found address cannot search tries its own section, then the site's other addresses
+      var stuck = results.filter(function(run) { return !searchWorked(run) && !timedOut(run.data); });
+      if (!stuck.length || $('w-method').value !== 'get') return results;
+      var main = 'https://{host}' + ensureSlash($('w-search-url').value.trim());
+      return stuck.reduce(function(chain, run) {
+        var id = run.category.id;
+        var page = ensureSlash(feedUrls[id] || '/').replace(/(feed\/?|rss(\.xml)?\/?)$/, '');
+        var query = main.indexOf('?') >= 0 ? main.slice(main.indexOf('?')) : '';
+        var addresses = (page !== '/' && query ? ['https://{host}' + page + query] : []).concat(state.searchAlternatives || [])
+          .filter(function(url, index, all) { return url !== main && all.indexOf(url) === index; }).slice(0, 3);
+        return addresses.reduce(function(inner, url) {
+          return inner.then(function(found) {
+            if (found) return found;
+            state.searchSections = Object.assign({}, state.searchSections || {});
+            state.searchSections[id] = url;
+            return runSearches([run.category], progress('trying another search address for')).then(function(again) {
+              return searchWorked(again[0]) ? again[0] : null;
+            });
+          });
+        }, Promise.resolve(null)).then(function(found) {
+          if (found) {
+            results = results.map(function(other) { return other === run ? found : other; });
+            var name = run.category.name.toLowerCase();
+            state.videoMissing = (state.videoMissing || []).filter(function(missing) { return missing !== name; });
+            if (!state.videoMissing.length && state.videoFound === false) state.videoFound = null;
+          } else if (state.searchSections) {
+            delete state.searchSections[id];
+            if (!Object.keys(state.searchSections).length) state.searchSections = null;
+          }
+        });
+      }, Promise.resolve()).then(function() { return results; });
+    }).then(function(results) {
       done();
+      // what each kind's test found, for the summary on the last step
+      state.searchReport = results.map(function(run) {
+        var asked = run.data.query || searchQueries[run.category.id];
+        var own = state.searchSections && state.searchSections[run.category.id];
+        var how = !run.data.success ? (timedOut(run.data) ? 'timed out' : 'failed')
+          : searchWorked(run) ? run.data.parsed + (run.data.parsed === 1 ? ' release' : ' releases') + ' found'
+          : 'nothing matching found';
+        return [run.category.name, how + ' for “' + asked + '”' + (own ? ', searched at ' + path(own) : '')];
+      });
       results.forEach(function(run) { showSearch(run); });
       var worked = results.filter(searchWorked)[0];
       if (auto && worked) {
@@ -2152,6 +2196,7 @@ _WIZARD_SCRIPT = r"""
       }
       if (s.phrase) line('Music and books', 'by name');
       line('Results page', current.search_list ? 'read with its own fields' : 'read like the feed');
+      (state.searchReport || []).forEach(function(entry) { line('Search test: ' + entry[0], entry[1]); });
     }
     line('Downloads', current.download.userscript ? 'Your own userscript collects the links'
       : (current.download.links && current.download.links.selector) || 'Releases link to their containers');

@@ -57,11 +57,11 @@ experienced users that works on desktop and phones and needs no code.
    the release block and the release name, link, size and date, and tests every page. A kind that reads nothing is
    left out. A preview shows what it read; pick a dropdown entry or click the page to change it.
 3. **Search:** Quasarr finds the site's search and tests it with each kind's newest release, by IMDb ID or, when the
-   site cannot find IDs, by title. Results that only link posts are opened, and a site that searches all kinds at
-   once is searched in each kind's section. Results laid out differently from the feed get their own fields.
+   site cannot find IDs, by title. Results that only link posts are opened, and a kind the found search cannot find
+   tries its own section and the site's other search addresses. Results laid out differently from the feed get their own fields.
 4. **Downloads:** Quasarr opens a release page and frames its download or crypter links. When there are none, the
    site needs a userscript.
-5. **Save:** a summary of everything set up, and the template to export.
+5. **Save:** a summary of everything set up, with each kind's search test, and the template to export.
 
 Every step has a test that runs the same code Quasarr uses for your apps, so you see the releases and links before
 saving.
