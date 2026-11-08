@@ -10,6 +10,7 @@ from urllib.parse import quote, unquote
 from bottle import HTTPResponse, redirect, request, response
 
 import quasarr.providers.html_images as images
+from quasarr.api.captcha.custom_userscript import custom_user_js
 from quasarr.api.jdownloader import get_jdownloader_disconnected_page
 from quasarr.downloads import fail, submit_final_download_urls
 from quasarr.downloads.linkcrypters.hide import (
@@ -24,6 +25,7 @@ from quasarr.providers.log import debug, error, info, trace
 from quasarr.providers.notifications import update_release_notification
 from quasarr.providers.notifications.helpers.notification_types import NotificationType
 from quasarr.providers.statistics import StatsHelper
+from quasarr.search.sources.helpers.custom_source import USERSCRIPT_MIRROR
 from quasarr.storage.categories import (
     get_download_category_from_package_id,
     get_download_category_mirrors,
@@ -48,6 +50,12 @@ def check_package_exists(package_id):
             '''),
             content_type="text/html",
         )
+
+
+# the SponsorsHelper hint appears for users above these manual CAPTCHA counts
+SPONSORS_HINT_DAY = 10
+SPONSORS_HINT_MONTH = 50
+SECONDS_PER_MANUAL_CAPTCHA = 30
 
 
 def setup_captcha_routes(app):
@@ -98,6 +106,13 @@ def setup_captcha_routes(app):
         except (TypeError, ValueError):
             pass
         return {"season": season, "episode": episode}
+
+    def is_userscript_link(link):
+        return (
+            isinstance(link, (list, tuple))
+            and len(link) > 1
+            and link[1] == USERSCRIPT_MIRROR
+        )
 
     def is_he_link(link):
         url = link[0] if isinstance(link, (list, tuple)) else link
@@ -207,6 +222,9 @@ def setup_captcha_routes(app):
                     return True
                 return (sj and sj in url) or (dj and dj in url)
 
+            has_userscript_links = any(
+                is_userscript_link(link) for link in prioritized_links
+            )
             has_junkies_links = any(is_junkies_link(link) for link in prioritized_links)
             has_he_links = any(is_he_link(link) for link in prioritized_links)
 
@@ -239,7 +257,10 @@ def setup_captcha_routes(app):
                 )
                 for link in prioritized_links
             )
-            if has_hide_links:
+            if has_userscript_links:
+                debug("Redirecting to the page for the user's own userscript")
+                redirect(f"/captcha/custom?data={quote(encoded_payload)}")
+            elif has_hide_links:
                 debug("Redirecting to Hide page")
                 redirect(f"/captcha/hide?data={quote(encoded_payload)}")
             elif has_junkies_links:
@@ -313,6 +334,7 @@ def setup_captcha_routes(app):
             "he": "HE",
             "keeplinks": "KeepLinks",
             "tolink": "ToLink",
+            "custom": "Release Page",
         }
         provider_name = provider_names.get(provider_type, "Provider")
         userscript_url = f"/captcha/{provider_type}.user.js"
@@ -349,7 +371,7 @@ def setup_captcha_routes(app):
             <div>
                 <!-- Primary action - the quick transfer link -->
                 <p>
-                    {render_button(f"Open {provider_name} & Get Download Links", "primary", {"onclick": f"handleProviderClick('{js_url}', '{storage_key}', '{js_provider_name}', '{js_userscript_url}')"})}
+                    {render_button(f"Open {provider_name} & Get Download Links", "primary", {"onclick": f"handleProviderClick('{js_url}', '{storage_key}', '{js_provider_name}', '{js_userscript_url}', {'true' if provider_type == 'custom' else 'false'})"})}
                 </p>
 
                 <!-- Reset tutorial button -->
@@ -367,7 +389,7 @@ def setup_captcha_routes(app):
                             <p style="font-size: 0.9em;">
                                 If the userscript doesn't work, you can manually paste the links below:
                             </p>
-                            <form id="bypass-form" action="/captcha/bypass-submit" method="post" enctype="multipart/form-data" onsubmit="if(typeof incrementCaptchaAttempts==='function')incrementCaptchaAttempts();">
+                            <form id="bypass-form" action="/captcha/bypass-submit" method="post" enctype="multipart/form-data" onsubmit="if(this.dataset.sent){{return false;}}this.dataset.sent='1';this.querySelector('button[type=submit]').disabled=true;if(typeof incrementCaptchaAttempts==='function')incrementCaptchaAttempts();">
                                 <input type="hidden" name="package_id" value="{package_id}" />
                                 <input type="hidden" name="title" value="{title}" />
                                 <input type="hidden" name="password" value="{password}" />
@@ -407,14 +429,28 @@ def setup_captcha_routes(app):
 
               // Global handler for provider clicks
               if (!window.handleProviderClick) {{
-                  window.handleProviderClick = function(url, storageKey, providerName, userscriptUrl) {{
+                  window.handleProviderClick = function(url, storageKey, providerName, userscriptUrl, ownScript) {{
                     if (localStorage.getItem(storageKey) === 'true') {{
                         if(typeof incrementCaptchaAttempts==='function') incrementCaptchaAttempts();
                         window.location.href = url;
                         return;
                     }}
 
-                    const content = `
+                    const content = ownScript ? `
+                        <p style="margin-bottom: 8px;">
+                            <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener noreferrer">1. On mobile Safari/Firefox or any Desktop Browser install Tampermonkey</a>
+                        </p>
+                        <p style="margin-top: 0; margin-bottom: 8px;">
+                            <a href="${{userscriptUrl}}" target="_blank">2. Install the userscript template for your own sites</a>
+                        </p>
+                        <p style="margin-top: 0; margin-bottom: 8px;">
+                            3. Add your own JavaScript where the template says "Your code". The template does not work out of the box:
+                            it only connects the page to Quasarr. Do not change the part marked "do not modify".
+                        </p>
+                        <p style="margin-top: 0; margin-bottom: 12px;">
+                            4. Open the release page; your code sends the links back to Quasarr.
+                        </p>
+                    ` : `
                         <p style="margin-bottom: 8px;">
                             <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener noreferrer">1. On mobile Safari/Firefox or any Desktop Browser install Tampermonkey</a>
                         </p>
@@ -489,6 +525,7 @@ def setup_captcha_routes(app):
         <html>
           <body>
             <h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
+            {render_sponsors_hint()}
             {package_selector}
             {failed_warning}
                 {render_userscript_section(url, package_id, title, password, "hide")}
@@ -535,6 +572,7 @@ def setup_captcha_routes(app):
         <html>
           <body>
             <h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
+            {render_sponsors_hint()}
             {package_selector}
             {failed_warning}
                 {render_userscript_section(url, package_id, title, password, "junkies")}
@@ -549,8 +587,8 @@ def setup_captcha_routes(app):
           </body>
         </html>""")
 
-    @app.get("/captcha/he")
-    def serve_he_captcha():
+    def render_page_for_userscript(provider_type):
+        """A protected release solved by a userscript on its own page."""
         payload = decode_payload()
 
         if "error" in payload:
@@ -581,9 +619,10 @@ def setup_captcha_routes(app):
         <html>
           <body>
             <h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
+            {render_sponsors_hint()}
             {package_selector}
             {failed_warning}
-                {render_userscript_section(url, package_id, title, password, "he")}
+                {render_userscript_section(url, package_id, title, password, provider_type)}
             {source_button}
             <p>
                 {render_button("Delete Package", "secondary", {"onclick": f"location.href='/captcha/delete/{package_id}?title={quote(title)}'"})}
@@ -594,6 +633,15 @@ def setup_captcha_routes(app):
 
           </body>
         </html>""")
+
+    @app.get("/captcha/he")
+    def serve_he_captcha():
+        return render_page_for_userscript("he")
+
+    @app.get("/captcha/custom")
+    def serve_custom_captcha():
+        """Releases of the user's own sites, solved by their own userscript."""
+        return render_page_for_userscript("custom")
 
     @app.get("/captcha/keeplinks")
     def serve_keeplinks_captcha():
@@ -628,6 +676,7 @@ def setup_captcha_routes(app):
         <html>
           <body>
             <h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
+            {render_sponsors_hint()}
             {package_selector}
             {failed_warning}
                 {render_userscript_section(url, package_id, title, password, "keeplinks")}
@@ -675,6 +724,7 @@ def setup_captcha_routes(app):
         <html>
           <body>
             <h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
+            {render_sponsors_hint()}
             {package_selector}
             {failed_warning}
                 {render_userscript_section(url, package_id, title, password, "tolink")}
@@ -722,6 +772,7 @@ def setup_captcha_routes(app):
         <html>
           <body>
             <h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>
+            {render_sponsors_hint()}
             {package_selector}
             {failed_warning}
                 {render_userscript_section(url, package_id, title, password, "filecrypt")}
@@ -735,6 +786,20 @@ def setup_captcha_routes(app):
 
           </body>
         </html>""")
+
+    @app.get("/captcha/custom.user.js")
+    @public_endpoint
+    def serve_custom_user_js():
+        from quasarr.storage.custom_sources import load_definitions
+
+        hosts = [
+            str(d.get("hostname") or "")
+            for d in load_definitions().values()
+            if (d.get("download") or {}).get("userscript") and d.get("hostname")
+        ]
+        response.content_type = "application/javascript"
+        response.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        return custom_user_js(hosts)
 
     @app.get("/captcha/filecrypt.user.js")
     @public_endpoint
@@ -834,6 +899,8 @@ def setup_captcha_routes(app):
                 for l in links
             )
 
+            if any(is_userscript_link(l) for l in links):
+                return "custom"
             if has_hide:
                 return "hide"
             elif has_junkies:
@@ -894,6 +961,34 @@ def setup_captcha_routes(app):
                     const [captchaType, encodedData] = this.value.split('|');
                     window.location.href = '/captcha/' + captchaType + '?data=' + encodedData;
                 }});
+            </script>
+        """
+
+    def render_sponsors_hint():
+        """A quiet pointer to SponsorsHelper for users who solve many CAPTCHAs by hand."""
+        if shared_state.values.get("helper_active"):
+            return ""
+        try:
+            today, month = StatsHelper(shared_state).manual_captcha_counts()
+        except Exception:
+            return ""
+        if today <= SPONSORS_HINT_DAY and month <= SPONSORS_HINT_MONTH:
+            return ""
+        minutes = max(1, round(month * SECONDS_PER_MANUAL_CAPTCHA / 60))
+        return f"""
+            <div id="sponsors-hint" style="display: none; text-align: left; font-size: 0.875rem; margin-bottom: 16px;
+                padding: 10px 12px; border: 1px solid rgba(128,128,128,0.3); border-radius: 8px; background: rgba(128,128,128,0.08);">
+                💖 You solved {today} CAPTCHA{"s" if today != 1 else ""} by hand today and {month} in the last 30 days,
+                roughly {minutes} minute{"s" if minutes != 1 else ""} of clicking.
+                <a href="https://github.com/rix1337/Quasarr?tab=readme-ov-file#sponsorshelper" target="_blank" rel="noopener noreferrer">SponsorsHelper</a>
+                solves them for you. It runs while you have an active monthly GitHub sponsorship: crypters change their
+                CAPTCHAs all the time, and the recurring sponsorship pays for keeping it working.
+                <button type="button" class="btn-subtle" style="margin-left: 4px;" onclick="localStorage.setItem('sponsorsHintHidden', new Date().toDateString()); document.getElementById('sponsors-hint').remove();">Hide for today</button>
+            </div>
+            <script>
+              if (localStorage.getItem('sponsorsHintHidden') !== new Date().toDateString()) {{
+                document.getElementById('sponsors-hint').style.display = 'block';
+              }}
             </script>
         """
 
@@ -1266,6 +1361,9 @@ def setup_captcha_routes(app):
                     {render_button("Back", "secondary", {"onclick": "location.href='/'"})}
                 </p>''')
 
+        except HTTPResponse:
+            # a package solved meanwhile, as by a second click, answers with its own page
+            raise
         except Exception as e:
             info(f"Bypass submission error: {e}")
             return render_centered_html(f'''<h1><img src="{images.logo}" type="image/webp" alt="Quasarr logo" class="logo"/>Quasarr</h1>

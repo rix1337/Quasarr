@@ -45,7 +45,7 @@ def _arr_client_selection_form_html(radarr_required_sites, sonarr_required_sites
     radarr_sites = ", ".join(sorted(site.upper() for site in radarr_required_sites))
     sonarr_sites = ", ".join(sorted(site.upper() for site in sonarr_required_sites))
     return f"""
-    <p>Configured hostnames support both movie and TV searches. Quasarr needs one
+    <p>Your sites support both movie and TV searches. Quasarr needs one
     *arr client to launch, but does not require both.</p>
     <p>Choose the client you use. You can configure the other later in Settings.</p>
     <form action="/api/arr/client" method="post">
@@ -87,7 +87,7 @@ def select_arr_client_config(
         )
 
     warn(
-        "Configured hostnames support both movie and TV searches. "
+        "Your sites support both movie and TV searches. "
         "Choose Radarr or Sonarr; the other client remains optional."
     )
     quasarr.providers.web_server.temp_server_success = False

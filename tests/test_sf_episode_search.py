@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from quasarr.search.sources import sf
+from quasarr.search.sources.templates.sf import search as sf
 
 SEASON_HTML = """
 <div class="entry">

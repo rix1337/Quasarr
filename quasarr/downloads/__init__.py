@@ -577,7 +577,7 @@ def download(
             source_candidates.append((key, source, False))
 
         for key, source, from_source_key in source_candidates:
-            hostname = config.get(key)
+            hostname = getattr(source, "custom_hostname", None) or config.get(key)
             if not from_source_key and not (
                 hostname and hostname.lower() in url.lower()
             ):

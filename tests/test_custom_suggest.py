@@ -1,0 +1,489 @@
+# -*- coding: utf-8 -*-
+
+import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from bs4 import BeautifulSoup
+
+from quasarr.search.sources.helpers import custom_source
+from quasarr.search.sources.helpers.custom_source import (
+    CustomSource,
+    FetchResult,
+    compile_definition,
+    parse_listing,
+)
+from quasarr.search.sources.helpers.custom_suggest import (
+    build_selector,
+    discover_search,
+    listing_from_suggestion,
+    pick_query,
+    search_quality,
+    suggest_download,
+    suggest_listing,
+)
+
+HOST = "source.invalid"
+URL = f"https://{HOST}/movies/"
+
+
+def release(index, extra_class=""):
+    return f"""
+    <article class="post post-{40000 + index} {extra_class} genre-{index}">
+      <h2 class="entry-title">
+        <a href="/r/{index}/">Movie.Number{index}.2026.German.1080p.WEB.x264-GRP</a>
+      </h2>
+      <p class="meta"><b>Größe:</b> {index},5 GB</p>
+      <p class="when"><span>Datum:</span> 0{index}.01.2026 10:00</p>
+      <a href="https://www.imdb.com/title/tt100000{index}/">IMDb</a>
+    </article>"""
+
+
+def blog_page(count=5):
+    posts = "".join(release(i, "alt" if i % 2 else "") for i in range(1, count + 1))
+    return f"""<html><body>
+      <nav><a href="/">Home</a><a href="/movies/">Movies</a></nav>
+      <form action="/" method="get"><input type="text" name="s"></form>
+      <main>{posts}</main>
+      <footer><a href="/imprint/">Imprint</a></footer>
+    </body></html>"""
+
+
+def listing_for(markup, **kwargs):
+    suggestion = suggest_listing(markup, URL, HOST, **kwargs)
+    return suggestion, listing_from_suggestion(suggestion["best"])
+
+
+def parse(markup, listing):
+    definition = {
+        "key": "c1",
+        "name": "Synthetic",
+        "hostname": HOST,
+        "language": "de",
+        "feeds": [{"category": 2000, "url": "https://{host}/movies/"}],
+        "list": listing,
+    }
+    return parse_listing(markup, URL, compile_definition(definition)["list"], HOST)
+
+
+class ListingSuggestionTests(unittest.TestCase):
+    def test_posts_with_per_post_classes_are_one_item_each(self):
+        suggestion, listing = listing_for(blog_page())
+
+        self.assertEqual("article.post", listing["item"])
+        report = parse(blog_page(), listing)
+        self.assertEqual(5, len(report["rows"]))
+        row = report["rows"][0]
+        self.assertEqual("Movie.Number1.2026.German.1080p.WEB.x264-GRP", row["title"])
+        self.assertEqual(f"https://{HOST}/r/1/", row["link"])
+        self.assertEqual(1536, row["size_mb"])
+        # read as German time, as the site is German
+        self.assertEqual("Thu, 01 Jan 2026 09:00:00 +0000", row["date"])
+        self.assertEqual("tt1000001", row["imdb_id"])
+
+    def test_labels_are_suggested_for_mixed_text(self):
+        suggestion, listing = listing_for(blog_page())
+        self.assertEqual({"label": "Größe"}, listing["size"])
+        self.assertEqual({"label": "Datum"}, listing["date"])
+
+    def test_navigation_links_are_never_items(self):
+        suggestion, _ = listing_for(blog_page())
+        self.assertFalse(
+            any("nav" in c["selector"] for c in suggestion["items"]), suggestion
+        )
+
+    def test_one_post_with_several_releases_splits_per_release(self):
+        tables = "".join(
+            f"""<table><tr><td>
+              <strong>Datum:</strong> 0{i}.02.2026<br>
+              <strong>Release: <a href="https://filecrypt.cc/Container/ABC{i}.html">
+                »Show.S0{i}.German.720p.WEB.x264-GRP«</a></strong><br>
+              <strong>Size:</strong> {i} GB
+            </td></tr></table>"""
+            for i in range(1, 5)
+        )
+        markup = f"""<html><body><article class="post">
+            <h2 class="entry-title"><a href="/show/">Show</a></h2>
+            <div class="entry-content">{tables}</div></article></body></html>"""
+
+        _, listing = listing_for(markup)
+        report = parse(markup, listing)
+
+        self.assertEqual(
+            [f"Show.S0{i}.German.720p.WEB.x264-GRP" for i in range(1, 5)],
+            [row["title"] for row in report["rows"]],
+        )
+        self.assertTrue(report["rows"][0]["link"].startswith("https://filecrypt.cc/"))
+        self.assertEqual(2048, report["rows"][1]["size_mb"])
+
+    def test_single_result_search_page(self):
+        markup = blog_page(count=1)
+        self.assertIsNone(suggest_listing(markup, URL, HOST)["best"])
+        _, listing = listing_for(markup, min_items=1)
+        self.assertEqual(1, len(parse(markup, listing)["rows"]))
+
+    def test_search_templates_come_from_forms_and_the_feed_path(self):
+        suggestion, _ = listing_for(blog_page())
+        self.assertEqual(
+            {"url": "https://{host}/?s={q}", "method": "get"}, suggestion["search"][0]
+        )
+        self.assertIn(
+            {"url": "https://{host}/movies/?s={q}", "method": "get"},
+            suggestion["search"],
+        )
+
+    def test_post_search_forms_keep_their_hidden_fields(self):
+        markup = blog_page().replace(
+            '<form action="/" method="get"><input type="text" name="s"></form>',
+            '<form action="/login" method="post"><input type="text" name="login_name">'
+            '<input type="password" name="pw"></form>'
+            '<form action="/search" method="post"><input type="search" name="q">'
+            '<input type="hidden" name="mode" value="all"></form>',
+        )
+        suggestion, _ = listing_for(markup)
+        self.assertEqual(
+            {
+                "url": "https://{host}/search",
+                "method": "post",
+                "body": "q={q}&mode=all",
+            },
+            suggestion["search"][0],
+        )
+
+
+class SearchKindTests(unittest.TestCase):
+    def test_results_of_other_kinds_are_left_out(self):
+        definition = {
+            "key": "c1",
+            "name": "Synthetic",
+            "hostname": HOST,
+            "language": "en",
+            "feeds": [{"category": 3000, "url": "https://{host}/media/music/rss.xml"}],
+            "list": {
+                "item": "div.r",
+                "title": {"selector": "h2 a"},
+                "link": {"selector": "h2 a", "attr": "href"},
+            },
+            "search": {
+                "mode": "title",
+                "phrase": True,
+                "url": "https://{host}/?s={q}",
+                "categories": [3000],
+                "kind_link": True,
+            },
+        }
+        markup = """<div class="r"><h2><a href="/1.html">Artist-Album-2026-GRP</a></h2><a href="/media/music/">Music</a></div>
+            <div class="r"><h2><a href="/2.html">Movie.2026.1080p.WEB.x264-GRP</a></h2><a href="/media/videos/">Videos</a></div>"""
+        source = CustomSource(definition)
+        report = parse_listing(
+            markup,
+            URL,
+            source.spec["search_list"],
+            HOST,
+            kind_path=source.kind_path(3000),
+        )
+        self.assertEqual(
+            ["Artist-Album-2026-GRP"], [r["title"] for r in report["rows"]]
+        )
+        self.assertEqual({"other kind": 1}, report["skipped"])
+
+    def test_quotes_around_a_name_are_dropped(self):
+        report = parse(
+            '<div class="r"><a href="/1/">»Movie.2026.1080p.WEB.x264-GRP«</a></div>',
+            {
+                "item": "div.r",
+                "title": {"selector": "a"},
+                "link": {"selector": "a", "attr": "href"},
+                "title_cleanup": "dots",
+            },
+        )
+        self.assertEqual("Movie.2026.1080p.WEB.x264-GRP", report["rows"][0]["title"])
+
+
+class ResultBlockTests(unittest.TestCase):
+    def test_a_recent_posts_box_is_not_the_results(self):
+        results = "".join(
+            f"""<div class="post"><h1><a href="/r/{i}/">Other.Movie.{i}.2020.1080p.WEB.x264-GRP</a></h1></div>"""
+            for i in range(1, 4)
+        )
+        recent = "".join(
+            f"""<article><h2 class="t"><a href="/n/{i}/">New.Movie.{i}.2026.1080p.WEB.x264-GRP</a></h2></article>"""
+            for i in range(1, 6)
+        )
+        markup = (
+            f"<html><body><main>{results}</main><aside>{recent}</aside></body></html>"
+        )
+        feed = {f"https://{HOST}/n/{i}/" for i in range(1, 6)}
+        best = suggest_listing(markup, URL, HOST, min_items=1, avoid_links=feed)["best"]
+        self.assertEqual("div.post", best["item"])
+
+    def test_another_release_is_picked_once_one_was_tried(self):
+        rows = [
+            {"title": "First.Movie.2026.1080p-GRP"},
+            {"title": "Second.Film.2026.1080p-GRP"},
+        ]
+        first, _ = pick_query(rows)
+        second, _ = pick_query(rows, [first])
+        self.assertNotEqual(first, second)
+
+
+class TagLinkTests(unittest.TestCase):
+    def test_a_tag_link_in_every_post_does_not_split_it(self):
+        posts = "".join(
+            f"""<div class="post"><h1><a href="/r/{i}/">Show.{i}.S01.German.1080p.WEB.x264-GRP</a></h1>
+            <p>Größe: {i} GB</p><a href="/c/hd/">HD - 720p</a></div>"""
+            for i in range(1, 6)
+        )
+        suggestion, listing = listing_for(
+            f"<html><body><main>{posts}</main></body></html>"
+        )
+        self.assertEqual("div.post", listing["item"])
+        self.assertIn("size", listing)
+
+    def test_a_release_name_in_the_text_falls_back_to_the_link(self):
+        listing = listing_from_suggestion(
+            {
+                "item": "li",
+                "fields": {
+                    "title": [{"spec": {"selector": "p", "find": "release"}}],
+                    "link": [{"spec": {"selector": "a", "attr": "href"}}],
+                },
+            }
+        )
+        self.assertEqual(
+            [{"selector": "p", "find": "release"}, {"selector": "a"}], listing["title"]
+        )
+
+
+class SearchDiscoveryTests(unittest.TestCase):
+    LISTING = {
+        "item": "article.post",
+        "title": {"selector": "h2 a"},
+        "link": {"selector": "h2 a"},
+    }
+
+    def test_query_is_the_release_name(self):
+        rows = [
+            {"title": "Some.Movie.2026.German.1080p.WEB.x264-GRP"},
+            {"title": "Other.Film.S01E02.German.720p.WEB.x264-GRP"},
+        ]
+        self.assertEqual("Some Movie", pick_query(rows)[0])
+        self.assertEqual(
+            ["Other", "Film"], pick_query(rows[1:])[1]["title"].split(".")[:2]
+        )
+
+    def test_first_template_that_searches_wins(self):
+        feed = blog_page()
+        hit = blog_page(count=1)
+        pages = {
+            f"https://{HOST}/movies/": feed,
+            f"https://{HOST}/?s=Movie+Number1": feed,  # ignores the query
+            f"https://{HOST}/movies/?s=Movie+Number1": hit,
+        }
+
+        def fetch(_state, url, _timeout, _solver, data=None):
+            if url in pages:
+                return FetchResult(pages[url], None, 200)
+            return FetchResult(None, "Page not found (404)", 404)
+
+        result = discover_search(None, HOST, URL, self.LISTING, fetch=fetch)
+
+        self.assertTrue(result["success"], result)
+        self.assertEqual("Movie Number1", result["query"])
+        self.assertEqual(
+            {"url": "https://{host}/movies/?s={q}", "method": "get"}, result["search"]
+        )
+        self.assertFalse(result["attempts"][0]["works"])
+
+    def test_post_searches_send_the_query_in_the_body(self):
+        definition = {
+            "key": "c1",
+            "name": "Synthetic",
+            "hostname": HOST,
+            "language": "de",
+            "search": {
+                "mode": "title",
+                "method": "post",
+                "url": "https://{host}/search",
+                "body": "q={q}&mode=all",
+                "categories": [2000],
+            },
+            "list": self.LISTING,
+        }
+        url, data = CustomSource(definition).search_request("Some Movie")
+        self.assertEqual(f"https://{HOST}/search", url)
+        self.assertEqual({"q": "Some Movie", "mode": "all"}, data)
+
+
+class FeedTests(unittest.TestCase):
+    RSS = """<?xml version="1.0"?><rss><channel><title>Site</title>
+        <item><title>Movie.One.2026.1080p.WEB.x264-GRP</title>
+          <link>https://source.invalid/one/</link>
+          <pubDate>Sat, 10 Jan 2026 08:30:00 +0000</pubDate></item>
+        <item><title><![CDATA[Movie.Two.2026.1080p.WEB.x264-GRP]]></title>
+          <link>https://source.invalid/two/</link>
+          <pubDate>Sat, 10 Jan 2026 09:30:00 +0000</pubDate></item>
+        </channel></rss>"""
+
+    def test_rss_links_survive_the_html_parser(self):
+        suggestion, listing = listing_for(self.RSS)
+        self.assertEqual("item", listing["item"])
+        report = parse(self.RSS, listing)
+        self.assertEqual(
+            [f"https://{HOST}/one/", f"https://{HOST}/two/"],
+            [row["link"] for row in report["rows"]],
+        )
+        self.assertEqual(
+            "Movie.Two.2026.1080p.WEB.x264-GRP", report["rows"][1]["title"]
+        )
+        self.assertEqual("Sat, 10 Jan 2026 08:30:00 +0000", report["rows"][0]["date"])
+
+
+class TitleCleanupTests(unittest.TestCase):
+    def test_listing_date_and_size_around_the_name_are_dropped(self):
+        markup = "".join(
+            f'<div class="row"><a href="/r/{i}">0{i}.11.2026 - 13:04 '
+            f"Movie.{i}.2026.1080p.WEB.x264-GRP – 14.6 GB</a></div>"
+            for i in range(1, 4)
+        )
+        listing = {
+            "item": "div.row",
+            "title": {"selector": "a"},
+            "link": {"selector": "a"},
+        }
+        titles = [row["title"] for row in parse(markup, listing)["rows"]]
+        self.assertEqual("Movie.1.2026.1080p.WEB.x264-GRP", titles[0])
+
+
+class SelectorTests(unittest.TestCase):
+    def test_generated_classes_are_skipped(self):
+        soup = BeautifulSoup(
+            '<div><span class="css-1x2y3z a8f93kd02jd83k">x</span>'
+            '<span class="size">1 GB</span></div>',
+            "html.parser",
+        )
+        root = soup.div
+        self.assertEqual("span.size", build_selector(soup.select("span")[1], root))
+        self.assertNotIn("css-", build_selector(soup.select("span")[0], root))
+
+
+class SearchQualityTests(unittest.TestCase):
+    def rows(self, *titles):
+        return [{"title": t, "link": f"https://{HOST}/{t}"} for t in titles]
+
+    def test_matching_results_work(self):
+        result = search_quality("Movie Two", self.rows("Movie.Two.2026-GRP"))
+        self.assertTrue(result["works"])
+
+    def test_front_page_answer_does_not_work(self):
+        feed = self.rows("A.2026-GRP", "B.2026-GRP", "Movie.Two.2026-GRP")
+        result = search_quality("Movie Two", feed, feed)
+        self.assertTrue(result["same_as_feed"])
+        self.assertFalse(result["works"])
+
+    def test_imdb_searches_match_by_title_or_id(self):
+        rows = [{"title": "Other.Name.2026-GRP", "link": "x", "imdb_id": "tt0000001"}]
+        self.assertTrue(search_quality("Movie Two", rows, imdb_id="tt0000001")["works"])
+        self.assertFalse(
+            search_quality("Movie Two", rows, imdb_id="tt0000002")["works"]
+        )
+
+    def test_one_match_among_hundreds_does_not_work(self):
+        rows = self.rows("Movie.Two.2026-GRP", *[f"X{i}.2026-GRP" for i in range(200)])
+        self.assertFalse(search_quality("Movie Two", rows)["works"])
+
+
+class DownloadSuggestionTests(unittest.TestCase):
+    def test_crypter_links_are_found(self):
+        markup = """<div class="downloads">
+            <a href="https://filecrypt.cc/Container/A.html">Rapidgator</a>
+            <a href="https://filecrypt.cc/Container/B.html">DDownload</a></div>
+            <a href="/comments/">Comments</a>"""
+        best = suggest_download(markup, f"https://{HOST}/r/", HOST)[0]
+        # crypter links are named after the hoster in their text, not their address
+        self.assertEqual("hoster_name", best["spec"]["mirror"])
+        self.assertEqual("rapidgator", best["names"]["hoster_name"])
+        self.assertEqual(2, best["known"])
+        self.assertNotIn("redirects", best["spec"])
+
+    def test_sample_links_are_no_downloads_and_redirect_buttons_are(self):
+        markup = """<p><a href="https://filecrypt.cc/Container/S.html">Sample</a></p>
+            <ul class="mirrors"><li><a href="/go/hoster-one"><img alt=""></a></li>
+            <li><a href="/go/rapidgator"><img alt=""></a></li></ul>"""
+        best = suggest_download(markup, f"https://{HOST}/r/", HOST)[0]
+        self.assertEqual(2, best["known"])
+        self.assertTrue(best["spec"]["redirects"])
+        # the image buttons name their hoster only in the forwarding address
+        self.assertEqual("hoster_name", best["spec"]["mirror"])
+        self.assertEqual("hoster-one", best["names"]["hoster_name"])
+
+    def test_a_click_on_a_link_picks_its_links_and_choices_do_not_repeat(self):
+        from quasarr.search.sources.helpers.custom_suggest import (
+            annotate_page,
+            pick_download,
+        )
+
+        markup = """<div class="mirrors"><span>Mirror 1</span>
+            <a href="https://filecrypt.cc/Container/A.html">Rapidgator</a>
+            <a href="https://filecrypt.cc/Container/B.html">DDownload</a></div>
+            <a href="https://rapidgator.net/account/registration/ref/1">Get premium</a>"""
+        found = suggest_download(markup, f"https://{HOST}/r/", HOST)
+        # an ad for a hoster account is no download link
+        self.assertEqual(2, found[0]["known"])
+        # both selectors collect the same two links: one choice
+        self.assertEqual(1, len(found))
+        soup = annotate_page(markup)
+        label = soup.select_one("div.mirrors span")
+        picked = pick_download(soup, label["data-q"], f"https://{HOST}/r/", HOST)
+        self.assertEqual(2, picked["known"])
+        self.assertEqual("hoster_name", picked["spec"]["mirror"])
+
+    def test_hoster_buttons_on_the_site_resolve_redirects(self):
+        markup = """<div class="mirrors">
+            <a class="btn background-rapidgator" href="/go/1">Rapidgator</a>
+            <a class="btn background-ddownload" href="/go/2">DDownload</a></div>"""
+        best = suggest_download(markup, f"https://{HOST}/r/", HOST)[0]
+        self.assertTrue(best["spec"]["redirects"])
+
+    def test_redirect_links_are_resolved_at_grab_time(self):
+        definition = {
+            "key": "c1",
+            "name": "Synthetic",
+            "hostname": HOST,
+            "language": "de",
+            "feeds": [{"category": 2000, "url": "https://{host}/"}],
+            "list": {"item": "div", "title": {}, "link": {}},
+            "download": {
+                "links": {"selector": "div.mirrors a", "mirror": "text"},
+                "redirects": True,
+            },
+        }
+        markup = """<div class="mirrors">
+            <a href="/go/1">Rapidgator</a><a href="/go/2">Dead</a></div>"""
+        source = CustomSource(definition)
+        targets = {
+            f"https://{HOST}/go/1": "https://filecrypt.cc/Container/A.html",
+            f"https://{HOST}/go/2": None,
+        }
+        with (
+            patch.object(
+                custom_source,
+                "fetch_markup",
+                return_value=FetchResult(markup, None, 200),
+            ),
+            patch(
+                "quasarr.downloads.sources.helpers.redirect.resolve_crypter_redirect",
+                side_effect=lambda url, *a, **k: targets[url],
+            ),
+        ):
+            links, error, _, _ = source.load_download_links(
+                SimpleNamespace(values={"user_agent": "UA/1.0"}), f"https://{HOST}/r/"
+            )
+        self.assertIsNone(error)
+        self.assertEqual(
+            [["https://filecrypt.cc/Container/A.html", "rapidgator"]], links
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

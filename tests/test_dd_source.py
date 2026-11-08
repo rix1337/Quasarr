@@ -6,9 +6,9 @@ from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock, patch
 
 from quasarr.constants import SEARCH_CAT_SHOWS
-from quasarr.downloads.sources.dd import Source as DownloadSource
 from quasarr.providers.sessions.dd import create_and_persist_session
-from quasarr.search.sources.dd import Source as SearchSource
+from quasarr.search.sources.templates.dd.download import Source as DownloadSource
+from quasarr.search.sources.templates.dd.search import Source as SearchSource
 
 
 class FakeResponse:
@@ -156,13 +156,14 @@ class DdSearchTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.search.sources.dd.retrieve_and_validate_session",
+                "quasarr.search.sources.templates.dd.search.retrieve_and_validate_session",
                 return_value=session,
             ),
             patch(
-                "quasarr.search.sources.dd.generate_download_link", return_value="dl"
+                "quasarr.search.sources.templates.dd.search.generate_download_link",
+                return_value="dl",
             ),
-            patch("quasarr.search.sources.dd.clear_hostname_issue"),
+            patch("quasarr.search.sources.templates.dd.search.clear_hostname_issue"),
         ):
             releases = SearchSource().search(
                 state,
@@ -201,7 +202,7 @@ class DdDownloadTests(unittest.TestCase):
         session.get.return_value = FakeResponse({"results": [item], "nextCursor": None})
 
         with patch(
-            "quasarr.downloads.sources.dd.retrieve_and_validate_session",
+            "quasarr.search.sources.templates.dd.download.retrieve_and_validate_session",
             return_value=session,
         ):
             result = DownloadSource().get_download_links(
@@ -243,7 +244,7 @@ class DdDownloadTests(unittest.TestCase):
         session.get.return_value = FakeResponse({"results": [item], "nextCursor": None})
 
         with patch(
-            "quasarr.downloads.sources.dd.retrieve_and_validate_session",
+            "quasarr.search.sources.templates.dd.download.retrieve_and_validate_session",
             return_value=session,
         ):
             result = DownloadSource().get_download_links(
@@ -267,11 +268,11 @@ class DdDownloadTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.downloads.sources.dd.retrieve_and_validate_session",
+                "quasarr.search.sources.templates.dd.download.retrieve_and_validate_session",
                 return_value=session,
             ),
             patch(
-                "quasarr.downloads.sources.dd.create_and_persist_session"
+                "quasarr.search.sources.templates.dd.download.create_and_persist_session"
             ) as recreate,
         ):
             result = DownloadSource().get_download_links(

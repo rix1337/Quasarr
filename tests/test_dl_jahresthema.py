@@ -8,11 +8,11 @@ from urllib.parse import urlsplit
 from bs4 import BeautifulSoup
 
 from quasarr.constants import SEARCH_CAT_BOOKS
-from quasarr.downloads.sources.dl import Source as DownloadSource
-from quasarr.search.sources.dl import (
+from quasarr.search.sources.templates.dl.download import Source as DownloadSource
+from quasarr.search.sources.templates.dl.search import (
     Source as SearchSource,
 )
-from quasarr.search.sources.dl import (
+from quasarr.search.sources.templates.dl.search import (
     _date_release_from_thread,
     _expand_jahresthema_thread_releases,
     _is_current_year_jahresthema_thread,
@@ -83,7 +83,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
         """
 
         with patch(
-            "quasarr.search.sources.dl._fetch_thread_page",
+            "quasarr.search.sources.templates.dl.search._fetch_thread_page",
             return_value=FakeResponse(html, "https://www.source.invalid/thread.1/"),
         ):
             release = _date_release_from_thread(
@@ -109,7 +109,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
         """
 
         with patch(
-            "quasarr.search.sources.dl._fetch_thread_page",
+            "quasarr.search.sources.templates.dl.search._fetch_thread_page",
             return_value=FakeResponse(html, "https://www.source.invalid/thread.1/"),
         ):
             release = _date_release_from_thread(
@@ -133,7 +133,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
         """
 
         with patch(
-            "quasarr.search.sources.dl._fetch_thread_page",
+            "quasarr.search.sources.templates.dl.search._fetch_thread_page",
             return_value=FakeResponse(html, "https://www.source.invalid/thread.1/"),
         ):
             release = _date_release_from_thread(
@@ -156,7 +156,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
         """
 
         with patch(
-            "quasarr.search.sources.dl._fetch_thread_page",
+            "quasarr.search.sources.templates.dl.search._fetch_thread_page",
             return_value=FakeResponse(html, "https://www.source.invalid/thread.1/"),
         ):
             release = _date_release_from_thread(
@@ -201,7 +201,9 @@ class DlJahresthemaSearchTests(unittest.TestCase):
                 return FakeResponse(second_page_html, page_url)
             raise AssertionError(f"unexpected fetch: {page_url}")
 
-        with patch("quasarr.search.sources.dl._fetch_thread_page", fake_fetch):
+        with patch(
+            "quasarr.search.sources.templates.dl.search._fetch_thread_page", fake_fetch
+        ):
             release = _date_release_from_thread(
                 FakeSharedState(),
                 "https://www.source.invalid/thread.1/",
@@ -247,7 +249,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
                 </article>
                 """
                 with patch(
-                    "quasarr.search.sources.dl._fetch_thread_page",
+                    "quasarr.search.sources.templates.dl.search._fetch_thread_page",
                     return_value=FakeResponse(
                         html, "https://www.source.invalid/thread.1/"
                     ),
@@ -389,17 +391,20 @@ class DlJahresthemaSearchTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.search.sources.dl.retrieve_and_validate_session",
+                "quasarr.search.sources.templates.dl.search.retrieve_and_validate_session",
                 return_value=object(),
             ),
-            patch("quasarr.search.sources.dl.fetch_via_requests_session", fake_fetch),
             patch(
-                "quasarr.search.sources.dl.generate_download_link",
+                "quasarr.search.sources.templates.dl.search.fetch_via_requests_session",
+                fake_fetch,
+            ),
+            patch(
+                "quasarr.search.sources.templates.dl.search.generate_download_link",
                 side_effect=lambda _state, title, url, *_args: (
                     f"download:{title}:{url}"
                 ),
             ),
-            patch("quasarr.search.sources.dl.clear_hostname_issue"),
+            patch("quasarr.search.sources.templates.dl.search.clear_hostname_issue"),
         ):
             releases = SearchSource().search(
                 FakeSharedState(),
@@ -454,7 +459,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
         """
 
         with patch(
-            "quasarr.search.sources.dl.generate_download_link",
+            "quasarr.search.sources.templates.dl.search.generate_download_link",
             side_effect=lambda _state, title, url, *_args: f"download:{title}:{url}",
         ):
             release = _release_from_jahresthema_post(
@@ -483,7 +488,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
         """
 
         with patch(
-            "quasarr.search.sources.dl.generate_download_link",
+            "quasarr.search.sources.templates.dl.search.generate_download_link",
             side_effect=lambda _state, title, url, *_args: f"download:{title}:{url}",
         ):
             year_note_release = _release_from_jahresthema_post(
@@ -514,7 +519,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
         """
 
         with patch(
-            "quasarr.search.sources.dl.generate_download_link",
+            "quasarr.search.sources.templates.dl.search.generate_download_link",
             side_effect=lambda _state, title, url, *_args: f"download:{title}:{url}",
         ):
             quoted_issue_release = _release_from_jahresthema_post(
@@ -542,7 +547,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
         """
 
         with patch(
-            "quasarr.search.sources.dl.generate_download_link",
+            "quasarr.search.sources.templates.dl.search.generate_download_link",
             side_effect=lambda _state, title, url, *_args: f"download:{title}:{url}",
         ):
             magazine_year_note_release = _release_from_jahresthema_post(
@@ -571,7 +576,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
         """
 
         with patch(
-            "quasarr.search.sources.dl.generate_download_link",
+            "quasarr.search.sources.templates.dl.search.generate_download_link",
             side_effect=lambda _state, title, url, *_args: f"download:{title}:{url}",
         ):
             valid_release = _release_from_jahresthema_post(
@@ -604,7 +609,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
         """
 
         with patch(
-            "quasarr.search.sources.dl.generate_download_link",
+            "quasarr.search.sources.templates.dl.search.generate_download_link",
             side_effect=lambda _state, title, url, *_args: f"download:{title}:{url}",
         ):
             release = _release_from_jahresthema_post(
@@ -648,11 +653,11 @@ class DlJahresthemaSearchTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.search.sources.dl.fetch_via_requests_session",
+                "quasarr.search.sources.templates.dl.search.fetch_via_requests_session",
                 return_value=FakeResponse(thread_html),
             ),
             patch(
-                "quasarr.search.sources.dl.generate_download_link",
+                "quasarr.search.sources.templates.dl.search.generate_download_link",
                 side_effect=lambda _state, title, url, *_args: (
                     f"download:{title}:{url}"
                 ),
@@ -695,7 +700,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
                 self.assertTrue(_post_contains_supported_download(post))
 
                 with patch(
-                    "quasarr.search.sources.dl.generate_download_link",
+                    "quasarr.search.sources.templates.dl.search.generate_download_link",
                     side_effect=lambda _state, title, url, *_args: (
                         f"download:{title}:{url}"
                     ),
@@ -732,7 +737,7 @@ class DlJahresthemaSearchTests(unittest.TestCase):
         self.assertTrue(_post_contains_supported_download(post))
 
         with patch(
-            "quasarr.search.sources.dl.generate_download_link",
+            "quasarr.search.sources.templates.dl.search.generate_download_link",
             side_effect=lambda _state, title, url, *_args: f"download:{title}:{url}",
         ):
             release = _release_from_jahresthema_post(
@@ -765,11 +770,11 @@ class DlJahresthemaDownloadTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.downloads.sources.dl.retrieve_and_validate_session",
+                "quasarr.search.sources.templates.dl.download.retrieve_and_validate_session",
                 return_value=object(),
             ),
             patch(
-                "quasarr.downloads.sources.dl.fetch_via_requests_session",
+                "quasarr.search.sources.templates.dl.download.fetch_via_requests_session",
                 return_value=FakeResponse(thread_html),
             ),
         ):
@@ -801,11 +806,11 @@ class DlJahresthemaDownloadTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.downloads.sources.dl.retrieve_and_validate_session",
+                "quasarr.search.sources.templates.dl.download.retrieve_and_validate_session",
                 return_value=object(),
             ),
             patch(
-                "quasarr.downloads.sources.dl.fetch_via_requests_session",
+                "quasarr.search.sources.templates.dl.download.fetch_via_requests_session",
                 return_value=FakeResponse(thread_html),
             ),
         ):
@@ -842,11 +847,11 @@ class DlJahresthemaDownloadTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.downloads.sources.dl.retrieve_and_validate_session",
+                "quasarr.search.sources.templates.dl.download.retrieve_and_validate_session",
                 return_value=object(),
             ),
             patch(
-                "quasarr.downloads.sources.dl.fetch_via_requests_session",
+                "quasarr.search.sources.templates.dl.download.fetch_via_requests_session",
                 return_value=FakeResponse(thread_html),
             ),
         ):

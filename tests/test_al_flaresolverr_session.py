@@ -3,8 +3,8 @@ from unittest.mock import patch
 
 import requests
 
-from quasarr.downloads.sources.al import Source
 from quasarr.providers.sessions import al as al_sessions
+from quasarr.search.sources.templates.al.download import Source
 
 
 class SharedState:
@@ -130,39 +130,48 @@ class AlFlareSolverrSessionTests(unittest.TestCase):
 
         with (
             patch(
-                "quasarr.downloads.sources.al.is_flaresolverr_available",
+                "quasarr.search.sources.templates.al.download.is_flaresolverr_available",
                 return_value=True,
             ),
             patch(
-                "quasarr.downloads.sources.al.retrieve_and_validate_session",
+                "quasarr.search.sources.templates.al.download.retrieve_and_validate_session",
                 return_value=requests.Session(),
             ),
             patch(
-                "quasarr.downloads.sources.al.flaresolverr_create_session",
+                "quasarr.search.sources.templates.al.download.flaresolverr_create_session",
                 return_value="browser-session",
             ),
             patch(
-                "quasarr.downloads.sources.al.flaresolverr_destroy_session"
+                "quasarr.search.sources.templates.al.download.flaresolverr_destroy_session"
             ) as destroy_session,
-            patch("quasarr.downloads.sources.al.fetch_via_flaresolverr", fake_fetch),
             patch(
-                "quasarr.downloads.sources.al.fetch_via_requests_session",
+                "quasarr.search.sources.templates.al.download.fetch_via_flaresolverr",
+                fake_fetch,
+            ),
+            patch(
+                "quasarr.search.sources.templates.al.download.fetch_via_requests_session",
                 fake_requests_fetch,
             ),
             patch(
-                "quasarr.downloads.sources.al._check_release",
+                "quasarr.search.sources.templates.al.download._check_release",
                 return_value=("Example.Release", 1),
             ),
-            patch("quasarr.downloads.sources.al._extract_episode", return_value=None),
             patch(
-                "quasarr.downloads.sources.al.solve_captcha",
+                "quasarr.search.sources.templates.al.download._extract_episode",
+                return_value=None,
+            ),
+            patch(
+                "quasarr.search.sources.templates.al.download.solve_captcha",
                 return_value={"response": "1", "captcha_id": "captcha-id"},
             ) as solve_captcha,
             patch(
-                "quasarr.downloads.sources.al.decrypt_content",
+                "quasarr.search.sources.templates.al.download.decrypt_content",
                 return_value=["https://files.invalid/download"],
             ),
-            patch("quasarr.downloads.sources.al.StatsHelper", return_value=Stats()),
+            patch(
+                "quasarr.search.sources.templates.al.download.StatsHelper",
+                return_value=Stats(),
+            ),
         ):
             result = Source().get_download_links(
                 shared_state,

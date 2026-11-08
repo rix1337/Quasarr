@@ -5,7 +5,13 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from quasarr.constants import SEARCH_CAT_SHOWS
-from quasarr.search.sources import by, dd, dl, he, sj, sl, wd
+from quasarr.search.sources import templates
+from quasarr.search.sources.helpers import custom_source
+from quasarr.search.sources.templates.by import search as by
+from quasarr.search.sources.templates.dd import search as dd
+from quasarr.search.sources.templates.dl import search as dl
+from quasarr.search.sources.templates.he import search as he
+from quasarr.search.sources.templates.sj import search as sj
 
 
 class EmptyResponse:
@@ -450,18 +456,25 @@ class DateSourceQueryTests(unittest.TestCase):
 
     def test_wd_date_search_does_not_include_premiere_year(self):
         urls = []
+        state = shared_state_for("wd")
 
-        def get(url, **_kwargs):
+        def fetch(_state, url, *_args, **_kwargs):
             urls.append(url)
-            return EmptyResponse()
+            return custom_source.FetchResult("", None, 200)
 
         with (
-            patch.object(wd, "get_localized_title", return_value="Synthetic Show"),
-            patch.object(wd, "get_year", return_value=1999),
-            patch.object(wd.requests, "get", side_effect=get),
+            patch("quasarr.providers.shared_state.values", state.values),
+            patch(
+                "quasarr.providers.imdb_metadata.get_localized_title",
+                return_value="Synthetic Show",
+            ),
+            patch("quasarr.providers.imdb_metadata.get_year", return_value=1999),
+            patch.object(custom_source, "fetch_markup", side_effect=fetch),
+            patch.object(custom_source, "mark_hostname_issue"),
+            patch.object(custom_source, "clear_hostname_issue"),
         ):
-            releases = wd.Source().search(
-                shared_state_for("wd"),
+            releases = templates._load("wd").search(
+                state,
                 time.time(),
                 SEARCH_CAT_SHOWS,
                 "tt0000001",
@@ -580,19 +593,24 @@ class DateSourceQueryTests(unittest.TestCase):
 
     def test_sl_date_search_uses_acronym_root(self):
         urls = []
+        state = shared_state_for("sl")
 
-        def bypass(_info, _state, session, url, _headers, **_kwargs):
+        def fetch(_state, url, *_args, **_kwargs):
             urls.append(url)
-            return session, None, EmptyResponse()
+            return custom_source.FetchResult("", None, 200)
 
         with (
-            patch.object(
-                sl, "get_localized_title", return_value="QZX Friday Night BetaDown"
+            patch("quasarr.providers.shared_state.values", state.values),
+            patch(
+                "quasarr.providers.imdb_metadata.get_localized_title",
+                return_value="QZX Friday Night BetaDown",
             ),
-            patch.object(sl, "ensure_session_cf_bypassed", side_effect=bypass),
+            patch.object(custom_source, "fetch_markup", side_effect=fetch),
+            patch.object(custom_source, "mark_hostname_issue"),
+            patch.object(custom_source, "clear_hostname_issue"),
         ):
-            releases = sl.Source().search(
-                shared_state_for("sl"),
+            releases = templates._load("sl").search(
+                state,
                 time.time(),
                 SEARCH_CAT_SHOWS,
                 "tt0000001",

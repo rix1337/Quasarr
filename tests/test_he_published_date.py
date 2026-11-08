@@ -4,7 +4,7 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
-from quasarr.search.sources import he
+from quasarr.search.sources.templates.he import search as he
 
 POST_URL = "https://source.invalid/synthetic-show-s01e01/"
 

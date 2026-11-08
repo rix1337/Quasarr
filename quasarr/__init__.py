@@ -43,6 +43,7 @@ from quasarr.search.sources.helpers import (
     get_sonarr_required_hostnames,
 )
 from quasarr.storage.config import Config, get_clean_hostnames
+from quasarr.storage.custom_sources import get_custom_sources
 from quasarr.storage.setup import (
     flaresolverr_config,
     hostname_credentials_config,
@@ -165,7 +166,7 @@ def run():
             )
 
         hostnames = get_clean_hostnames(shared_state)
-        if not hostnames:
+        if not hostnames and not get_custom_sources():
             hostnames_config(shared_state)
             hostnames = get_clean_hostnames(shared_state)
 
@@ -324,6 +325,17 @@ def run():
             count_str = f"<y>{set_hostnames_count}</y>/<g>{total_hostnames_count}</g>"
 
         info(f"Hostnames: [{' '.join(hostnames_log)}] {count_str} set")
+        own_sites = get_custom_sources()
+        if own_sites:
+            info(f"Your own sites: [{' '.join(k.upper() for k in sorted(own_sites))}]")
+        from quasarr.search.sources.templates import get_templates, is_modified
+
+        changed = [k.upper() for k in sorted(get_templates()) if is_modified(k)]
+        if changed:
+            warn(
+                f"Changed by you: [{' '.join(changed)}]. Issues about changed sites "
+                "are not supported; reset them under Sites before reporting a problem."
+            )
 
         protected = shared_state.get_db("protected").retrieve_all_titles()
         if protected:

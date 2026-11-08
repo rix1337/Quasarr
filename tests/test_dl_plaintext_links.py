@@ -4,7 +4,7 @@ import unittest
 
 from bs4 import BeautifulSoup
 
-from quasarr.downloads.sources.dl import (
+from quasarr.search.sources.templates.dl.download import (
     _extract_links_and_password_from_post,
     _extract_mirror_name_from_link,
 )

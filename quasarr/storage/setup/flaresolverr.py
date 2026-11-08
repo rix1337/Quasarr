@@ -108,7 +108,7 @@ def flaresolverr_form_html(shared_state, is_setup=False):
     <span><a href="https://github.com/rix1337/flaresolverr-next" target="_blank">flaresolverr-next</a>
     must be running and reachable to Quasarr for some sites to work.</span><br><br>
     <label for="url">flaresolverr-next URL</label>
-    <input type="text" id="url" name="url" placeholder="http://192.168.0.1:8191/v1" value="{current_url}"><br>
+    <input type="text" id="url" name="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="http://192.168.0.1:8191/v1" value="{current_url}"><br>
     '''
 
     buttons = render_button("Save", "primary", {"type": "submit", "id": "submitBtn"})

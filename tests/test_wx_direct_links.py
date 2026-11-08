@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from quasarr.downloads.sources.wx import Source
+from quasarr.search.sources.templates.wx.download import Source
 
 
 class SharedState:
@@ -76,9 +76,11 @@ class WxDirectLinksTests(unittest.TestCase):
             return result
 
         with (
-            patch("quasarr.downloads.sources.wx.requests.Session") as session_cls,
             patch(
-                "quasarr.downloads.sources.wx.check_links_online_status",
+                "quasarr.search.sources.templates.wx.download.requests.Session"
+            ) as session_cls,
+            patch(
+                "quasarr.search.sources.templates.wx.download.check_links_online_status",
                 side_effect=fake_check_links,
             ),
         ):

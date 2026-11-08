@@ -4,15 +4,16 @@ date: 2026-10-19
 author: Quasarr
 touches:
   - quasarr/search/sources/__init__.py
+  - quasarr/search/sources/templates/__init__.py
   - quasarr/downloads/sources/__init__.py
   - quasarr/constants/__init__.py
 ---
 
 ## Decided
 
-Represent each source with one two-letter key shared by its search module, hostname config entry, logs, and any source-specific download extractor.
+Represent each source with one key shared by its bundled template, hostname config entry, logs, and its download step. Built-in sites use two letters; user-defined sites use a letter and a digit.
 
-Why: The key is the join between configuration, discovery, capability metadata, logs, and extraction. Keeping source-specific behavior in source modules prevents shared orchestration from accumulating hostname rules. Search-only sources may omit a download module and use generic crypter detection.
+Why: The key is the join between configuration, discovery, capability metadata, logs, and extraction. Keeping source-specific behavior in the site's template (and the code it links) prevents shared orchestration from accumulating hostname rules. A template without download links leaves grabs to the generic crypter detection.
 
 ## Watch out
 

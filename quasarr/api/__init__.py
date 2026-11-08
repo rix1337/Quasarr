@@ -44,6 +44,7 @@ from quasarr.search.sources.helpers import (
     get_sonarr_required_hostnames,
 )
 from quasarr.storage.config import Config
+from quasarr.storage.custom_sources import get_custom_sources
 from quasarr.storage.setup.arr import missing_arr_client_requirement
 from quasarr.storage.setup.radarr import is_radarr_configured
 from quasarr.storage.setup.sonarr import is_sonarr_configured
@@ -121,27 +122,28 @@ def get_api(shared_state_dict, shared_state_lock):
                 continue
             working_count += 1
 
+        for custom_key in get_custom_sources():
+            total_count += 1
+            if custom_key not in hostname_issues:
+                working_count += 1
+
         # Determine status
         if total_count == 0:
             hostname_status_class = "error"
             hostname_status_emoji = "⚫️"
-            hostname_status_text = "No hostnames configured"
+            hostname_status_text = "No sites added"
         elif working_count == 0:
             hostname_status_class = "error"
             hostname_status_emoji = "🔴"
-            hostname_status_text = f"0/{total_count} hostnames operational"
+            hostname_status_text = f"0/{total_count} sites working"
         elif working_count < total_count:
             hostname_status_class = "warning"
             hostname_status_emoji = "🟡"
-            hostname_status_text = (
-                f"{working_count}/{total_count} hostnames operational"
-            )
+            hostname_status_text = f"{working_count}/{total_count} sites working"
         else:
             hostname_status_class = "success"
             hostname_status_emoji = "🟢"
-            hostname_status_text = (
-                f"{working_count}/{total_count} hostnames operational"
-            )
+            hostname_status_text = f"{working_count}/{total_count} sites working"
 
         # CAPTCHA banner
         captcha_hint = ""
@@ -168,7 +170,7 @@ def get_api(shared_state_dict, shared_state_lock):
                     {jd_status["status_text"]}
                 </span>
                 <span class="status-pill {hostname_status_class}"
-                      title="Hostnames Status">
+                      title="Sites status">
                     {hostname_status_emoji} {hostname_status_text}
                 </span>
             </div>
@@ -349,7 +351,7 @@ def get_api(shared_state_dict, shared_state_lock):
             </a>
             <a href="/hostnames" class="action-card">
                 <span class="action-icon">🌐</span>
-                <span class="action-label">Hostnames</span>
+                <span class="action-label">Sites</span>
             </a>
             <a href="/categories" class="action-card">
                 <span class="action-icon">📁</span>
@@ -452,7 +454,7 @@ def get_api(shared_state_dict, shared_state_lock):
                         <div class="input-group">
                             <label for="fsUrl">URL</label>
                             <div class="input-row">
-                                <input type="text" id="fsUrl" name="url" placeholder="http://192.168.0.1:8191/v1" value="{flaresolverr_url}">
+                                <input type="text" id="fsUrl" autocapitalize="off" autocorrect="off" spellcheck="false" name="url" placeholder="http://192.168.0.1:8191/v1" value="{flaresolverr_url}">
                                 <button type="submit" id="fsSubmitBtn">Save</button>
                             </div>
                         </div>
@@ -475,7 +477,7 @@ def get_api(shared_state_dict, shared_state_lock):
                         <div class="input-group">
                             <label for="radarrUrl">URL</label>
                             <div class="input-row">
-                                <input type="text" id="radarrUrl" placeholder="http://192.168.0.1:7878" value="{radarr_url}">
+                                <input type="text" id="radarrUrl" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="http://192.168.0.1:7878" value="{radarr_url}">
                             </div>
                         </div>
                         <div class="input-group">
@@ -497,7 +499,7 @@ def get_api(shared_state_dict, shared_state_lock):
                         <div class="input-group">
                             <label for="sonarrUrl">URL</label>
                             <div class="input-row">
-                                <input type="text" id="sonarrUrl" placeholder="http://192.168.0.1:8989" value="{sonarr_url}">
+                                <input type="text" id="sonarrUrl" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="http://192.168.0.1:8989" value="{sonarr_url}">
                             </div>
                         </div>
                         <div class="input-group">
@@ -545,7 +547,7 @@ def get_api(shared_state_dict, shared_state_lock):
                         <div class="input-group">
                             <label for="notification-discord-webhook">Webhook URL</label>
                             <div class="input-row">
-                                <input type="text" id="notification-discord-webhook" placeholder="https://discord.com/api/webhooks/..." value="{discord_webhook}">
+                                <input type="text" id="notification-discord-webhook" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://discord.com/api/webhooks/..." value="{discord_webhook}">
                             </div>
                         </div>
                         <div class="notification-toggle-list">
