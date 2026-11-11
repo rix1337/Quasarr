@@ -19,6 +19,7 @@ from quasarr.providers.hostname_issues import (
     record_configured_hostnames,
 )
 from quasarr.providers.log import (
+    configure_error_log,
     crit,
     debug,
     error,
@@ -145,6 +146,7 @@ def run():
             error(f'Could not access "{config_path}": {e}"Stopping Quasarr...')
             sys.exit(1)
 
+        configure_error_log(config_path)
         shared_state.set_files(config_path)
         if DataBase.maintain(shared_state.values["dbfile"]) is False:
             error("Stopping Quasarr because Quasarr.db failed its integrity check.")
@@ -375,6 +377,7 @@ def run():
 def flaresolverr_checker(shared_state_dict, shared_state_lock):
     try:
         shared_state.set_state(shared_state_dict, shared_state_lock)
+        configure_error_log(os.path.dirname(shared_state.values["configfile"]))
 
         # Check if FlareSolverr was previously skipped
         skip_flaresolverr_db = DataBase("skip_flaresolverr")
@@ -422,6 +425,7 @@ def flaresolverr_checker(shared_state_dict, shared_state_lock):
 def update_checker(shared_state_dict, shared_state_lock):
     try:
         shared_state.set_state(shared_state_dict, shared_state_lock)
+        configure_error_log(os.path.dirname(shared_state.values["configfile"]))
 
         message = "!!! UPDATE AVAILABLE !!!"
         link = "https://github.com/rix1337/Quasarr/releases/latest"
@@ -462,6 +466,7 @@ def update_checker(shared_state_dict, shared_state_lock):
 def jdownloader_connection(shared_state_dict, shared_state_lock):
     try:
         shared_state.set_state(shared_state_dict, shared_state_lock)
+        configure_error_log(os.path.dirname(shared_state.values["configfile"]))
 
         while True:
             shared_state.set_device_from_config()

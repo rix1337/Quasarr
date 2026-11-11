@@ -9,6 +9,8 @@ Hostname Issues Tracker - Uses lazy imports to avoid circular dependency
 import json
 from datetime import date, datetime
 
+from quasarr.providers.log import log_source_issue
+
 
 def _get_db(table_name):
     """Lazy import to avoid circular dependency."""
@@ -25,11 +27,16 @@ def is_timeout_message(error_message):
 
 def mark_hostname_issue(shorthand, operation, error_message):
     shorthand = shorthand.lower()
+    message = str(error_message)
+    is_timeout = is_timeout_message(message)
+    if not is_timeout:
+        log_source_issue(shorthand, operation, message)
+
     db = _get_db("hostname_issues")
 
     issue_data = {
         "operation": operation,
-        "error": str(error_message)[:500],
+        "error": message[:500],
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -41,7 +48,7 @@ def mark_hostname_issue(shorthand, operation, error_message):
 
         stats_db = _get_db("statistics")
         prune_daily(stats_db)
-        kind = "timeout" if is_timeout_message(error_message) else "issue"
+        kind = "timeout" if is_timeout else "issue"
         stats_db.update_store(f"{kind}:{date.today().isoformat()}:{shorthand}", "1")
         record_configured_hostnames(refresh=False)
     except Exception:
