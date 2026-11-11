@@ -3,6 +3,7 @@
 import json
 import time
 import unittest
+from datetime import datetime
 from unittest.mock import ANY, MagicMock, patch
 
 from quasarr.providers.cloudflare import (
@@ -124,35 +125,21 @@ class FfSourceTests(unittest.TestCase):
             "Synthetic.Uemlaut.2030.1080p.WEB-GROUP",
             result[0]["details"]["title"],
         )
+        self.assertEqual(1024**3, result[0]["details"]["size"])
 
-    def test_feed_cross_references_movie_api(self):
+    def test_feed_uses_updates_for_release_details(self):
         host = "host-ff.invalid"
-        feed_url = f"https://{host}/updates/2026-06-24#list"
-        empty_feed_url = f"https://{host}/updates/2026-06-23#list"
-        movie_url = f"https://{host}/example-movie"
-        api_url = f"https://{host}/api/v1/token123?filter="
-        release_url = f"{movie_url}/Example.Movie.2026.1080p.WEB-GROUP"
+        feed_url = f"https://{host}/updates/2026-11-11#list"
+        empty_feed_url = f"https://{host}/updates/2026-11-10#list"
+        release_title = "Example.Movie.2026.1080p.WEB-GROUP"
+        release_url = f"https://{host}/example-movie/{release_title}"
         requested_urls = []
 
-        feed_html = """
+        feed_html = f"""
         <div class="sra">
           <span class="lsf-icon timed">10:15</span>
           <a href="/example-movie"></a>
-          <h2>Example Movie<i>(2026)</i><span>
-            <a href="/example-movie/Example.Movie.2026.1080p.WEB-GROUP">
-              Example.Movie.2026.1080p.WEB-GROUP
-            </a>
-          </span></h2>
-        </div>
-        """
-        movie_html = """
-        <a href="https://www.imdb.com/title/tt1234567/">IMDB</a>
-        <script>initMovie('token123', '', '', '', '', '');</script>
-        """
-        api_html = """
-        <div class="entry">
-          <span class="morespec">Example.Movie.2026.1080p.WEB-GROUP</span>
-          <span class="audiotag"><small>Größe:</small> 1.5 GB</span>
+          <h2><span><a href="/example-movie/{release_title}">{release_title}</a></span></h2>
         </div>
         """
 
@@ -162,10 +149,6 @@ class FfSourceTests(unittest.TestCase):
                 return FakeResponse(url, text=feed_html)
             if url == empty_feed_url:
                 return FakeResponse(url, text="")
-            if url == movie_url:
-                return FakeResponse(url, text=movie_html)
-            if url == api_url:
-                return FakeResponse(url, json_data={"html": api_html})
             raise AssertionError(f"Unexpected URL requested: {url}")
 
         with (
@@ -182,22 +165,90 @@ class FfSourceTests(unittest.TestCase):
                 "quasarr.search.sources.templates.ff.search.datetime"
             ) as fake_datetime,
         ):
-            fake_datetime.now.return_value.strftime.return_value = "2026-06-24"
-            fake_datetime.now.return_value = __import__("datetime").datetime(
-                2026, 6, 24, 12, 0, 0
+            fake_datetime.now.return_value = datetime(2026, 11, 11, 12, 0, 0)
+            fake_datetime.strptime = datetime.strptime
+            result = FfSearchSource().feed(
+                _build_shared_state({"ff": host}), time.time(), 2000
             )
-            fake_datetime.strptime = __import__("datetime").datetime.strptime
+            self.assertEqual(
+                [feed_url, empty_feed_url],
+                requested_urls,
+            )
+            self.assertEqual(1, len(result))
+            details = result[0]["details"]
+            self.assertEqual(release_title, details["title"])
+            self.assertIsNone(details["imdb_id"])
+            self.assertEqual(release_url, details["source"])
+            self.assertEqual(0, details["size"])
+            self.assertTrue(details["date"].startswith("Wed, 11 Nov 2026 10:15:00 "))
+
+    def test_feed_stops_after_updates_rate_limit_and_keeps_releases(self):
+        host = "host-ff.invalid"
+        feed_url = f"https://{host}/updates/2026-06-24#list"
+        next_feed_url = f"https://{host}/updates/2026-06-23#list"
+        release_title = "First.Movie.2026.1080p.WEB-GROUP"
+        feed_html = f"""
+        <div class="sra">
+          <span class="lsf-icon timed">10:15</span>
+          <a href="/first-movie"></a>
+          <h2><span><a href="/first-movie/{release_title}">{release_title}</a></span></h2>
+        </div>
+        """
+        rate_response = FlareSolverrResponse(
+            next_feed_url,
+            200,
+            {"Content-Type": "text/html"},
+            '<html><body><pre>{"error":"limit reached"}</pre></body></html>',
+        )
+        responses = {
+            feed_url: FakeResponse(feed_url, text=feed_html),
+            next_feed_url: rate_response,
+        }
+        requested_urls = []
+        issues = []
+
+        def fake_get(url, headers=None, timeout=None):
+            requested_urls.append(url)
+            return responses[url]
+
+        with (
+            patch(
+                "quasarr.search.sources.templates.ff.search.requests.get",
+                side_effect=fake_get,
+            ),
+            patch(
+                "quasarr.search.sources.templates.ff.search.generate_download_link",
+                return_value="download://synthetic",
+            ),
+            patch(
+                "quasarr.search.sources.templates.ff.search.mark_hostname_issue",
+                side_effect=lambda *args: issues.append(args),
+            ),
+            patch(
+                "quasarr.search.sources.templates.ff.search.clear_hostname_issue"
+            ) as clear_issue,
+            patch(
+                "quasarr.search.sources.templates.ff.search.datetime"
+            ) as fake_datetime,
+        ):
+            fake_datetime.now.return_value = datetime(2026, 6, 24, 12, 0, 0)
+            fake_datetime.strptime = datetime.strptime
             result = FfSearchSource().feed(
                 _build_shared_state({"ff": host}), time.time(), 2000
             )
 
-        self.assertEqual([feed_url, movie_url, api_url, empty_feed_url], requested_urls)
+        self.assertEqual([feed_url, next_feed_url], requested_urls)
         self.assertEqual(1, len(result))
         details = result[0]["details"]
-        self.assertEqual("Example.Movie.2026.1080p.WEB-GROUP", details["title"])
-        self.assertEqual("tt1234567", details["imdb_id"])
-        self.assertEqual(release_url, details["source"])
-        self.assertEqual(1536 * 1024 * 1024, details["size"])
+        self.assertEqual(release_title, details["title"])
+        self.assertEqual(
+            f"https://{host}/first-movie/{release_title}", details["source"]
+        )
+        self.assertIsNone(details["imdb_id"])
+        self.assertEqual(0, details["size"])
+        self.assertEqual([("ff", "feed", "Request limit reached")], issues)
+        self.assertTrue(details["date"].startswith("Wed, 24 Jun 2026 10:15:00 "))
+        clear_issue.assert_not_called()
 
     def test_feed_stops_cross_reference_when_timeout_budget_expires(self):
         host = "host-ff.invalid"

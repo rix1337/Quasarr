@@ -36,6 +36,8 @@ from quasarr.search.sources.helpers.search_release import SearchRelease
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
 from quasarr.search.sources.templates import site_url
 
+_RATE_LIMITED = object()
+
 
 class Source(AbstractSearchSource):
     initials = "ff"
@@ -88,6 +90,8 @@ class Source(AbstractSearchSource):
                     timeout,
                     request_get=requests.get,
                 )
+                if _report_rate_limit(r, self.initials, "feed"):
+                    return releases
                 r.raise_for_status()
             except Exception as e:
                 warn(f"Error loading feed: {e} for {formatted_date}")
@@ -101,14 +105,12 @@ class Source(AbstractSearchSource):
 
             for item in items:
                 if _feed_timed_out(start_time):
-                    debug("FF feed stopped during movie cross-reference")
+                    debug("FF feed stopped while reading releases")
                     break
 
                 try:
-                    movie_anchor = item.find("a", href=True, recursive=False)
-                    if not movie_anchor:
+                    if not item.find("a", href=True, recursive=False):
                         continue
-                    movie_path = movie_anchor["href"]
                     published = _parse_feed_date(formatted_date, item)
 
                     release_titles = {
@@ -116,40 +118,14 @@ class Source(AbstractSearchSource):
                         for a in item.select("h2 > span > a[href]")
                         if a.get_text(strip=True)
                     }
-                    if not release_titles:
-                        continue
-
-                    movie_data = _load_movie_data(
-                        self,
-                        shared_state,
-                        host,
-                        movie_path.strip("/"),
-                        headers,
-                        cf_session,
-                        start_time=start_time,
-                        feed=True,
-                    )
-                    if not movie_data:
-                        continue
-
-                    entries = {
-                        entry["title"]: entry
-                        for entry in movie_data["entries"]
-                        if entry.get("title")
-                    }
                     for title, source in release_titles.items():
-                        entry = entries.get(title)
-                        if not entry:
-                            continue
-                        mb = entry.get("mb", 0)
-                        imdb_id = movie_data.get("imdb_id")
                         link = generate_download_link(
                             shared_state,
                             title,
                             source,
-                            mb,
+                            0,
                             password,
-                            imdb_id,
+                            None,
                             self.initials,
                         )
                         releases.append(
@@ -157,9 +133,9 @@ class Source(AbstractSearchSource):
                                 "details": {
                                     "title": title,
                                     "hostname": self.initials,
-                                    "imdb_id": imdb_id,
+                                    "imdb_id": None,
                                     "link": link,
-                                    "size": mb * 1024 * 1024,
+                                    "size": 0,
                                     "date": published,
                                     "source": source,
                                 },
@@ -248,6 +224,8 @@ class Source(AbstractSearchSource):
                 SEARCH_REQUEST_TIMEOUT_SECONDS,
                 request_get=requests.get,
             )
+            if _report_rate_limit(r, self.initials, "search"):
+                return releases
             r.raise_for_status()
             feed = r.json()
         except Exception as e:
@@ -277,11 +255,12 @@ class Source(AbstractSearchSource):
             movie_data = _load_movie_data(
                 self,
                 shared_state,
-                host,
                 movie_id,
                 headers,
                 cf_session,
             )
+            if movie_data is _RATE_LIMITED:
+                return releases
             if not movie_data:
                 continue
 
@@ -336,16 +315,7 @@ class Source(AbstractSearchSource):
         return releases
 
 
-def _load_movie_data(
-    source,
-    shared_state,
-    host,
-    movie_id,
-    headers,
-    cf_session,
-    start_time=None,
-    feed=False,
-):
+def _load_movie_data(source, shared_state, movie_id, headers, cf_session):
     context = "recents_ff"
     threshold = 60
     recently_searched = get_recently_searched(shared_state, context, threshold)
@@ -356,25 +326,21 @@ def _load_movie_data(
         debug(f"Using cached content for '/{movie_id}'")
         return entry
 
-    timeout = (
-        _remaining_feed_timeout(start_time) if feed else SEARCH_REQUEST_TIMEOUT_SECONDS
-    )
-    if timeout is None:
-        return None
-
     movie_url = site_url(shared_state, Source.initials, "movie", movie_id=movie_id)
     try:
         r = cf_session.get(
             movie_url,
             headers,
-            timeout,
+            SEARCH_REQUEST_TIMEOUT_SECONDS,
             request_get=requests.get,
         )
+        if _report_rate_limit(r, source.initials, "search"):
+            return _RATE_LIMITED
         r.raise_for_status()
         movie_page = r.text
     except Exception as e:
         debug(f"Failed to load movie page for {movie_id}: {e}")
-        mark_hostname_issue(source.initials, "feed" if feed else "search", str(e))
+        mark_hostname_issue(source.initials, "search", str(e))
         return None
 
     content = BeautifulSoup(movie_page, "html.parser")
@@ -382,15 +348,7 @@ def _load_movie_data(
     imdb_id = re.search(r"tt\d+", str(imdb_link)).group() if imdb_link else None
     token_match = re.search(r"initMovie\('([^']+)'", movie_page)
     if not token_match:
-        mark_hostname_issue(
-            source.initials, "feed" if feed else "search", "Missing movie token"
-        )
-        return None
-
-    timeout = (
-        _remaining_feed_timeout(start_time) if feed else SEARCH_REQUEST_TIMEOUT_SECONDS
-    )
-    if timeout is None:
+        mark_hostname_issue(source.initials, "search", "Missing movie token")
         return None
 
     try:
@@ -402,14 +360,16 @@ def _load_movie_data(
                 token=token_match.group(1),
             ),
             headers,
-            timeout,
+            SEARCH_REQUEST_TIMEOUT_SECONDS,
             request_get=requests.get,
         )
+        if _report_rate_limit(r, source.initials, "search"):
+            return _RATE_LIMITED
         r.raise_for_status()
         data_html = r.json().get("html", "")
     except Exception as e:
         debug(f"Failed to load movie API for {movie_id}: {e}")
-        mark_hostname_issue(source.initials, "feed" if feed else "search", str(e))
+        mark_hostname_issue(source.initials, "search", str(e))
         return None
 
     movie_data = {
@@ -420,6 +380,21 @@ def _load_movie_data(
     recently_searched[movie_id] = movie_data
     shared_state.update(context, recently_searched)
     return movie_data
+
+
+def _report_rate_limit(response, initials, operation):
+    if response.status_code != 429:
+        # The rate-limit JSON can arrive with HTTP 200, including via FlareSolverr.
+        if '"limit reached"' not in response.text:
+            return False
+        try:
+            payload = response.json()
+        except ValueError:
+            return False
+        if not isinstance(payload, dict) or payload.get("error") != "limit reached":
+            return False
+    mark_hostname_issue(initials, operation, "Request limit reached")
+    return True
 
 
 def _parse_entries(data_html):
