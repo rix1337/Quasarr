@@ -26,6 +26,8 @@
 *.db-wal
 *.ini
 .env
+Quasarr.error.log
+Quasarr.error.log.*
 
 # CI PR-check artifacts
 pr_check_report.md

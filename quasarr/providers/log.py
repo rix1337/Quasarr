@@ -6,8 +6,10 @@ from __future__ import annotations
 import inspect
 import os
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from filelock import FileLock, Timeout
 from loguru import logger
 from wcwidth import wcswidth, wrap
 
@@ -25,6 +27,7 @@ _context_max_width = wcswidth("⬜⬜⬜")
 
 _subsequent_indent = 0
 _loggers = {}
+_error_log_max_bytes = 5 * 1024 * 1024
 
 log_level_names = {
     50: "CRIT",
@@ -154,15 +157,20 @@ class _Logger:
         self.logger = self.logger_alt.opt(colors=True)
 
     def _log(self, level: int, msg: str, *args: Any, **kwargs: Any) -> None:
+        colored_logger = self.logger
+        plain_logger = self.logger_alt
         if self.level > level:
-            return
+            if level < 40:
+                return
+            plain_logger = plain_logger.bind(file_only=True)
+            colored_logger = plain_logger.opt(colors=True)
 
         try:
             try:
-                self.logger.log(log_level_names[level], msg, *args, **kwargs)
+                colored_logger.log(log_level_names[level], msg, *args, **kwargs)
             except ValueError as e:
                 # Fallback: try logging without color parsing if tags are mismatched
-                self.logger_alt.log(log_level_names[level], msg, *args, **kwargs)
+                plain_logger.log(log_level_names[level], msg, *args, **kwargs)
 
                 if self.level <= 10:
                     self.logger_alt.debug(
@@ -216,6 +224,12 @@ def get_source_logger(source: str) -> _Logger:
     return get_logger(module_name)
 
 
+def log_source_issue(source: str, operation: str, message: str) -> None:
+    logger.bind(context="", source=source.upper(), padding="", file_only=True).error(
+        "{}: {}", operation, message
+    )
+
+
 def crit(msg: str, *args: Any, **kwargs: Any) -> None:
     _get_logger_for_module().crit(msg, *args, **kwargs)
 
@@ -267,6 +281,37 @@ def _counting_sink(message: Message) -> None:
     _subsequent_indent = message.__len__()
 
 
+def configure_error_log(config_path: str | Path) -> int:
+    path = Path(config_path) / "Quasarr.error.log"
+    backup = path.with_suffix(".log.1")
+    lock = FileLock(path.with_suffix(".log.lock"), timeout=1)
+
+    def write_error(message: Message) -> None:
+        entry = message.encode("utf-8", errors="backslashreplace")
+        try:
+            # All workers share this lock and reopen the file after any rotation.
+            with lock:
+                if (
+                    path.exists()
+                    and path.stat().st_size + len(entry) > _error_log_max_bytes
+                ):
+                    path.replace(backup)
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+                with os.fdopen(fd, "ab") as stream:
+                    stream.write(entry)
+        except (OSError, Timeout) as exc:
+            print(f"Could not write Quasarr.error.log: {exc}", file=sys.stderr)
+
+    return logger.add(
+        write_error,
+        format=_format,
+        level="ERROR",
+        colorize=False,
+        backtrace=False,
+        diagnose=False,
+    )
+
+
 def _init():
     logger.level(name="WARN", no=30, color="<yellow>")
     logger.level(name="CRIT", no=50, color="<red>")
@@ -282,6 +327,7 @@ def _init():
     logger.add(
         _wrapping_sink,
         format=_format,
+        filter=lambda record: not record["extra"].get("file_only", False),
         colorize=os.getenv("LOG_COLOR", "1").lower() in ["1", "true", "yes"],
         level=5,
     )
