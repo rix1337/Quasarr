@@ -828,7 +828,7 @@ class FfSfCloudflareTests(unittest.TestCase):
             )
 
         self.assertEqual(
-            {"links": [[protected_url, "filecrypt"]], "imdb_id": None}, result
+            {"links": [[protected_url, "ddownload"]], "imdb_id": None}, result
         )
         self.assertEqual([release_url], plain_urls)
         self.assertEqual([], redirect_urls)

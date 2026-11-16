@@ -9,6 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from quasarr.constants import DOWNLOAD_REQUEST_TIMEOUT_SECONDS
+from quasarr.downloads.mirror_filters import link_priority_rank, mirror_allowed
 from quasarr.downloads.sources.helpers.abstract_source import AbstractDownloadSource
 from quasarr.downloads.sources.helpers.redirect import resolve_crypter_redirect
 from quasarr.providers.cloudflare import LazyFlareSolverrSession
@@ -133,90 +134,91 @@ class Source(AbstractDownloadSource):
                 data = r.json()["html"]
 
             content = BeautifulSoup(data, "html.parser")
-            items = content.find_all("h3")
+            # An episode grabbed from a season entry carries SxxEyy only in its title.
+            season_title = re.sub(
+                r"(S\d+)E\d+(?:-E\d+)?", r"\1", title, flags=re.IGNORECASE
+            ).lower()
+            episode_match = re.search(r"S\d+E(\d+)", title, re.IGNORECASE)
 
-            for item in items:
+            release = None
+            for item in content.find_all("h3"):
                 try:
                     details = item.parent.parent.parent
                     name = details.find("small").text.strip()
-
-                    result_pattern = re.compile(
-                        r"^(?P<name>.+?)\.S(?P<season>\d+)(?:E\d+)?\..*?(?P<resolution>\d+p)\..+?-(?P<group>[\w/-]+)$",
-                        re.IGNORECASE,
-                    )
-                    result_match = result_pattern.match(name)
-
-                    if not result_match:
+                    if not _release_matches(name, release_parts):
                         continue
-
-                    result_parts = result_match.groupdict()
-
-                    name_match = (
-                        release_parts["name"].lower() == result_parts["name"].lower()
-                    )
-                    season_match = release_parts["season"] == result_parts["season"]
-                    resolution_match = (
-                        release_parts["resolution"].lower()
-                        == result_parts["resolution"].lower()
-                    )
-
-                    result_groups = {
-                        g.lower() for g in result_parts["group"].split("/")
-                    }
-                    release_groups = {
-                        g.lower() for g in release_parts["group"].split("/")
-                    }
-                    group_match = not result_groups.isdisjoint(release_groups)
-
-                    if name_match and season_match and resolution_match and group_match:
-                        info(f'Release "{name}" found at: {url}')
-
-                        mirrors_dict = _parse_mirrors(f"https://{sf}", details)
-
-                        release_url = None
-                        if mirrors:
-                            for m in mirrors:
-                                if m in mirrors_dict["season"]:
-                                    release_url = mirrors_dict["season"][m]
-                                    break
-                            if not release_url:
-                                info(
-                                    f"Could not find any of mirrors '{mirrors}' for '{title}'"
-                                )
-                        else:
-                            release_url = next(iter(mirrors_dict["season"].values()))
-
-                        if release_url:
-                            real_url = _resolve_sf_redirect(
-                                release_url, user_agent, cf_session
-                            )
-                            if real_url:
-                                # Use the mirror name if we have it, otherwise use "filecrypt"
-                                # We don't know exactly which mirror was picked if we just took the first one
-                                # But if we iterated, we know.
-                                # Let's just say "filecrypt" as generic fallback or try to find which key matched
-                                mirror_name = "filecrypt"
-                                if mirrors:
-                                    for m in mirrors:
-                                        if (
-                                            m in mirrors_dict["season"]
-                                            and mirrors_dict["season"][m] == release_url
-                                        ):
-                                            mirror_name = m
-                                            break
-
-                                return {
-                                    "links": [[real_url, mirror_name]],
-                                    "imdb_id": imdb_id,
-                                }
-
-                        return {"links": [], "imdb_id": imdb_id}
-                except:
+                    if name.lower() == season_title:
+                        release = (name, details)
+                        break
+                    release = release or (name, details)
+                except Exception:
                     continue
+
+            if not release:
+                return {"links": [], "imdb_id": None}
+
+            name, details = release
+            info(f'Release "{name}" found at: {url}')
+            mirrors_dict = _parse_mirrors(f"https://{sf}", details)
+            links = mirrors_dict.get("season", {})
+            if episode_match and not re.search(r"S\d+E\d+", name, re.IGNORECASE):
+                episode = next(
+                    (
+                        e
+                        for e in mirrors_dict.get("episodes", [])
+                        if e["number"] == int(episode_match.group(1))
+                    ),
+                    None,
+                )
+                if episode and episode["links"]:
+                    links = episode["links"]
+
+            selected = _select_mirrors(links, mirrors)
+            if not selected:
+                info(f"Could not find any of mirrors '{mirrors}' for '{title}'")
+                return {"links": [], "imdb_id": imdb_id}
+
+            resolved = []
+            for release_url, mirror_name in selected:
+                real_url = _resolve_sf_redirect(release_url, user_agent, cf_session)
+                if real_url:
+                    resolved.append([real_url, mirror_name])
+            return {"links": resolved, "imdb_id": imdb_id}
         except Exception as e:
             mark_hostname_issue(Source.initials, "download", str(e))
 
         return {"links": [], "imdb_id": None}
+
+
+def _release_matches(name, release_parts):
+    match = re.match(
+        r"^(?P<name>.+?)\.S(?P<season>\d+)(?:E\d+)?\..*?(?P<resolution>\d+p)\..+?-(?P<group>[\w/-]+)$",
+        name,
+        re.IGNORECASE,
+    )
+    if not match:
+        return False
+    parts = match.groupdict()
+    return (
+        release_parts["name"].lower() == parts["name"].lower()
+        and release_parts["season"] == parts["season"]
+        and release_parts["resolution"].lower() == parts["resolution"].lower()
+        and not {g.lower() for g in parts["group"].split("/")}.isdisjoint(
+            g.lower() for g in release_parts["group"].split("/")
+        )
+    )
+
+
+def _select_mirrors(links, mirrors):
+    """Every allowed mirror's link, whitelisted ones first in category priority order."""
+    ranked = sorted(
+        (
+            (link_priority_rank([link, name], mirrors), link, name.lower())
+            for name, link in links.items()
+        ),
+        key=lambda item: item[0],
+    )
+    return [(link, name) for _, link, name in ranked if mirror_allowed(name, mirrors)]
 
 
 def _parse_mirrors(base_url, entry):

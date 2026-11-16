@@ -378,7 +378,6 @@ class Source(AbstractSearchSource):
                                     title = re.sub(
                                         r"(S\d{1,3})", rf"\1E{int(episode):02d}", title
                                     )
-                                    source = next(iter(episode_data["links"].values()))
                                 else:
                                     debug(
                                         f"Episode '{episode}' data not found in mirrors for '{title}'"
@@ -412,10 +411,17 @@ class Source(AbstractSearchSource):
                     ):
                         continue
 
+                    # The release page, not one mirror's link: the download
+                    # picks the mirror by the category's priority order.
+                    release_page = (
+                        f"https://{sf}/{series_id}/{season}"
+                        if season
+                        else f"https://{sf}/{series_id}"
+                    )
                     link = generate_download_link(
                         shared_state,
                         title,
-                        source,
+                        release_page,
                         mb,
                         password,
                         imdb_id,
@@ -432,9 +438,7 @@ class Source(AbstractSearchSource):
                                 "link": link,
                                 "size": size_bytes,
                                 "date": one_hour_ago,
-                                "source": f"https://{sf}/{series_id}/{season}"
-                                if season
-                                else f"https://{sf}/{series_id}",
+                                "source": release_page,
                             },
                             "type": "protected",
                         }

@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 import requests
 
 from quasarr.constants import DOWNLOAD_REQUEST_TIMEOUT_SECONDS
+from quasarr.downloads.mirror_filters import link_priority_rank
 from quasarr.downloads.sources.helpers.abstract_source import AbstractDownloadSource
 from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import debug, info
@@ -66,6 +67,16 @@ def _collect_online_direct_links(release, mirrors, shared_state):
     online_hosters = len(set(link[1] for link in online_links))
 
     return online_hosters, online_links
+
+
+def _ranks_higher(links, count, best, mirrors):
+    """A mirror upload carrying a higher-priority hoster wins, then more online hosters."""
+
+    def key(candidate_links, candidate_count):
+        rank = min(link_priority_rank(link, mirrors) for link in candidate_links)
+        return rank, -candidate_count
+
+    return best is None or key(links, count) < key(best[1], best[0])
 
 
 class Source(AbstractDownloadSource):
@@ -294,8 +305,8 @@ class Source(AbstractDownloadSource):
                     if hide_badged
                     else []
                 )
-                if online_hide and (
-                    best_hide is None or len(online_hide) > best_hide[0]
+                if online_hide and _ranks_higher(
+                    online_hide, len(online_hide), best_hide, mirrors
                 ):
                     best_hide = (len(online_hide), online_hide)
 
@@ -310,14 +321,18 @@ class Source(AbstractDownloadSource):
                     if fc_badged
                     else []
                 )
-                if online_fc and (best_fc is None or len(online_fc) > best_fc[0]):
+                if online_fc and _ranks_higher(
+                    online_fc, len(online_fc), best_fc, mirrors
+                ):
                     best_fc = (len(online_fc), online_fc)
 
                 # Tier 3 candidate: this mirror's online direct links.
                 count, direct_links = _collect_online_direct_links(
                     release, mirrors, shared_state
                 )
-                if direct_links and (best_direct is None or count > best_direct[0]):
+                if direct_links and _ranks_higher(
+                    direct_links, count, best_direct, mirrors
+                ):
                     best_direct = (count, direct_links)
 
                 # Tier 4 fallbacks: first offline-flagged option of each kind.

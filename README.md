@@ -142,8 +142,9 @@ integration.
 Manage categories in the web UI.
 
 * **Download categories** organize your downloads. Inside one you can allow only certain mirrors: downloads then
-  fail unless the release is available from them. This affects the **Quasarr download client** in your apps, not
-  search results.
+  fail unless the release is available from them. Every allowed mirror is used; their order sets the priority, so
+  the first one comes first, as when solving a CAPTCHA. This affects the **Quasarr download client** in your apps,
+  not search results.
 * **Search categories** can be limited to certain sites. Only those sites are then searched for that category. This
   affects the **Quasarr Newznab indexer** in your apps.
 

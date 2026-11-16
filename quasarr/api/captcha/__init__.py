@@ -17,6 +17,7 @@ from quasarr.downloads.linkcrypters.hide import (
     HideEpisodeError,
     confirm_hide_episode_selection,
 )
+from quasarr.downloads.mirror_filters import link_priority_rank
 from quasarr.downloads.packages import delete_package
 from quasarr.providers import obfuscated, shared_state
 from quasarr.providers.auth import public_endpoint
@@ -179,20 +180,9 @@ def setup_captcha_routes(app):
             except Exception:
                 mirror_priority = []
             if mirror_priority:
-
-                def mirror_rank(link):
-                    if isinstance(link, (list, tuple)) and len(link) > 1 and link[1]:
-                        haystack = str(link[1]).lower()
-                    elif isinstance(link, (list, tuple)) and link:
-                        haystack = str(link[0]).lower()
-                    else:
-                        haystack = str(link).lower()
-                    for index, mirror in enumerate(mirror_priority):
-                        if mirror and mirror in haystack:
-                            return index
-                    return len(mirror_priority)
-
-                prioritized_links = sorted(links, key=mirror_rank)
+                prioritized_links = sorted(
+                    links, key=lambda link: link_priority_rank(link, mirror_priority)
+                )
             else:
                 rapid = [ln for ln in links if "rapidgator" in ln[1].lower()]
                 others = [ln for ln in links if "rapidgator" not in ln[1].lower()]

@@ -21,6 +21,7 @@ from quasarr.constants import (
     SIZE_REGEX,
     TRAILING_GARBAGE_PATTERN,
 )
+from quasarr.downloads.mirror_filters import mirror_allowed
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.log import debug, info, warn
 from quasarr.providers.utils import (
@@ -407,7 +408,6 @@ def download(site, shared_state, url, mirrors, title, password):
     """
     headers = {"User-Agent": shared_state.values["user_agent"]}
 
-    mirrors_lower = [m.lower() for m in mirrors] if mirrors else []
     links = []
 
     try:
@@ -483,10 +483,9 @@ def download(site, shared_state, url, mirrors, title, password):
             seen_urls.add(fc_url)
 
             # Filter by requested mirror if specified
-            if mirrors_lower:
-                if fc_mirror not in mirrors_lower:
-                    debug(f"Skipping {fc_mirror} link (requested mirrors: {mirrors})")
-                    continue
+            if not mirror_allowed(fc_mirror, mirrors):
+                debug(f"Skipping {fc_mirror} link (requested mirrors: {mirrors})")
+                continue
 
             # Store [url, mirror_name] - mirror_name is used by CAPTCHA page for filtering
             links.append([fc_url, fc_mirror])

@@ -44,7 +44,47 @@ def normalize_mirror_token(value):
     return _normalize_root_token(host_or_name)
 
 
+def mirror_priority_rank(value, mirrors):
+    """Position of a mirror name, hostname, or URL in the ordered category mirrors."""
+    token = normalize_mirror_token(value)
+    ranked = [normalize_mirror_token(mirror) for mirror in (mirrors or [])]
+    return ranked.index(token) if token and token in ranked else len(ranked)
+
+
+def link_priority_rank(link, mirrors):
+    """Rank a [url, mirror] link by its mirror label, its URL, or a label naming the mirror."""
+    if isinstance(link, (list, tuple)):
+        values = [value for value in link[:2] if value]
+    else:
+        values = [link]
+    ranks = [mirror_priority_rank(value, mirrors) for value in values]
+    for index, mirror in enumerate(mirrors or []):
+        wanted = _clean_token(mirror)
+        if wanted and any(wanted in _clean_token(value) for value in values):
+            ranks.append(index)
+    return min(ranks, default=len(mirrors or []))
+
+
+def is_known_mirror(value):
+    """Whether a mirror name, hostname, or URL names a known hoster."""
+    return normalize_mirror_token(value) in _CANONICAL_MIRROR_TOKENS
+
+
+def mirror_allowed(link, mirrors):
+    """Whitelist check for a source link before decryption.
+
+    A label or URL that names no known hoster, as a generic "filecrypt"
+    container, is kept: its hoster is only known after decryption, where the
+    final check applies the whitelist.
+    """
+    if not mirrors or link_priority_rank(link, mirrors) < len(mirrors):
+        return True
+    values = link[:2] if isinstance(link, (list, tuple)) else [link]
+    return not any(is_known_mirror(value) for value in values if value)
+
+
 def filter_final_download_urls(urls, mirrors):
+    """Keep links of whitelisted mirrors, ordered by the category's mirror priority."""
     allowed_tokens = {
         normalize_mirror_token(mirror) for mirror in (mirrors or []) if mirror
     }
@@ -72,6 +112,9 @@ def filter_final_download_urls(urls, mirrors):
             kept_tokens.add(token)
             continue
         dropped.append({"url": url, "token": token or "unknown"})
+
+    # Every whitelisted mirror is kept for redundancy, highest priority first.
+    kept_urls.sort(key=lambda url: mirror_priority_rank(url, mirrors))
 
     return {
         "urls": kept_urls,

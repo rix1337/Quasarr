@@ -2,6 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from quasarr.search.sources.templates.sf import download as sf_download
 from quasarr.search.sources.templates.sf import search as sf
 
 SEASON_HTML = """
@@ -125,10 +126,10 @@ class SfEpisodeSearchTests(unittest.TestCase):
 
         self.assertEqual(len(releases), 1)
         self.assertEqual(releases[0]["details"]["title"], EPISODE_TITLE)
-        # The per-episode container must be grabbed, not the whole-season one.
+        # The release page is passed on so the download picks the mirror.
         self.assertEqual(
             self._source_passed_to_download_link(link_maker),
-            "https://sf.invalid/external/2/ep2-1f",
+            "https://sf.invalid/synthetic-show/1",
         )
 
     def test_int_episode_yields_same_result_as_string(self):
@@ -140,7 +141,7 @@ class SfEpisodeSearchTests(unittest.TestCase):
         self.assertEqual(releases[0]["details"]["title"], EPISODE_TITLE)
         self.assertEqual(
             self._source_passed_to_download_link(link_maker),
-            "https://sf.invalid/external/2/ep2-1f",
+            "https://sf.invalid/synthetic-show/1",
         )
 
     def test_episode_release_size_is_pack_size_divided_by_episode_count(self):
@@ -151,15 +152,61 @@ class SfEpisodeSearchTests(unittest.TestCase):
         self.assertEqual(releases[0]["details"]["size"], 4096 * 1024 * 1024)
 
     def test_season_search_still_returns_the_full_pack(self):
-        # Legacy path: without an episode the season container is returned
-        # unchanged and the title keeps its plain S01 form.
+        # Without an episode the title keeps its plain S01 form.
         releases, link_maker = run_search(None)
 
         self.assertEqual(len(releases), 1)
         self.assertEqual(releases[0]["details"]["title"], SEASON_TITLE)
         self.assertEqual(
             self._source_passed_to_download_link(link_maker),
-            "https://sf.invalid/external/2/season-1f",
+            "https://sf.invalid/synthetic-show/1",
+        )
+
+
+def run_download(title, mirrors):
+    """Run the SF download for a release page; returns the redirect that was resolved."""
+    resolve = MagicMock(side_effect=lambda url, *args: url + "/resolved")
+    with (
+        patch.object(sf_download, "_resolve_sf_redirect", resolve),
+        patch.object(sf_download, "mark_hostname_issue"),
+    ):
+        result = sf_download.Source()._get_download_links(
+            fake_shared_state(),
+            "https://sf.invalid/synthetic-show/1",
+            mirrors,
+            title,
+            "",
+            FakeCfSession(),
+        )
+    return result["links"]
+
+
+class SfDownloadMirrorPriorityTests(unittest.TestCase):
+    def test_season_returns_every_whitelisted_mirror_by_priority(self):
+        self.assertEqual(
+            run_download(SEASON_TITLE, ["rapidgator", "ddownload", "1fichier"]),
+            [
+                ["https://sf.invalid/external/2/season-dd/resolved", "ddownload"],
+                ["https://sf.invalid/external/2/season-1f/resolved", "1fichier"],
+            ],
+        )
+
+    def test_episode_uses_its_own_container_by_priority(self):
+        self.assertEqual(
+            run_download(EPISODE_TITLE, ["ddownload"]),
+            [["https://sf.invalid/external/2/ep2-dd/resolved", "ddownload"]],
+        )
+
+    def test_no_whitelisted_mirror_yields_no_link(self):
+        self.assertEqual(run_download(SEASON_TITLE, ["rapidgator"]), [])
+
+    def test_without_mirrors_every_link_is_used(self):
+        self.assertEqual(
+            run_download(SEASON_TITLE, []),
+            [
+                ["https://sf.invalid/external/2/season-1f/resolved", "1fichier"],
+                ["https://sf.invalid/external/2/season-dd/resolved", "ddownload"],
+            ],
         )
 
 
