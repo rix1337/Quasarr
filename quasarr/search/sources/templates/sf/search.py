@@ -364,12 +364,12 @@ class Source(AbstractSearchSource):
                             if not re.search(r"S\d{1,3}E\d{1,3}", title):
                                 episodes_in_release = len(mirrors["episodes"])
 
-                                # Get the correct episode entry (episode numbers are 1-based, list index is 0-based)
+                                # SF can list announced episodes without mirrors.
                                 episode_data = next(
                                     (
                                         e
                                         for e in mirrors["episodes"]
-                                        if e["number"] == int(episode)
+                                        if e["number"] == int(episode) and e["links"]
                                     ),
                                     None,
                                 )

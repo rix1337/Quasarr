@@ -5,7 +5,12 @@ from unittest.mock import MagicMock, patch
 from quasarr.search.sources.templates.sf import download as sf_download
 from quasarr.search.sources.templates.sf import search as sf
 
-SEASON_HTML = """
+EPISODE_TWO_MIRRORS = """<div class="row">
+<a class="dlb row" href="/external/2/ep2-1f"><div class="col"><span>1F</span></div></a>
+<a class="dlb row" href="/external/2/ep2-dd"><div class="col"><span>DD</span></div></a>
+</div>"""
+
+SEASON_HTML = f"""
 <div class="entry">
 <div class="row">
 <div class="col">
@@ -27,10 +32,7 @@ SEASON_HTML = """
 </div>
 </div>
 <div class="row"><div>2.</div><div>Synthetic Episode Two</div>
-<div class="row">
-<a class="dlb row" href="/external/2/ep2-1f"><div class="col"><span>1F</span></div></a>
-<a class="dlb row" href="/external/2/ep2-dd"><div class="col"><span>DD</span></div></a>
-</div>
+{EPISODE_TWO_MIRRORS}
 </div>
 </div>
 </div>
@@ -67,7 +69,8 @@ class FakeResponse:
 class FakeCfSession:
     """Serves the three requests _search makes: search API, series page, season API."""
 
-    def __init__(self):
+    def __init__(self, season_html=SEASON_HTML):
+        self.season_html = season_html
         self.requested_urls = []
 
     def get(self, url, headers, timeout, request_get=None):
@@ -75,7 +78,7 @@ class FakeCfSession:
         if "/api/v2/search" in url:
             return FakeResponse(payload=SEARCH_API_PAYLOAD)
         if "/api/v1/" in url:
-            return FakeResponse(payload={"html": SEASON_HTML})
+            return FakeResponse(payload={"html": self.season_html})
         return FakeResponse(text=SERIES_PAGE)
 
 
@@ -89,12 +92,11 @@ def fake_shared_state():
     )
 
 
-def run_search(episode):
+def run_search(episode, season_html=SEASON_HTML):
     """Run _search with a fake session; returns (releases, generate_download_link mock)."""
     link_maker = MagicMock(return_value="http://quasarr.invalid/download/?payload=x")
     with (
         patch.object(sf, "get_recently_searched", return_value={}),
-        patch.object(sf, "is_valid_release", return_value=True),
         patch.object(sf, "generate_download_link", link_maker),
         patch.object(sf, "clear_hostname_issue"),
         patch.object(sf, "mark_hostname_issue"),
@@ -106,7 +108,7 @@ def run_search(episode):
             "Synthetic Show",
             1,
             episode,
-            FakeCfSession(),
+            FakeCfSession(season_html),
         )
     return releases, link_maker
 
@@ -150,6 +152,14 @@ class SfEpisodeSearchTests(unittest.TestCase):
         releases, _ = run_search("2")
 
         self.assertEqual(releases[0]["details"]["size"], 4096 * 1024 * 1024)
+
+    def test_episode_row_without_mirrors_is_not_offered(self):
+        season_html = SEASON_HTML.replace(EPISODE_TWO_MIRRORS, "")
+
+        releases, link_maker = run_search("2", season_html)
+
+        self.assertEqual(releases, [])
+        link_maker.assert_not_called()
 
     def test_season_search_still_returns_the_full_pack(self):
         # Without an episode the title keeps its plain S01 form.
