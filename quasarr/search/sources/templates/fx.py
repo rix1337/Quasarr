@@ -52,5 +52,6 @@ TEMPLATE = {
         "follow": {"selector": "h2.entry-title a", "limit": 1},
     },
     "search_list": _release_list('article a[href*="filecrypt."]', source_is_page=True),
-    "download": {"password": "site_name"},
+    # releases are bare crypter links that never name their hoster
+    "download": {"password": "site_name", "only_mirror": "rapidgator"},
 }

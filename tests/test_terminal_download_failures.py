@@ -237,3 +237,61 @@ class TerminalDownloadFailureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OnlyMirrorCrypterLinkTests(unittest.TestCase):
+    """A site that only links bare containers names its one hoster for them."""
+
+    CONTAINER_URL = "https://filecrypt.cc/Container/SYNTHETIC.html"
+
+    def _download(self, mirrors):
+        shared_state = _shared_state()
+        shared_state.get_db.return_value = MagicMock()
+        source = MagicMock(only_mirror="rapidgator")
+        source.get_download_links.return_value = {"links": []}
+        with (
+            patch(
+                "quasarr.downloads.get_download_sources", return_value={"xx": source}
+            ),
+            patch(
+                "quasarr.downloads.get_download_category_mirrors", return_value=mirrors
+            ),
+            patch("quasarr.downloads.download_category_exists", return_value=True),
+            patch("quasarr.downloads.clear_hostname_issue"),
+            patch("quasarr.downloads.mark_hostname_issue"),
+            patch("quasarr.downloads.package_id_exists", return_value=False),
+            patch("quasarr.downloads.store_protected_links") as store_protected,
+            patch(
+                "quasarr.downloads.filter_offline_links",
+                side_effect=lambda links, **_: links,
+            ),
+            patch("quasarr.downloads.StatsHelper"),
+        ):
+            result = download(
+                shared_state,
+                "Sonarr/1.0",
+                "tv",
+                "Synthetic.Release",
+                self.CONTAINER_URL,
+                1,
+                None,
+                None,
+                "xx",
+            )
+        return result, store_protected
+
+    def test_container_is_labelled_with_the_sites_mirror(self):
+        _, store_protected = self._download(["ddownload", "rapidgator"])
+        self.assertEqual(
+            [[self.CONTAINER_URL, "rapidgator"]], store_protected.call_args.args[1]
+        )
+
+    def test_mirror_outside_the_whitelist_fails_before_any_captcha(self):
+        result, store_protected = self._download(["ddownload"])
+        self.assertTrue(result["failed"])
+        store_protected.assert_not_called()
+
+    def test_fx_template_names_its_one_mirror(self):
+        from quasarr.search.sources.templates import get_templates
+
+        self.assertEqual("rapidgator", get_templates()["fx"].only_mirror)

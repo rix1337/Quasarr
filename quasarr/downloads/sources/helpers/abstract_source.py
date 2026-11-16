@@ -10,6 +10,8 @@ from quasarr.downloads.sources.helpers.download_release import DownloadRelease
 class AbstractDownloadSource(ABC):
     # Set only by user-defined sources, whose hostname is not in Quasarr.ini.
     custom_hostname = None
+    # The one hoster a site uses, for links that carry only a crypter label.
+    only_mirror = None
 
     @property
     @abstractmethod

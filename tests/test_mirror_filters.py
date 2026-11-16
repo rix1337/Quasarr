@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 from quasarr.downloads import submit_final_download_urls
 from quasarr.downloads.mirror_filters import (
     filter_final_download_urls,
+    link_priority_rank,
+    mirror_allowed,
     normalize_mirror_token,
 )
 
@@ -47,6 +49,49 @@ class FilterFinalDownloadUrlsTests(unittest.TestCase):
             {item["token"] for item in result["dropped"]},
             {"rapidgator", "nitroflare"},
         )
+
+    def test_keeps_every_whitelisted_mirror_in_priority_order(self):
+        result = filter_final_download_urls(
+            [
+                "https://rapidgator.net/file/abc",
+                "https://ddownload.com/xyz",
+                "https://1fichier.com/?part2",
+            ],
+            ["1fichier", "rapidgator"],
+        )
+        self.assertEqual(
+            result["urls"],
+            ["https://1fichier.com/?part2", "https://rapidgator.net/file/abc"],
+        )
+
+    def test_without_whitelist_every_link_is_kept(self):
+        urls = ["https://rapidgator.net/file/abc", "https://ddownload.com/xyz"]
+        self.assertEqual(filter_final_download_urls(urls, [])["urls"], urls)
+
+
+class LinkPriorityRankTests(unittest.TestCase):
+    def test_ranks_by_label_alias_url_and_unknown(self):
+        mirrors = ["rapidgator", "ddownload"]
+        self.assertEqual(link_priority_rank(["https://x.invalid", "RG.to"], mirrors), 0)
+        self.assertEqual(
+            link_priority_rank(["https://ddl.to/f", "filecrypt"], mirrors), 1
+        )
+        self.assertEqual(
+            link_priority_rank(["https://x.invalid", "DDownload Premium"], mirrors), 1
+        )
+        self.assertEqual(
+            link_priority_rank(["https://x.invalid", "1fichier"], mirrors), 2
+        )
+
+
+class MirrorAllowedTests(unittest.TestCase):
+    def test_generic_labels_wait_for_the_final_check(self):
+        mirrors = ["rapidgator"]
+        self.assertTrue(mirror_allowed("filecrypt", mirrors))
+        self.assertTrue(mirror_allowed("Download", mirrors))
+        self.assertTrue(mirror_allowed("rapidgator.net", mirrors))
+        self.assertFalse(mirror_allowed("ddownload", mirrors))
+        self.assertTrue(mirror_allowed("ddownload", []))
 
 
 class SubmitFinalDownloadUrlsTests(unittest.TestCase):

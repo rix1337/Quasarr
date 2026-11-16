@@ -509,5 +509,22 @@ class WxDirectLinksTests(unittest.TestCase):
         )
 
 
+class WxMirrorPriorityTests(unittest.TestCase):
+    def test_upload_with_higher_priority_hoster_wins_over_more_hosters(self):
+        from quasarr.search.sources.templates.wx.download import _ranks_higher
+
+        mirrors = ["rapidgator", "ddownload"]
+        best = (
+            2,
+            [["https://a.invalid", "ddownload"], ["https://b.invalid", "1fichier"]],
+        )
+        self.assertTrue(
+            _ranks_higher([["https://c.invalid", "rapidgator"]], 1, best, mirrors)
+        )
+        self.assertFalse(
+            _ranks_higher([["https://d.invalid", "ddownload"]], 1, best, mirrors)
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

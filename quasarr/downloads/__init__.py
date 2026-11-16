@@ -12,7 +12,7 @@ from quasarr.constants import (
     PROTECTED_PATTERNS,
 )
 from quasarr.downloads.linkcrypters.hide import decrypt_links_if_hide
-from quasarr.downloads.mirror_filters import filter_final_download_urls
+from quasarr.downloads.mirror_filters import filter_final_download_urls, mirror_allowed
 from quasarr.downloads.packages import get_packages
 from quasarr.downloads.sources import get_sources as get_download_sources
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
@@ -621,8 +621,22 @@ def download(
         if source_result is None:
             crypter, crypter_type = detect_crypter(url)
             if crypter_type:
-                # For direct crypter URLs, we only know the crypter type, not the hoster inside
-                source_result = {"links": [[url, crypter]]}
+                # For direct crypter URLs, we only know the crypter type, not the
+                # hoster inside, unless the site always uses one hoster.
+                site = download_sources.get(normalized_source_key)
+                only_mirror = getattr(site, "only_mirror", None)
+                if only_mirror and not mirror_allowed(only_mirror, mirrors):
+                    source_result = {
+                        "links": [],
+                        "error": (
+                            f"{normalized_source_key.upper()} only offers {only_mirror}, "
+                            f'which the mirror-whitelist of category "{download_category}" '
+                            "does not allow"
+                        ),
+                        "terminal": True,
+                    }
+                else:
+                    source_result = {"links": [[url, only_mirror or crypter]]}
                 label = crypter.upper()
                 detected_source_key = crypter
 

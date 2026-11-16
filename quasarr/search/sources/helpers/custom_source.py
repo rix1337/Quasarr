@@ -36,6 +36,7 @@ from quasarr.constants import (
     SEARCH_REQUEST_TIMEOUT_SECONDS,
     SHARE_HOSTERS_LOWERCASE,
 )
+from quasarr.downloads.mirror_filters import is_known_mirror, mirror_allowed
 from quasarr.downloads.sources.helpers.abstract_source import AbstractDownloadSource
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.log import debug, get_logger
@@ -713,6 +714,9 @@ def compile_definition(definition, bundled=False):
             download.get("empty_is_issue", True), "download.empty_is_issue"
         ),
         "mirror": str(links.get("mirror") or "text").strip(),
+        # a site using a single hoster names it here, in place of a generic
+        # crypter label such as "filecrypt"
+        "only_mirror": normalize_hoster_name(download.get("only_mirror") or "") or None,
         "filter": _require_choice(
             download.get("filter", "known"), DOWNLOAD_FILTERS, "download.filter"
         ),
@@ -1501,6 +1505,10 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
         return self.spec["key"]
 
     @property
+    def only_mirror(self):
+        return self.spec["download"]["only_mirror"]
+
+    @property
     def custom_hostname(self):
         # bundled templates keep their hostname in the hostname settings
         return None if self.spec["bundled"] else self.spec["hostname"]
@@ -1996,16 +2004,19 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 ):
                     mark_hostname_issue(self.initials, "download", link_error)
                 return result
+            if download["only_mirror"]:
+                links = [
+                    [url, download["only_mirror"]]
+                    if not is_known_mirror(mirror)
+                    else [url, mirror]
+                    for url, mirror in links
+                ]
             if mirrors and download["filter_mirrors"] == "exact":
                 wanted = {normalize_hoster_name(m) for m in mirrors if m}
                 links = [link for link in links if link[1] in wanted]
             elif mirrors and download["filter_mirrors"] != "none":
                 index = 1 if download["filter_mirrors"] == "mirror" else 0
-                links = [
-                    link
-                    for link in links
-                    if any(m.lower() in link[index].lower() for m in mirrors)
-                ]
+                links = [link for link in links if mirror_allowed(link[index], mirrors)]
                 if not links:
                     self._log("downloads").info(
                         f"No download links for {title} match the mirrors {mirrors}"
