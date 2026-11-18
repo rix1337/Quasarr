@@ -92,12 +92,13 @@ stable for you, please open a pull request with it, so the site becomes built-in
 
 ## Changing a built-in site
 
-When a site changes and an update is not out yet, experienced users can change its template under **Sites → More**.
-The editor shows the template as JSON and tests every step before you save. Sites whose steps run Quasarr's own code
-let you change the addresses that code requests.
+When a site changes and an update is not out yet, experienced users can change its template under **Sites → Edit**.
+It opens in the same editor as sites you set up yourself, with each step tested before you save, and its template as
+JSON on the last step. Steps a site runs in Quasarr's own code cannot change; you can change the addresses that code
+requests.
 
 A changed site is yours to maintain. Issues about it are not supported, so reset it to the shipped version before you
-report a problem. Removing a changed site resets it.
+report a problem. A changed site is reset, not removed.
 
 ## Hostname rules
 

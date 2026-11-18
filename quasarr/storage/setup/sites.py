@@ -517,13 +517,6 @@ SITES_CSS = """
   .chip .flag svg { width: 1em; height: .75em; vertical-align: -.05em; }
   .chip.warn { background: #fff3cd; border-color: #d39e00; color: #856404; }
   .site-actions { display: flex; gap: .35rem; flex-wrap: wrap; justify-content: flex-end; align-items: flex-start; }
-  .more { position: relative; }
-  .more > summary { list-style: none; cursor: pointer; padding: .3rem .7rem; font-size: .85rem; border-radius: .4rem;
-    border: 1px solid var(--card-border); color: var(--fg-color); }
-  .more > summary::-webkit-details-marker { display: none; }
-  .more-menu { position: absolute; right: 0; z-index: 5; width: min(16rem, 80vw); margin-top: .3rem; padding: .6rem;
-    background: var(--card-bg); border: 1px solid var(--card-border); border-radius: .5rem; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
-  .more-menu .hint { margin: .4rem 0 0; }
   .site-actions button, .check-actions button { padding: .3rem .7rem; font-size: .85rem; margin: 0; }
   .check-actions { display: flex; gap: .35rem; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
   .check-actions select { width: auto; padding: .3rem 1.8rem .3rem .5rem; background-position: right .5rem center;
@@ -638,6 +631,10 @@ _PAGE_SCRIPT = r"""
       }
       actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Address',
         onclick: function() { addressForm(row, site); }}));
+      actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Edit',
+        title: 'Change its template, for when the site changed and an update is not out yet. ' +
+          'Issues about a changed site are not supported.',
+        onclick: function() { window.location.href = '/sites/edit/' + encodeURIComponent(site.key.toLowerCase()); }}));
       if (site.modified) {
         actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Reset',
           onclick: function(event) { resetTemplate(site, event.currentTarget); }}));
@@ -652,16 +649,6 @@ _PAGE_SCRIPT = r"""
     if (!site.modified) {
       actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Remove',
         onclick: function() { remove(site); }}));
-    }
-    // the template editor is for advanced users only, so it hides behind More
-    if (site.kind === 'builtin') {
-      var menu = el('div', {className: 'more-menu'}, [
-        el('button', {type: 'button', className: 'btn-secondary', text: site.modified ? 'Edit your changes' : 'Change its template',
-          onclick: function() { window.location.href = '/sites/edit/' + encodeURIComponent(site.key.toLowerCase()); }}),
-        el('p', {className: 'hint', text: 'For experienced users, when the site changed and an update is not out yet. ' +
-          'Issues about a changed site are not supported.'})
-      ]);
-      actions.appendChild(el('details', {className: 'more'}, [el('summary', {text: 'More'}), menu]));
     }
     if (site.needs_login && !site.login_user && site.kind === 'builtin') loginForm(row, site);
     return row;
@@ -949,12 +936,6 @@ _PAGE_SCRIPT = r"""
     });
   };
 
-  // an open More menu closes when the page is clicked elsewhere
-  document.addEventListener('click', function(event) {
-    document.querySelectorAll('details.more[open]').forEach(function(menu) {
-      if (!menu.contains(event.target)) menu.open = false;
-    });
-  });
   load();
   $('add-input').focus();
 })();

@@ -96,6 +96,48 @@ class OverrideTests(unittest.TestCase):
         moved = {**unchanged, "feeds": [{"category": 2000, "url": "https://{host}/x/"}]}
         self.assertEqual(["feeds"], list(site_editor._changed_parts("mb", moved)))
 
+    def test_the_wizards_whole_definition_only_changes_editable_parts(self):
+        sent = {
+            **templates.shipped_definition("mb"),
+            "name": "Renamed",
+            "hostname": "site.invalid",
+            "language": "en",
+            "hooks": {"feed": "search"},
+        }
+        self.assertEqual({}, site_editor._changed_parts("mb", sent))
+
+    def test_the_wizard_edits_the_shipped_template_with_the_changes(self):
+        template_overrides.save_override("nx", {"flaresolverr": True})
+        with patch.object(site_editor, "Config") as config:
+            config.return_value.get.return_value = "site.invalid"
+            definition = site_editor.builtin_definition("nx")
+        self.assertTrue(definition["flaresolverr"])
+        self.assertEqual("site.invalid", definition["hostname"])
+        self.assertEqual("nx", definition["key"])
+        self.assertIn("hooks", definition)
+
+    def test_previews_of_a_built_in_site_run_its_code_with_the_changes(self):
+        from quasarr.api.config.custom_sources import _draft_source
+
+        draft = templates.shipped_definition("nx")
+        draft["urls"] = {**draft["urls"], "release": "https://{host}/r/{slug}"}
+        source = _draft_source(draft)
+        self.assertIn("search", source.hooks)
+        self.assertEqual("https://{host}/r/{slug}", source.spec["urls"]["release"])
+
+    def test_wizard_page_marks_the_steps_a_site_runs_in_code(self):
+        from quasarr.storage.setup.custom_sources import custom_source_wizard_page
+
+        with (
+            patch.object(site_editor, "Config"),
+            patch(
+                "quasarr.storage.setup.custom_sources.render_form",
+                side_effect=lambda _title, body, _extra: body,
+            ),
+        ):
+            page = custom_source_wizard_page(builtin="nx")
+        self.assertIn('"code_steps": ["feed", "search", "download"]', page)
+
     def test_removing_a_changed_site_resets_it_and_keeps_the_address(self):
         template_overrides.save_override("mb", {"flaresolverr": True})
         with patch.object(sites, "Config") as config:
