@@ -108,7 +108,7 @@ def get_custom_sources():
 
 def save_definition(definition):
     """Validate, encrypt and store a definition; assigns a key to new ones."""
-    from quasarr.search.sources.helpers.custom_source import compile_definition
+    from quasarr.search.sources.helpers.custom_source import known_definition
     from quasarr.storage.config import encrypt_secret
 
     definition = dict(definition)
@@ -124,7 +124,8 @@ def save_definition(definition):
     definition["key"] = str(definition["key"]).lower()
     definition["schema"] = SCHEMA_VERSION
     definition.setdefault("enabled", True)
-    compile_definition(definition)
+    # validates, and drops keys Quasarr does not read so they never look like settings
+    definition = known_definition(definition, keep=("key", "schema", "enabled"))
     db.update_store(definition["key"], encrypt_secret(json.dumps(definition)))
     bump_revision()
     return definition

@@ -38,8 +38,11 @@ def shipped_definition(key):
     return {**copy.deepcopy(module.TEMPLATE), "key": key}
 
 
-def build_template(key, changes=None):
-    """The template of one site, with the user's changes laid over it."""
+def build_template(key, changes=None, hostname=None):
+    """The template of one site, with the user's changes laid over it.
+
+    ``hostname`` runs it on a site that is not saved yet, to check it.
+    """
     from quasarr.search.sources.helpers.custom_source import CustomSource
 
     module = importlib.import_module(f"{__name__}.{key}")
@@ -49,7 +52,7 @@ def build_template(key, changes=None):
         point: _hook(module, point, name)
         for point, name in (definition.get("hooks") or {}).items()
     }
-    return CustomSource(definition, bundled=True, hooks=hooks)
+    return CustomSource(definition, bundled=True, hooks=hooks, hostname=hostname)
 
 
 def _hook(module, point, name):

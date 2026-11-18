@@ -7,6 +7,8 @@ Hostname Issues Tracker - Uses lazy imports to avoid circular dependency
 """
 
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date, datetime
 
 import requests
@@ -22,6 +24,19 @@ UNREACHABLE_HTTP_STATUSES = frozenset({429, 502, 503, 504, 520, 521, 522, 523, 5
 class SiteUnreachableError(Exception):
     """The site could not be reached or served: an IP ban, a rate limit, or
     FlareSolverr not solving in time. Not something Quasarr can fix."""
+
+
+# a trial run of a site's code (checking a pasted hostname) records no issues
+_quiet = ContextVar("quiet_hostname_issues", default=False)
+
+
+@contextmanager
+def quiet_hostname_issues():
+    token = _quiet.set(True)
+    try:
+        yield
+    finally:
+        _quiet.reset(token)
 
 
 def _get_db(table_name):
@@ -56,6 +71,8 @@ def is_unresolved_name(error):
 
 def mark_hostname_issue(shorthand, operation, error):
     """Record a source failure; ``error`` is the exception or a description."""
+    if _quiet.get():
+        return
     shorthand = shorthand.lower()
     message = str(error) or type(error).__name__
     unreachable = is_site_unreachable(error)
@@ -105,6 +122,8 @@ def record_configured_hostnames(refresh=True):
 
 
 def clear_hostname_issue(shorthand):
+    if _quiet.get():
+        return
     shorthand = shorthand.lower()
     db = _get_db("hostname_issues")
     db.delete(shorthand)

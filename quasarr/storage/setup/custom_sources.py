@@ -15,6 +15,7 @@ import re
 from bottle import abort
 
 from quasarr.providers.html_templates import json_for_script, render_form
+from quasarr.search.sources.helpers.custom_source import known_definition
 from quasarr.search.sources.helpers.custom_suggest import FIELD_COLORS
 from quasarr.storage.custom_sources import load_definitions
 
@@ -51,6 +52,11 @@ def custom_source_wizard_page(key=None, onboarding=False, builtin=None):
         definition = load_definitions().get(key)
         if definition is None:
             abort(404, "Unknown site")
+        # a site saved before keys were checked may hold some Quasarr does not read
+        try:
+            definition = known_definition(definition, keep=("key", "schema", "enabled"))
+        except Exception:
+            pass
     config = {
         "definition": definition,
         "builtin": builtin_state,
@@ -147,13 +153,13 @@ _WIZARD_HTML = """
   </section>
 
   <section class="wizard-step" data-step="feed" hidden>
-    <p class="wizard-lead">Choose what the site offers and the page listing the newest releases of each kind.
+    <p class="wizard-lead" id="feed-lead">Choose what the site offers and the page listing the newest releases of each kind.
       Quasarr fills them in from the site menu and tests them on its own.</p>
     <div id="feed-categories" class="category-grid"></div>
     <div class="wizard-notes" id="feed-info" aria-live="polite"></div>
     <div id="feed-rows"></div>
     <div class="feed-row inline">
-      <label for="feed-page">Set up on</label>
+      <label for="feed-page">Page in the preview</label>
       <select id="feed-page"></select>
     </div>
     <div class="wizard-notes" id="feed-notes" aria-live="polite"></div>
@@ -167,7 +173,7 @@ _WIZARD_HTML = """
   </section>
 
   <section class="wizard-step" data-step="search" hidden>
-    <p class="wizard-lead">Radarr and Sonarr search by IMDb ID. Quasarr sends that ID to the site, or the
+    <p class="wizard-lead" id="search-lead">Radarr and Sonarr search by IMDb ID. Quasarr sends that ID to the site, or the
       movie or show title when the site cannot find IDs. It finds the search on its own when this step opens.</p>
     <div class="button-row left">
       <button type="button" class="btn-primary" id="search-discover">Find the search for me</button>
@@ -191,7 +197,7 @@ _WIZARD_HTML = """
       <label class="check"><input type="radio" name="w-mode" value="title"> Title</label>
       <label class="check"><input type="radio" name="w-mode" value="off"> No search</label>
     </div>
-    <p class="hint">Quasarr chooses this on its own: IMDb ID when the feed shows IMDb IDs, otherwise the title
+    <p class="hint" id="search-mode-hint">Quasarr chooses this on its own: IMDb ID when the feed shows IMDb IDs, otherwise the title
       of the movie or show in the language below. When the test finds nothing by IMDb ID, it switches to the title.
       Music and books are always searched by name.</p>
     <label for="w-search-language">Titles in</label>
@@ -200,16 +206,16 @@ _WIZARD_HTML = """
       as German sites list German titles. Titles in a script Quasarr cannot search, as Cyrillic or Chinese,
       fall back to the English title.</p>
     <div id="search-results-setup">
-      <h4>Results page</h4>
-      <p class="hint">Each kind is searched for its newest release from the feed, so the search should find it again.
-        Change it to anything the site lists: movies and shows take an IMDb ID, so type a title and press Grab IMDb ID.
-        Search results are often laid out differently from the feed; the results page below shows how they are read.</p>
+      <h4>Test the search</h4>
+      <p class="hint">Search each kind for something the site lists; its newest release is filled in for you. Movies and
+        shows take an IMDb ID: type a title and press Grab IMDb ID. Results are often laid out differently from the feed;
+        the results page below shows how they are read.</p>
       <div id="search-queries"></div>
       <div class="button-row left">
         <button type="button" class="btn-secondary" id="search-test">Test search</button>
       </div>
       <div class="feed-row inline">
-        <label for="search-page">Results page for</label>
+        <label for="search-page">Results in the preview</label>
         <select id="search-page"></select>
       </div>
       <div class="wizard-notes" id="search-layout" aria-live="polite"></div>
@@ -617,19 +623,16 @@ _WIZARD_SCRIPT = r"""
     ]);
     var toDetails = el('button', {type: 'button', className: 'btn-primary', text: 'Continue to the details'});
     var blocksBox = el('div', {}, [
-      el('p', {className: 'hint', text: 'A release block is the part of the page that holds exactly one release: ' +
-        'its name, its link and usually its size and date. Quasarr reads every block as one release, so choose ' +
-        'the one that frames each release on its own, not the whole list and not just the name. Click Pick and ' +
-        'then any release if no suggestion fits. Ads or notices that look alike are fine: Quasarr skips blocks ' +
-        'without a release.'}),
+      el('p', {className: 'hint', text: 'A release block frames exactly one release: its name, its link and usually its ' +
+        'size and date. Choose the block around one release, not the whole list and not just the name. If no ' +
+        'suggestion fits, click Pick and then a release in the preview. Ads that look alike are skipped.'}),
       itemRow, toDetails
     ]);
     var rows = {};
     var fieldBox = el('div', {hidden: 'hidden'}, [
-      el('p', {className: 'hint', text: 'Now show Quasarr where each detail sits inside a release. The preview shows ' +
-        'one release at a time, starting with the first one that reads, usually the second, as the first block is often an ad ' +
-        'or a notice. Use the arrows to check a few others: a choice should read the right value in all of them. ' +
-        'Name and link are required; size and date help your apps choose between releases.'})
+      el('p', {className: 'hint', text: 'Show where each detail sits inside one release. Use the arrows above the ' +
+        'preview to check a few releases: each choice should read the right value in all of them. Name and link are ' +
+        'required; size and date help your apps choose between releases.'})
     ]);
     FIELDS.forEach(function(field) {
       var selector = el('input', {type: 'hidden'});
@@ -733,9 +736,13 @@ _WIZARD_SCRIPT = r"""
     }
     function readSpec(name) {
       var r = rows[name];
-      var spec = {};
+      // options the picker has no control for (within, pick, required, …) stay with the field
+      var spec = Object.assign({}, r.extra || {});
       if (r.selector.value.trim()) spec.selector = r.selector.value.trim();
-      if (r.label && r.label.value.trim()) spec.label = r.label.value.trim();
+      if (r.label && r.label.value.trim()) {
+        // a list of labels shows its first; it stays a list until that one is changed
+        spec.label = r.labels && r.labels[0] === r.label.value.trim() ? r.labels : r.label.value.trim();
+      }
       var value = r.field.attrs.length > 1 ? r.attr.value : r.field.attrs[0];
       if (value !== 'text') spec.attr = value;
       // "release": only the release name the text holds
@@ -747,6 +754,11 @@ _WIZARD_SCRIPT = r"""
       var r = rows[name];
       r.more = Array.isArray(spec) ? spec.slice(1) : [];
       spec = (Array.isArray(spec) ? spec[0] : spec) || {};
+      r.extra = {};
+      Object.keys(spec).forEach(function(key) {
+        if (['selector', 'label', 'attr', 'find'].indexOf(key) < 0) r.extra[key] = spec[key];
+      });
+      r.labels = Array.isArray(spec.label) ? spec.label : null;
       r.selector.value = spec.selector || '';
       r.find = spec.find || '';
       if (r.label) r.label.value = Array.isArray(spec.label) ? spec.label[0] : (spec.label || '');
@@ -832,10 +844,14 @@ _WIZARD_SCRIPT = r"""
         r.suggestions.forEach(function(candidate, i) { if (index === -1 && sameSpec(candidate.spec, spec)) index = i; });
         var values = (picker.marked.values || {})[field.name];
         var set = Object.keys(spec).some(function(key) { return key !== 'attr'; });
+        // a name or link without a selector is read from the release block itself
+        var itself = !set && (field.name === 'title' || field.name === 'link') &&
+          (values || []).some(function(value) { return value !== null; });
         fill(r.choice, r.suggestions.map(function(candidate, i) {
           var read = options[i] || [];
           return shown(field.name, read[picker.index]) + ' · ' + share(read);
-        }), index, !set ? 'Not chosen yet: click Pick'
+        }), index, itself ? 'The release block itself · ' + shown(field.name, (values || [])[picker.index]) + ' · ' + share(values)
+          : !set ? 'Not chosen yet: click Pick'
           : 'Your pick · ' + shown(field.name, (values || [])[picker.index]) + ' · ' + share(values));
       });
     }
@@ -1694,6 +1710,9 @@ _WIZARD_SCRIPT = r"""
   }
 
   $('search-discover').onclick = function() {
+    // an edited site has a search that works; finding one replaces it
+    if (config.definition && !config.imported && !state.autoSearch && $('w-search-url').value.trim() &&
+        !confirm('Replace this site\'s search settings with what Quasarr finds?')) return;
     clear('search-notes');
     var first = selectedCategories()[0];
     if (!first) { note('search-notes', 'error', 'Set up the feed first.'); return; }
@@ -2424,6 +2443,15 @@ _WIZARD_SCRIPT = r"""
   if (config.definition) {
     renderFeedRows();
     setFeedTested(!config.imported);
+  }
+  if (config.definition && !config.imported) {
+    $('feed-lead').textContent = 'The kinds this site offers and the page listing the newest releases of each. ' +
+      'Change what you need, then test the feed.';
+    $('search-lead').textContent = 'How Quasarr searches this site. Change what you need, then test the search.';
+    $('search-mode-hint').textContent = 'IMDb ID works when the site finds releases by IMDb ID; otherwise use the ' +
+      'title in the language below. Music and books are always searched by name.';
+    $('search-discover').className = 'btn-secondary';
+    $('search-discover').textContent = 'Set the search up again';
   }
   if (builtin) {
     ['w-hostname', 'w-name'].forEach(function(id) {

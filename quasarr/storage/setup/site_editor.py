@@ -76,11 +76,17 @@ def _changed_parts(key, current):
 
 def builtin_definition(key):
     """The definition the wizard edits: the shipped template with the changes over it."""
+    from quasarr.search.sources.helpers.custom_source import known_definition
     from quasarr.search.sources.templates import shipped_definition
     from quasarr.storage.template_overrides import load_overrides
 
     definition = shipped_definition(key)
     definition.update(load_overrides().get(key) or {})
+    # changes saved before keys were checked may hold some Quasarr does not read
+    try:
+        definition = known_definition(definition, bundled=True)
+    except Exception:
+        pass
     definition["hostname"] = str(Config("Hostnames").get(key) or "")
     return definition
 

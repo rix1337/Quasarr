@@ -488,6 +488,75 @@ def _compile_listing(spec, name):
     return listing
 
 
+class _ReadTracker(dict):
+    """A definition object that remembers which of its keys the compiler reads."""
+
+    def __init__(self, data):
+        super().__init__(data)
+        self.read = set()
+
+    def __getitem__(self, key):
+        self.read.add(key)
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        self.read.add(key)
+        return super().get(key, default)
+
+    def __contains__(self, key):
+        self.read.add(key)
+        return super().__contains__(key)
+
+    # reading every entry (an address map, a list of labels) keeps every key
+    def __iter__(self):
+        self.read.update(super().keys())
+        return super().__iter__()
+
+    def items(self):
+        self.read.update(super().keys())
+        return super().items()
+
+    def keys(self):
+        self.read.update(super().keys())
+        return super().keys()
+
+    def values(self):
+        self.read.update(super().keys())
+        return super().values()
+
+
+def _tracked(value):
+    if isinstance(value, dict):
+        return _ReadTracker({key: _tracked(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return [_tracked(item) for item in value]
+    return value
+
+
+def _read_only(value):
+    if isinstance(value, _ReadTracker):
+        return {
+            key: _read_only(item)
+            for key, item in dict.items(value)
+            if key in value.read
+        }
+    if isinstance(value, list):
+        return [_read_only(item) for item in value]
+    return value
+
+
+def known_definition(definition, bundled=False, keep=()):
+    """The definition without the keys Quasarr does not read, at any depth.
+
+    The compiler decides what is known, so this never drifts from what runs.
+    ``keep`` names top-level keys read outside the compiler.
+    """
+    tracked = _tracked(definition)
+    compile_definition(tracked, bundled=bundled)
+    tracked.read.update(key for key in keep if key in definition)
+    return _read_only(tracked)
+
+
 def compile_definition(definition, bundled=False):
     """Validate a definition and return the parsed form CustomSource runs on.
 
@@ -1498,7 +1567,9 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
     called with this source first, then the arguments of that step.
     """
 
-    def __init__(self, definition, bundled=False, hooks=None):
+    def __init__(self, definition, bundled=False, hooks=None, hostname=None):
+        # a bundled template tried on a pasted hostname before it is saved
+        self._trial_hostname = hostname
         self.definition = definition
         self.spec = compile_definition(definition, bundled=bundled)
         self.hooks = hooks or {}
@@ -1510,6 +1581,8 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
     def hostname(self):
         if not self.spec["bundled"]:
             return self.spec["hostname"]
+        if self._trial_hostname:
+            return self._trial_hostname
         from quasarr.providers import shared_state
 
         value = shared_state.values["config"]("Hostnames").get(self.initials)

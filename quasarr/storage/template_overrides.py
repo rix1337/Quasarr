@@ -53,6 +53,7 @@ def load_overrides():
 def save_override(key, changes):
     """Validate and store changed parts of a built-in site."""
     from quasarr.search.sources import templates
+    from quasarr.search.sources.helpers.custom_source import known_definition
 
     key = str(key).lower()
     if key not in templates.get_template_keys():
@@ -66,6 +67,10 @@ def save_override(key, changes):
             + ", ".join(EDITABLE_PARTS)
         )
     templates.build_template(key, changes)
+    # keys the template does not read are dropped, so the stored changes only hold settings
+    merged = {**templates.shipped_definition(key), **changes}
+    known = known_definition(merged, bundled=True)
+    changes = {part: known[part] for part in changes if part in known}
     _override_db().update_store(key, json.dumps(changes))
     bump_revision()
 
