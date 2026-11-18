@@ -15,6 +15,7 @@ import re
 from bottle import abort
 
 from quasarr.providers.html_templates import json_for_script, render_form
+from quasarr.search.sources.helpers.custom_source import known_definition
 from quasarr.search.sources.helpers.custom_suggest import FIELD_COLORS
 from quasarr.storage.custom_sources import load_definitions
 
@@ -29,21 +30,41 @@ WIZARD_CATEGORIES = [
 ]
 
 
-def custom_source_wizard_page(key=None, onboarding=False):
+def custom_source_wizard_page(key=None, onboarding=False, builtin=None):
+    """The site wizard: a new site, an own site, or a built-in one (``builtin`` key)."""
     definition = None
-    if key is not None:
+    builtin_state = None
+    if builtin is not None:
+        from quasarr.storage.setup.site_editor import builtin_definition, template_state
+
+        definition = builtin_definition(builtin)
+        state = template_state(builtin)
+        builtin_state = {
+            "key": state["key"],
+            "modified": state["modified"],
+            "code_steps": state["code_steps"],
+            "parts": state["parts"],
+            "shipped": state["shipped"],
+        }
+    elif key is not None:
         if not _KEY_REGEX.match(key):
             abort(404, "Unknown site")
         definition = load_definitions().get(key)
         if definition is None:
             abort(404, "Unknown site")
+        # a site saved before keys were checked may hold some Quasarr does not read
+        try:
+            definition = known_definition(definition, keep=("key", "schema", "enabled"))
+        except Exception:
+            pass
     config = {
         "definition": definition,
+        "builtin": builtin_state,
         "categories": WIZARD_CATEGORIES,
         "sites_url": "/" if onboarding else "/hostnames",
     }
     title = (
-        f"Edit {html.escape(str(definition.get('name', key)))}"
+        f"Edit {html.escape(str(definition.get('name') or key or builtin))}"
         if definition
         else "Add a site"
     )
@@ -80,7 +101,8 @@ _WIZARD_HTML = """
 
   <section class="wizard-step" data-step="site">
     <p class="wizard-lead">Tell Quasarr where the site is. Nothing is saved until the last step.</p>
-    <p class="hint">A site you set up is yours to maintain, and issues about it are not supported.
+    <div class="wizard-notes" id="builtin-notes"></div>
+    <p class="hint" id="site-hint">A site you set up is yours to maintain, and issues about it are not supported.
       Sites that need a login cannot be set up here: they need Python code, contributed as a pull request.</p>
     <label for="w-hostname">Hostname</label>
     <input id="w-hostname" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="example.org">
@@ -107,6 +129,12 @@ _WIZARD_HTML = """
       <option value="ja">Japanese</option>
       <option value="ko">Korean</option>
     </select>
+    <div id="w-urls-box" hidden>
+      <h4>Addresses</h4>
+      <p class="hint">The pages and API addresses this site requests. {host} stands for its hostname;
+        other words in braces are filled in when Quasarr requests them.</p>
+      <div id="w-urls"></div>
+    </div>
     <!-- set when the site shows a browser check, never by hand -->
     <input type="checkbox" id="w-flaresolverr" hidden style="display: none">
     <div class="button-row left">
@@ -125,13 +153,13 @@ _WIZARD_HTML = """
   </section>
 
   <section class="wizard-step" data-step="feed" hidden>
-    <p class="wizard-lead">Choose what the site offers and the page listing the newest releases of each kind.
+    <p class="wizard-lead" id="feed-lead">Choose what the site offers and the page listing the newest releases of each kind.
       Quasarr fills them in from the site menu and tests them on its own.</p>
     <div id="feed-categories" class="category-grid"></div>
     <div class="wizard-notes" id="feed-info" aria-live="polite"></div>
     <div id="feed-rows"></div>
     <div class="feed-row inline">
-      <label for="feed-page">Set up on</label>
+      <label for="feed-page">Page in the preview</label>
       <select id="feed-page"></select>
     </div>
     <div class="wizard-notes" id="feed-notes" aria-live="polite"></div>
@@ -145,7 +173,7 @@ _WIZARD_HTML = """
   </section>
 
   <section class="wizard-step" data-step="search" hidden>
-    <p class="wizard-lead">Radarr and Sonarr search by IMDb ID. Quasarr sends that ID to the site, or the
+    <p class="wizard-lead" id="search-lead">Radarr and Sonarr search by IMDb ID. Quasarr sends that ID to the site, or the
       movie or show title when the site cannot find IDs. It finds the search on its own when this step opens.</p>
     <div class="button-row left">
       <button type="button" class="btn-primary" id="search-discover">Find the search for me</button>
@@ -169,7 +197,7 @@ _WIZARD_HTML = """
       <label class="check"><input type="radio" name="w-mode" value="title"> Title</label>
       <label class="check"><input type="radio" name="w-mode" value="off"> No search</label>
     </div>
-    <p class="hint">Quasarr chooses this on its own: IMDb ID when the feed shows IMDb IDs, otherwise the title
+    <p class="hint" id="search-mode-hint">Quasarr chooses this on its own: IMDb ID when the feed shows IMDb IDs, otherwise the title
       of the movie or show in the language below. When the test finds nothing by IMDb ID, it switches to the title.
       Music and books are always searched by name.</p>
     <label for="w-search-language">Titles in</label>
@@ -178,16 +206,16 @@ _WIZARD_HTML = """
       as German sites list German titles. Titles in a script Quasarr cannot search, as Cyrillic or Chinese,
       fall back to the English title.</p>
     <div id="search-results-setup">
-      <h4>Results page</h4>
-      <p class="hint">Each kind is searched for its newest release from the feed, so the search should find it again.
-        Change it to anything the site lists: movies and shows take an IMDb ID, so type a title and press Grab IMDb ID.
-        Search results are often laid out differently from the feed; the results page below shows how they are read.</p>
+      <h4>Test the search</h4>
+      <p class="hint">Search each kind for something the site lists; its newest release is filled in for you. Movies and
+        shows take an IMDb ID: type a title and press Grab IMDb ID. Results are often laid out differently from the feed;
+        the results page below shows how they are read.</p>
       <div id="search-queries"></div>
       <div class="button-row left">
         <button type="button" class="btn-secondary" id="search-test">Test search</button>
       </div>
       <div class="feed-row inline">
-        <label for="search-page">Results page for</label>
+        <label for="search-page">Results in the preview</label>
         <select id="search-page"></select>
       </div>
       <div class="wizard-notes" id="search-layout" aria-live="polite"></div>
@@ -252,13 +280,17 @@ _WIZARD_HTML = """
     <dl class="summary" id="summary"></dl>
     <div class="wizard-notes" id="save-notes" aria-live="polite"></div>
     <h4>Template</h4>
-    <p class="hint">What Quasarr saves, without the hostname. Export it to share it, or contribute it in a pull request.</p>
-    <textarea id="w-template" rows="14" readonly spellcheck="false" aria-label="Template"></textarea>
+    <p class="hint" id="template-hint">What Quasarr saves, without the hostname. Edit it and apply it to see it in the steps,
+      export it to share it, or contribute it in a pull request.</p>
+    <textarea id="w-template" rows="14" spellcheck="false" aria-label="Template"></textarea>
+    <div class="wizard-notes" id="template-notes" aria-live="polite"></div>
     <div class="button-row left">
+      <button type="button" class="btn-secondary" id="template-apply">Apply to the steps</button>
       <button type="button" class="btn-secondary" id="template-export">Export template</button>
     </div>
     <div class="button-row">
       <button type="button" class="btn-secondary" data-back>Back</button>
+      <button type="button" class="btn-secondary" id="reset" hidden>Reset to the shipped version</button>
       <button type="button" class="btn-primary" id="save">Save site</button>
     </div>
   </section>
@@ -414,11 +446,18 @@ _WIZARD_SCRIPT = r"""
     imported = JSON.parse(sessionStorage.getItem('quasarr-import') || 'null');
     sessionStorage.removeItem('quasarr-import');
   } catch (e) { imported = null; }
-  if (imported) {
+  // a draft belongs to the page that stored it: a new site, an own one or a built-in one
+  if (imported && (imported.path || '/sources/custom') === window.location.pathname) {
     config.definition = Object.assign({}, imported.definition, {hostname: imported.hostname});
     config.imported = true;
   }
   var draft = config.definition || {};
+  // a built-in site: the shipped template with your changes laid over it. Steps its code
+  // runs stay as they are; their parts pass through unchanged and only addresses are edited.
+  var builtin = config.builtin;
+  function inCode(step) { return !!builtin && builtin.code_steps.indexOf(step) >= 0; }
+  var STEP_PARTS = {feed: ['feeds', 'list', 'feed_validate', 'magazine_titles'], search: ['search', 'search_list'],
+    download: ['download']};
   var FIELDS = [
     {name: 'title', label: 'Release name', attrs: ['text', 'title']},
     {name: 'link', label: 'Release link', attrs: ['href']},
@@ -526,7 +565,7 @@ _WIZARD_SCRIPT = r"""
   // --- steps -------------------------------------------------------------------
   function show(step) {
     pickers.forEach(function(picker) { picker.stopPicking(); });
-    if (step === 'search') { renderSearchQueries(); $('w-search-language').value = $('w-language').value; }
+    if (step === 'search' && !inCode('search')) { renderSearchQueries(); $('w-search-language').value = $('w-language').value; }
     state.step = step;
     state.reached = Math.max(state.reached, ORDER.indexOf(step));
     document.querySelectorAll('.wizard-step').forEach(function(section) {
@@ -540,7 +579,7 @@ _WIZARD_SCRIPT = r"""
       button.disabled = current || index > state.reached;
       if (current) button.setAttribute('aria-current', 'step'); else button.removeAttribute('aria-current');
     });
-    if (step === 'download') prepareDownload();
+    if (step === 'download' && !inCode('download')) prepareDownload();
     if (step === 'save') renderSummary();
     var heading = document.querySelector('.wizard-step[data-step="' + step + '"] .wizard-lead');
     window.scrollTo({top: 0, behavior: 'smooth'});
@@ -584,19 +623,16 @@ _WIZARD_SCRIPT = r"""
     ]);
     var toDetails = el('button', {type: 'button', className: 'btn-primary', text: 'Continue to the details'});
     var blocksBox = el('div', {}, [
-      el('p', {className: 'hint', text: 'A release block is the part of the page that holds exactly one release: ' +
-        'its name, its link and usually its size and date. Quasarr reads every block as one release, so choose ' +
-        'the one that frames each release on its own, not the whole list and not just the name. Click Pick and ' +
-        'then any release if no suggestion fits. Ads or notices that look alike are fine: Quasarr skips blocks ' +
-        'without a release.'}),
+      el('p', {className: 'hint', text: 'A release block frames exactly one release: its name, its link and usually its ' +
+        'size and date. Choose the block around one release, not the whole list and not just the name. If no ' +
+        'suggestion fits, click Pick and then a release in the preview. Ads that look alike are skipped.'}),
       itemRow, toDetails
     ]);
     var rows = {};
     var fieldBox = el('div', {hidden: 'hidden'}, [
-      el('p', {className: 'hint', text: 'Now show Quasarr where each detail sits inside a release. The preview shows ' +
-        'one release at a time, starting with the first one that reads, usually the second, as the first block is often an ad ' +
-        'or a notice. Use the arrows to check a few others: a choice should read the right value in all of them. ' +
-        'Name and link are required; size and date help your apps choose between releases.'})
+      el('p', {className: 'hint', text: 'Show where each detail sits inside one release. Use the arrows above the ' +
+        'preview to check a few releases: each choice should read the right value in all of them. Name and link are ' +
+        'required; size and date help your apps choose between releases.'})
     ]);
     FIELDS.forEach(function(field) {
       var selector = el('input', {type: 'hidden'});
@@ -700,9 +736,13 @@ _WIZARD_SCRIPT = r"""
     }
     function readSpec(name) {
       var r = rows[name];
-      var spec = {};
+      // options the picker has no control for (within, pick, required, …) stay with the field
+      var spec = Object.assign({}, r.extra || {});
       if (r.selector.value.trim()) spec.selector = r.selector.value.trim();
-      if (r.label && r.label.value.trim()) spec.label = r.label.value.trim();
+      if (r.label && r.label.value.trim()) {
+        // a list of labels shows its first; it stays a list until that one is changed
+        spec.label = r.labels && r.labels[0] === r.label.value.trim() ? r.labels : r.label.value.trim();
+      }
       var value = r.field.attrs.length > 1 ? r.attr.value : r.field.attrs[0];
       if (value !== 'text') spec.attr = value;
       // "release": only the release name the text holds
@@ -714,6 +754,11 @@ _WIZARD_SCRIPT = r"""
       var r = rows[name];
       r.more = Array.isArray(spec) ? spec.slice(1) : [];
       spec = (Array.isArray(spec) ? spec[0] : spec) || {};
+      r.extra = {};
+      Object.keys(spec).forEach(function(key) {
+        if (['selector', 'label', 'attr', 'find'].indexOf(key) < 0) r.extra[key] = spec[key];
+      });
+      r.labels = Array.isArray(spec.label) ? spec.label : null;
       r.selector.value = spec.selector || '';
       r.find = spec.find || '';
       if (r.label) r.label.value = Array.isArray(spec.label) ? spec.label[0] : (spec.label || '');
@@ -799,10 +844,14 @@ _WIZARD_SCRIPT = r"""
         r.suggestions.forEach(function(candidate, i) { if (index === -1 && sameSpec(candidate.spec, spec)) index = i; });
         var values = (picker.marked.values || {})[field.name];
         var set = Object.keys(spec).some(function(key) { return key !== 'attr'; });
+        // a name or link without a selector is read from the release block itself
+        var itself = !set && (field.name === 'title' || field.name === 'link') &&
+          (values || []).some(function(value) { return value !== null; });
         fill(r.choice, r.suggestions.map(function(candidate, i) {
           var read = options[i] || [];
           return shown(field.name, read[picker.index]) + ' · ' + share(read);
-        }), index, !set ? 'Not chosen yet: click Pick'
+        }), index, itself ? 'The release block itself · ' + shown(field.name, (values || [])[picker.index]) + ' · ' + share(values)
+          : !set ? 'Not chosen yet: click Pick'
           : 'Your pick · ' + shown(field.name, (values || [])[picker.index]) + ' · ' + share(values));
       });
     }
@@ -1030,13 +1079,16 @@ _WIZARD_SCRIPT = r"""
       if (!data.success) { note('import-notes', 'error', 'Could not import it: ' + plain(data.error) + '.'); return; }
       if (config.definition && !config.imported && !confirm('Replace the setup of this site with the imported template?')) return;
       var definition = Object.assign({}, data.definition, draft.key ? {key: draft.key} : {});
-      sessionStorage.setItem('quasarr-import', JSON.stringify({definition: definition, hostname: host()}));
+      sessionStorage.setItem('quasarr-import', JSON.stringify({definition: definition, hostname: host(),
+        path: window.location.pathname}));
       window.location.reload();
     });
   };
 
   $('site-next').onclick = function() {
     clear('site-notes');
+    // a built-in site is already set up: its hostname is changed under Address on your sites
+    if (builtin) { show('feed'); return; }
     if (!$('w-name').value.trim()) { note('site-notes', 'error', 'Give the site a name.'); $('w-name').focus(); return; }
     if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host())) {
       note('site-notes', 'error', 'Enter a hostname such as example.org.');
@@ -1173,7 +1225,7 @@ _WIZARD_SCRIPT = r"""
           return;
         }
         // the page offers its own RSS feed: every kind moves to its feed, which reads more reliably
-        if (data.rss && !state.rssTried) {
+        if (data.rss && !state.rssTried && !config.definition) {
           state.rssTried = true;
           var suffix = data.rss.indexOf(url) === 0 ? data.rss.slice(url.length) : '';
           selectedCategories().forEach(function(category) {
@@ -1189,6 +1241,7 @@ _WIZARD_SCRIPT = r"""
         if (data.is_feed) {
           feedPicker.hide();
           state.rssListing = data.listing;
+          if (config.definition && !state.feedBaseline) state.feedBaseline = data.listing;
           note('feed-notes', 'ok', 'This is an RSS feed. Quasarr reads its names, links and dates on its own.');
           if (state.autoTest) {
             state.autoTest = false;
@@ -1210,6 +1263,8 @@ _WIZARD_SCRIPT = r"""
         }
         state.feedLoadedOnce = true;
         feedPicker.setListing(listing, data.best ? data.best.fields : {});
+        // what the picker shows for the saved fields; only fields that differ from it were changed
+        if (config.definition && !state.feedBaseline) state.feedBaseline = feedPicker.listing();
         if (!data.best) {
           lockStep('feed', false);
           note('feed-notes', 'warn', data.unreadable === 'login'
@@ -1226,7 +1281,11 @@ _WIZARD_SCRIPT = r"""
         }
       });
   }
-  function feedListing() { return state.feedIsRss ? state.rssListing : feedPicker.listing(); }
+  // until a page is loaded the picker holds no fields; the saved ones stay
+  function feedListing() {
+    if (state.feedIsRss) return state.rssListing;
+    return feedPicker.loaded() ? feedPicker.listing() : {};
+  }
 
   // --- results tables -------------------------------------------------------------
   function resultsTable(target, rows, columns) {
@@ -1277,15 +1336,22 @@ _WIZARD_SCRIPT = r"""
       hostname: host(),
       language: $('w-language').value,
       flaresolverr: $('w-flaresolverr').checked,
+      // a kind's other feed options (a POST body) stay, and kinds the wizard does not offer pass through
       feeds: selectedCategories().map(function(category) {
-        return {category: category.id, url: 'https://{host}' + ensureSlash(feedUrls[category.id])};
-      }),
+        var saved = (draft.feeds || []).filter(function(feed) { return feed.category === category.id; })[0];
+        return Object.assign({}, saved || {}, {category: category.id, url: 'https://{host}' + ensureSlash(feedUrls[category.id])});
+      }).concat((draft.feeds || []).filter(function(feed) {
+        return !config.categories.some(function(category) { return category.id === feed.category; });
+      })),
       // options the wizard has no field for, as a title cleanup, stay
-      list: Object.assign({}, draft.list || {}, feedListing())
+      list: changedFields(draft.list, feedListing(), state.feedBaseline)
     });
     if (draft.key) result.key = draft.key;
+    // kinds keep the saved order, so an untouched site reads as unchanged
+    result.feeds = inSavedOrder(result.feeds, (draft.feeds || []).map(function(feed) { return feed.category; }),
+      function(feed) { return feed.category; });
     // Magazarr reads magazine issues only by a few date spellings; book names have no dates to change
-    if (result.magazine_titles === undefined && result.feeds.some(function(feed) { return feed.category === 7000; })) {
+    if (!builtin && result.magazine_titles === undefined && result.feeds.some(function(feed) { return feed.category === 7000; })) {
       result.magazine_titles = true;
     }
     // dates the site shows in its own time without saying so
@@ -1293,12 +1359,65 @@ _WIZARD_SCRIPT = r"""
     var search = searchSettings();
     if (search) {
       result.search = Object.assign({}, draft.search || {}, search);
+      var saved = draft.search || {};
+      if (saved.categories) {
+        result.search.categories = inSavedOrder(result.search.categories, saved.categories, function(id) { return id; });
+      }
+      if (config.definition) withoutAddedDefaults(result.search, saved, {method: 'get', phrase: false});
       var own = searchLayout();
-      if (own) result.search_list = Object.assign({}, draft.search_list || {}, own);
+      if (own) result.search_list = changedFields(draft.search_list, own, state.searchBaseline);
       if (own && state.utcOffset) result.search_list = withOffset(result.search_list, state.utcOffset);
     }
     result.download = Object.assign({}, draft.download || {}, downloadSettings());
+    if (config.definition) {
+      withoutAddedDefaults(result.download, draft.download || {}, {redirects: false, userscript: false, links: {}});
+    }
+    Object.keys(STEP_PARTS).forEach(function(step) {
+      if (!inCode(step)) return;
+      STEP_PARTS[step].forEach(function(part) {
+        if (part in draft) result[part] = draft[part]; else delete result[part];
+      });
+    });
+    if (draft.urls) result.urls = addresses();
     return result;
+  }
+  // The pickers know only some field options (no ways to fall back, no "required") and fill
+  // empty fields with suggestions. Over saved fields they write back only what was changed.
+  function changedFields(saved, current, baseline) {
+    var result = Object.assign({}, saved || {});
+    if (!baseline) return Object.assign(result, current);
+    Object.keys(Object.assign({}, current, baseline)).forEach(function(name) {
+      if (JSON.stringify(current[name]) === JSON.stringify(baseline[name])) return;
+      if (name in current) result[name] = current[name]; else delete result[name];
+    });
+    return result;
+  }
+  // an edited site only gains what was changed, not the defaults the wizard spells out
+  function withoutAddedDefaults(part, saved, defaults) {
+    Object.keys(defaults).forEach(function(name) {
+      if (!(name in saved) && JSON.stringify(part[name]) === JSON.stringify(defaults[name])) delete part[name];
+    });
+  }
+  function inSavedOrder(items, savedOrder, keyOf) {
+    function rank(item) { var index = savedOrder.indexOf(keyOf(item)); return index < 0 ? savedOrder.length : index; }
+    return items.slice().sort(function(a, b) { return rank(a) - rank(b); });
+  }
+  // --- addresses a site requests, by name ------------------------------------------------
+  (function renderAddresses() {
+    if (!draft.urls) return;
+    $('w-urls-box').hidden = false;
+    Object.keys(draft.urls).forEach(function(name) {
+      var input = el('input', {id: 'w-url-' + name, 'data-url': name, autocomplete: 'off', autocapitalize: 'off',
+        autocorrect: 'off', spellcheck: 'false'});
+      input.value = draft.urls[name];
+      $('w-urls').appendChild(el('label', {'for': 'w-url-' + name, text: name}));
+      $('w-urls').appendChild(input);
+    });
+  })();
+  function addresses() {
+    var urls = {};
+    document.querySelectorAll('#w-urls input').forEach(function(input) { urls[input.getAttribute('data-url')] = input.value.trim(); });
+    return urls;
   }
 
   function withOffset(listing, hours) {
@@ -1389,7 +1508,7 @@ _WIZARD_SCRIPT = r"""
   $('feed-next').onclick = function() {
     show('search');
     // like the newest releases, the search is found on its own the first time
-    if (!state.searchTried && !$('w-search-url').value.trim()) {
+    if (!builtin && !state.searchTried && !$('w-search-url').value.trim()) {
       state.searchTried = true;
       state.autoSearch = true;
       lockStep('search', true);
@@ -1591,6 +1710,9 @@ _WIZARD_SCRIPT = r"""
   }
 
   $('search-discover').onclick = function() {
+    // an edited site has a search that works; finding one replaces it
+    if (config.definition && !config.imported && !state.autoSearch && $('w-search-url').value.trim() &&
+        !confirm('Replace this site\'s search settings with what Quasarr finds?')) return;
     clear('search-notes');
     var first = selectedCategories()[0];
     if (!first) { note('search-notes', 'error', 'Set up the feed first.'); return; }
@@ -1657,7 +1779,11 @@ _WIZARD_SCRIPT = r"""
       if (!data.success) { note('search-results', 'error', 'Could not load the results: ' + data.error + '.'); return; }
       searchPicker.load(data);
       var own = document.querySelector('input[name="w-layout"]:checked').value === 'own';
-      if (own && state.searchList) { searchPicker.setListing(state.searchList, data.best ? data.best.fields : {}); return; }
+      if (own && state.searchList) {
+        searchPicker.setListing(state.searchList, data.best ? data.best.fields : {});
+        if (config.definition && !state.searchBaseline) state.searchBaseline = searchPicker.listing();
+        return;
+      }
       // does the newest-releases layout read the results page?
       searchPicker.setListing(feedListing(), data.best ? data.best.fields : {});
       return searchPicker.refresh().then(function(marked) {
@@ -1925,7 +2051,7 @@ _WIZARD_SCRIPT = r"""
   $('search-next').onclick = function() {
     show('download');
     // the newest release is opened and its links tested on their own the first time
-    if (!state.downloadTried && !$('w-download-selector').value.trim() && $('download-release').value) {
+    if (!builtin && !state.downloadTried && !$('w-download-selector').value.trim() && $('download-release').value) {
       state.downloadTried = true;
       state.autoDownload = true;
       lockStep('download', true);
@@ -2178,30 +2304,38 @@ _WIZARD_SCRIPT = r"""
     function line(term, value) { list.appendChild(el('dt', {text: term})); list.appendChild(el('dd', {text: value})); }
     line('Name', current.name);
     line('Hostname', current.hostname);
-    line('Feed', current.feeds.map(function(feed) {
+    var CODE = 'Quasarr\'s own code';
+    line('Feed', inCode('feed') ? CODE : (current.feeds || []).map(function(feed) {
       var category = config.categories.filter(function(c) { return c.id === feed.category; })[0];
-      return category.name + ': ' + path(feed.url);
+      return (category ? category.name : feed.category) + ': ' + path(feed.url);
     }).join(', ') || 'None');
     var s = current.search;
-    if (!s) {
+    if (inCode('search')) {
+      line('Search', CODE);
+    } else if (!s) {
       line('Search', 'Off');
     } else {
       var language = $('w-language').selectedOptions[0].textContent;
-      line('Search address', s.method.toUpperCase() + ' ' + path(s.url) + (s.body ? ' with ' + s.body : ''));
-      line('Searched kinds', s.categories.map(function(id) {
-        return config.categories.filter(function(c) { return c.id === id; })[0].name;
+      var kinds = s.categories || (current.feeds || []).map(function(feed) { return feed.category; });
+      line('Search address', (s.method || 'get').toUpperCase() + ' ' + path(s.url) + (s.body ? ' with ' + s.body : ''));
+      line('Searched kinds', kinds.map(function(id) {
+        var category = config.categories.filter(function(c) { return c.id === id; })[0];
+        return category ? category.name : id;
       }).join(', '));
-      if (s.categories.some(function(id) { return id === 2000 || id === 5000; })) {
+      if (kinds.some(function(id) { return id === 2000 || id === 5000; })) {
         line('Movies and shows', s.mode === 'imdb' ? 'by IMDb ID' : s.mode === 'title' ? 'by their ' + language + ' title' : 'not searched');
       }
       if (s.phrase) line('Music and books', 'by name');
       line('Results page', current.search_list ? 'read with its own fields' : 'read like the feed');
       (state.searchReport || []).forEach(function(entry) { line('Search test: ' + entry[0], entry[1]); });
     }
-    line('Downloads', current.download.userscript ? 'Your own userscript collects the links'
-      : (current.download.links && current.download.links.selector) || 'Releases link to their containers');
-    $('w-template').value = JSON.stringify(shareable(current), null, 2);
+    var download = current.download || {};
+    line('Downloads', inCode('download') ? CODE : download.userscript ? 'Your own userscript collects the links'
+      : (download.links && download.links.selector) || 'Releases link to their containers');
+    $('w-template').value = JSON.stringify(builtin ? editableParts(shareable(current)) : shareable(current), null, 2);
+    clear('template-notes');
     clear('save-notes');
+    if (builtin) { builtinChanges(current); return; }
     if (!state.feedOk) note('save-notes', 'warn', 'The feed has not passed a test yet.');
     if (!$('w-download-selector').value.trim() && !$('w-userscript').checked) {
       note('save-notes', 'warn', 'No download links are set up. You can save the site, but its downloads will not work ' +
@@ -2225,8 +2359,76 @@ _WIZARD_SCRIPT = r"""
     link.click();
     link.remove();
   };
+  // what an unsaved built-in template changes against the shipped one
+  function builtinChanges(current) {
+    var key = builtin.key.toLowerCase();
+    api('/api/sites/' + key + '/template/changes', {template: current}).then(function(data) {
+      if (!data.success) { note('save-notes', 'error', plain(data.error) + '.'); return; }
+      note('save-notes', data.changed.length ? 'warn' : 'ok', data.changed.length
+        ? 'Changed against the shipped version: ' + data.changed.join(', ') + '. A changed site is yours to maintain: ' +
+          'issues about it are not supported.'
+        : 'Nothing differs from the shipped version.');
+    });
+  }
+  function editableParts(definition) {
+    var parts = {};
+    builtin.parts.forEach(function(part) { if (part in definition) parts[part] = definition[part]; });
+    return parts;
+  }
+  $('template-apply').onclick = function() {
+    clear('template-notes');
+    var parsed;
+    try { parsed = JSON.parse($('w-template').value); } catch (e) {
+      note('template-notes', 'error', 'This is not valid JSON: ' + e.message + '.');
+      return;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      note('template-notes', 'error', 'The template must be a JSON object.');
+      return;
+    }
+    // the steps read the template again; addresses keep {host}, and the hostname and key stay
+    var applied = Object.assign(parsed, draft.key ? {key: draft.key} : {});
+    if (builtin) {
+      var other = Object.keys(parsed).filter(function(part) { return part !== 'key' && builtin.parts.indexOf(part) < 0; });
+      if (other.length) {
+        note('template-notes', 'error', other.join(', ') + ' cannot be changed. Only ' + builtin.parts.join(', ') + ' can.');
+        return;
+      }
+      // a part left out of the JSON goes back to the shipped version
+      applied = Object.assign({}, draft);
+      builtin.parts.forEach(function(part) { delete applied[part]; });
+      Object.assign(applied, builtin.shipped, parsed);
+    }
+    sessionStorage.setItem('quasarr-import', JSON.stringify({definition: applied, hostname: host(),
+      path: window.location.pathname}));
+    window.location.reload();
+  };
+  $('reset').onclick = function() {
+    if (!confirm('Reset ' + builtin.key + ' to the shipped version? Your changes to its template are deleted.')) return;
+    var done = busy($('reset'), 'Resetting…');
+    api('/api/sites/' + builtin.key.toLowerCase() + '/template', undefined, 'DELETE').then(function(data) {
+      done();
+      if (!data.success) { note('save-notes', 'error', plain(data.error) + '.'); return; }
+      window.location.reload();
+    });
+  };
   $('save').onclick = function() {
     clear('save-notes');
+    if (builtin) {
+      var saving = busy($('save'), 'Saving…');
+      api('/api/sites/' + builtin.key.toLowerCase() + '/template', {template: definition()}, 'PUT').then(function(data) {
+        saving();
+        if (!data.success) { note('save-notes', 'error', 'Could not save: ' + plain(data.error) + '.'); return; }
+        builtin.modified = data.modified;
+        $('reset').hidden = !data.modified;
+        var box = note('save-notes', 'ok', data.modified
+          ? 'Saved. ' + builtin.key + ' runs your changes from the next feed and search on. '
+          : 'Saved. Nothing differs from the shipped version, so ' + builtin.key + ' runs it again. ');
+        box.appendChild(el('button', {type: 'button', className: 'btn-secondary chip-button', text: 'Back to your sites',
+          onclick: function() { window.location.href = config.sites_url; }}));
+      });
+      return;
+    }
     var done = busy($('save'), 'Saving…');
     api('/api/custom-sources', definition()).then(function(data) {
       done();
@@ -2241,6 +2443,51 @@ _WIZARD_SCRIPT = r"""
   if (config.definition) {
     renderFeedRows();
     setFeedTested(!config.imported);
+  }
+  if (config.definition && !config.imported) {
+    $('feed-lead').textContent = 'The kinds this site offers and the page listing the newest releases of each. ' +
+      'Change what you need, then test the feed.';
+    $('search-lead').textContent = 'How Quasarr searches this site. Change what you need, then test the search.';
+    $('search-mode-hint').textContent = 'IMDb ID works when the site finds releases by IMDb ID; otherwise use the ' +
+      'title in the language below. Music and books are always searched by name.';
+    $('search-discover').className = 'btn-secondary';
+    $('search-discover').textContent = 'Set the search up again';
+  }
+  if (builtin) {
+    ['w-hostname', 'w-name'].forEach(function(id) {
+      $(id).readOnly = true;
+      var hint = $(id).nextElementSibling;
+      if (hint && hint.classList.contains('hint')) hint.hidden = true;
+    });
+    $('w-language').disabled = true;
+    $('site-hint').hidden = true;
+    $('import-open').hidden = true;
+    $('template-hint').textContent = 'The parts of ' + builtin.key + ' that can change, with your changes. ' +
+      'Edit them and apply them to see them in the steps. Its name, language and code stay as shipped.';
+    $('save').textContent = 'Save changes';
+    $('reset').hidden = !builtin.modified;
+    note('builtin-notes', 'warn', builtin.key + ' ships with Quasarr. Its hostname is changed under Address on your sites. ' +
+      'A changed site is yours to maintain: issues about it are not supported, so reset it and check again before you report one.');
+    var names = {feed: 'Newest releases', search: 'Search', download: 'Downloads'};
+    var coded = builtin.code_steps.map(function(step) { return names[step].toLowerCase(); });
+    if (coded.length) {
+      note('builtin-notes', 'ok', builtin.key + ' runs ' + coded.join(', ') + ' in Quasarr\'s own code' +
+        (draft.urls ? '. You can change the addresses it requests below; ' : '; ') + 'the rest of that logic cannot be changed here.');
+    }
+    builtin.code_steps.forEach(function(step) {
+      var section = document.querySelector('.wizard-step[data-step="' + step + '"]');
+      // some step parts set their own display, so hidden alone would not hide them
+      Array.prototype.forEach.call(section.children, function(child) {
+        if (!child.classList.contains('button-row')) child.style.display = 'none';
+      });
+      section.querySelectorAll('.button-row button:not([data-back]):not([id$="-next"])').forEach(function(button) {
+        button.style.display = 'none';
+      });
+      section.insertBefore(el('p', {className: 'wizard-lead code-step', text: names[step] + ' of ' + builtin.key +
+        ' run in Quasarr\'s own code, for example its login or API. This step cannot be changed here' +
+        (draft.urls ? '; the addresses it requests are on the Site step.' : '.')}), section.firstChild);
+    });
+    if (inCode('feed')) setFeedTested(true);
   }
   show('site');
 })();

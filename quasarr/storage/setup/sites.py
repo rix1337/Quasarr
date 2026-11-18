@@ -12,6 +12,7 @@ wizard. Passwords never reach the page; site text is shown as text only.
 import re
 from concurrent.futures import ThreadPoolExecutor
 
+import requests
 from bottle import request, response
 
 import quasarr.providers.web_server
@@ -29,6 +30,7 @@ from quasarr.providers.auth import require_api_key
 from quasarr.providers.hostname_issues import (
     clear_hostname_issue,
     get_all_hostname_issues,
+    is_unresolved_name,
     record_configured_hostnames,
 )
 from quasarr.providers.html_images import FLAG_SVGS, LANGUAGE_FLAG_EMOJI
@@ -278,15 +280,16 @@ def check_hostname(shared_state, hostname, named_key=None, fetch=None):
 
 def _short_error(page):
     """A fetch error in words a user can act on."""
-    text = str(page.error)
     if page.status:
         return f"it answered with HTTP {page.status}"
-    if "resolve" in text or "NameResolution" in text:
-        return "the name does not resolve"
-    if "timed out" in text.lower() or "timeout" in text.lower():
+    if isinstance(page.cause, requests.Timeout):
         return "it did not answer in time"
-    if "SSL" in text:
+    if isinstance(page.cause, requests.exceptions.SSLError):
         return "its certificate failed the check"
+    if isinstance(page.cause, requests.ConnectionError) and is_unresolved_name(
+        page.cause
+    ):
+        return "the name does not resolve"
     return "the connection failed"
 
 
@@ -439,7 +442,7 @@ _PAGE_HTML = """
       placeholder="example.org"></textarea>
     <div class="sites-row">
       <button type="button" class="btn-primary" id="add-check">Check</button>
-      <button type="button" class="btn-secondary" id="import-toggle" aria-expanded="false">Load a list from a URL</button>
+      <button type="button" class="link-button" id="import-toggle" aria-expanded="false">or load a list from a URL</button>
     </div>
     <div id="import-box" hidden>
       <label for="import-url">Address of a hostname list</label>
@@ -514,13 +517,6 @@ SITES_CSS = """
   .chip .flag svg { width: 1em; height: .75em; vertical-align: -.05em; }
   .chip.warn { background: #fff3cd; border-color: #d39e00; color: #856404; }
   .site-actions { display: flex; gap: .35rem; flex-wrap: wrap; justify-content: flex-end; align-items: flex-start; }
-  .more { position: relative; }
-  .more > summary { list-style: none; cursor: pointer; padding: .3rem .7rem; font-size: .85rem; border-radius: .4rem;
-    border: 1px solid var(--card-border); color: var(--fg-color); }
-  .more > summary::-webkit-details-marker { display: none; }
-  .more-menu { position: absolute; right: 0; z-index: 5; width: min(16rem, 80vw); margin-top: .3rem; padding: .6rem;
-    background: var(--card-bg); border: 1px solid var(--card-border); border-radius: .5rem; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
-  .more-menu .hint { margin: .4rem 0 0; }
   .site-actions button, .check-actions button { padding: .3rem .7rem; font-size: .85rem; margin: 0; }
   .check-actions { display: flex; gap: .35rem; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
   .check-actions select { width: auto; padding: .3rem 1.8rem .3rem .5rem; background-position: right .5rem center;
@@ -537,6 +533,11 @@ SITES_CSS = """
   .share-modal pre { max-height: 55vh; overflow: auto; background: var(--code-bg); padding: .75rem;
     border-radius: .4rem; font-size: .8rem; white-space: pre; }
   .advanced { color: var(--text-muted); font-size: .9rem; }
+  /* a secondary choice that should not compete with the main button */
+  .link-button { background: none; border: 0; padding: .3rem .1rem; margin: 0; color: var(--link-color);
+    font: inherit; font-size: .9rem; text-decoration: underline; text-underline-offset: .15em; cursor: pointer; }
+  .link-button:hover { text-decoration-thickness: 2px; }
+  .check-actions .link-button { font-size: .85rem; }
   .sites-footer { display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
   @media (max-width: 600px) {
     .check-item, .site { grid-template-columns: auto minmax(0, 1fr); }
@@ -635,6 +636,10 @@ _PAGE_SCRIPT = r"""
       }
       actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Address',
         onclick: function() { addressForm(row, site); }}));
+      actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Edit',
+        title: 'Change its template, for when the site changed and an update is not out yet. ' +
+          'Issues about a changed site are not supported.',
+        onclick: function() { window.location.href = '/sites/edit/' + encodeURIComponent(site.key.toLowerCase()); }}));
       if (site.modified) {
         actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Reset',
           onclick: function(event) { resetTemplate(site, event.currentTarget); }}));
@@ -649,16 +654,6 @@ _PAGE_SCRIPT = r"""
     if (!site.modified) {
       actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Remove',
         onclick: function() { remove(site); }}));
-    }
-    // the template editor is for advanced users only, so it hides behind More
-    if (site.kind === 'builtin') {
-      var menu = el('div', {className: 'more-menu'}, [
-        el('button', {type: 'button', className: 'btn-secondary', text: site.modified ? 'Edit your changes' : 'Change its template',
-          onclick: function() { window.location.href = '/sites/edit/' + encodeURIComponent(site.key.toLowerCase()); }}),
-        el('p', {className: 'hint', text: 'For experienced users, when the site changed and an update is not out yet. ' +
-          'Issues about a changed site are not supported.'})
-      ]);
-      actions.appendChild(el('details', {className: 'more'}, [el('summary', {text: 'More'}), menu]));
     }
     if (site.needs_login && !site.login_user && site.kind === 'builtin') loginForm(row, site);
     return row;
@@ -754,7 +749,7 @@ _PAGE_SCRIPT = r"""
     results.textContent = '';
     if (!text.trim()) { note(results, 'error', 'Paste at least one hostname.'); $('add-input').focus(); return; }
     var done = busy($('add-check'), 'Checking…');
-    var waiting = note(results, 'busy', 'Quasarr opens each site to see which built-in template matches it. This takes a few seconds per site.');
+    var waiting = note(results, 'busy', 'Quasarr opens each site and tries the built-in sites whose name fits it. This takes a few seconds, up to a minute for slow sites.');
     api('/api/sites/check', {hostnames: text}).then(function(data) {
       done();
       waiting.remove();
@@ -765,7 +760,7 @@ _PAGE_SCRIPT = r"""
   function choiceFor(result) {
     if (result.named) return {key: result.named, sure: true};
     if (result.verified.length) return {key: result.verified[0].key, sure: true};
-    if (result.possible.length === 1) return {key: result.possible[0].key, sure: false};
+    // a template that fits the name but cannot read the page is no match
     return null;
   }
   function renderResults(results) {
@@ -803,27 +798,27 @@ _PAGE_SCRIPT = r"""
           include.checked = choice.sure;
           actions.appendChild(el('label', {className: 'check'}, [include, ' Add as ']));
           actions.appendChild(select);
-          actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Set it up yourself',
+          actions.appendChild(el('button', {type: 'button', className: 'link-button', text: 'or set it up yourself',
             onclick: function() { window.location.href = setupLink(result.hostname); }}));
-          actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Skip',
-            onclick: function() {
-              include.checked = false;
-              include.dispatchEvent(new Event('change'));
-              item.remove();
-            }}));
           addable.push({hostname: result.hostname, select: select, include: include, item: item});
           main.appendChild(chips(picked));
         } else {
           dot += ' warn'; counts.setup++;
+          var fits = result.possible.map(function(option) { return option.key; });
           text = (text || '') + (result.unreachable
             ? 'Quasarr could not open it (' + result.unreachable + ').'
-            : 'No built-in template matches it.');
-          actions.appendChild(el('button', {type: 'button', className: 'btn-secondary', text: 'Set it up yourself',
+            : 'No built-in site reads this page' + (fits.length
+              ? ': its name fits ' + fits.join(' or ') + ', but ' +
+                (fits.length === 1 ? 'that template found no releases on it.' : 'none of them found releases on it.')
+              : '.'));
+          // a site Quasarr cannot open cannot be set up either; its address needs checking first
+          actions.appendChild(el('button', {type: 'button', className: result.unreachable ? 'btn-secondary' : 'btn-primary',
+            text: 'Set it up yourself',
             onclick: function() { window.location.href = setupLink(result.hostname); }}));
           if (result.possible.length) {
             // the name rule alone is weak evidence, so nothing is preselected
             var chooser = el('select', {'aria-label': 'Built-in site for ' + result.hostname});
-            chooser.appendChild(el('option', {value: '', text: 'or use a built-in site…'}));
+            chooser.appendChild(el('option', {value: '', text: 'Add as a built-in site anyway…'}));
             result.possible.forEach(function(option) { chooser.appendChild(el('option', {value: option.key, text: option.key})); });
             var box = el('input', {type: 'checkbox', hidden: 'hidden'});
             chooser.onchange = function() { box.checked = !!chooser.value; };
@@ -848,8 +843,9 @@ _PAGE_SCRIPT = r"""
     if (addable.length) {
       var addAll = el('button', {type: 'button', className: 'btn-primary', text: 'Add selected sites'});
       addAll.onclick = function() { addSelected(addable, addAll); };
+      // shown only once something is chosen, so it never competes with setting a site up
       var refresh = function() {
-        addAll.disabled = !addable.some(function(entry) { return entry.include.checked && entry.select.value; });
+        addAll.hidden = !addable.some(function(entry) { return entry.include.checked && entry.select.value; });
       };
       addable.forEach(function(entry) {
         entry.select.addEventListener('change', refresh);
@@ -860,11 +856,10 @@ _PAGE_SCRIPT = r"""
     }
     if (counts.setup) {
       note(target, 'warn', [
-        el('strong', {text: 'No built-in template matches ' + (counts.setup === 1 ? 'one site' : counts.setup + ' sites') + '. '}),
-        'You can teach Quasarr to read it yourself: the guided setup opens the site with you, you click where its releases, ' +
-        'its search and its download links are, and every step is tested before you save. A site you set up is yours to maintain, ' +
-        'and issues about it are not supported. Sites that need a login cannot be set up this way: they need Python code, ' +
-        'contributed as a pull request.'
+        el('strong', {text: 'Set it up yourself: '}),
+        'the guided setup opens the site with you, you click where its releases, search and download links are, and ' +
+        'every step is tested before you save. A site you set up is yours to maintain. Sites that need a login need ' +
+        'Python code instead, contributed as a pull request.'
       ]);
     }
   }
@@ -946,12 +941,6 @@ _PAGE_SCRIPT = r"""
     });
   };
 
-  // an open More menu closes when the page is clicked elsewhere
-  document.addEventListener('click', function(event) {
-    document.querySelectorAll('details.more[open]').forEach(function(menu) {
-      if (!menu.contains(event.target)) menu.open = false;
-    });
-  });
   load();
   $('add-input').focus();
 })();

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import io
+import re
 import subprocess
 import sys
 import tempfile
@@ -9,8 +10,11 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import requests
+
 from quasarr.providers import log
 from quasarr.providers.hostname_issues import mark_hostname_issue
+from quasarr.providers.version import __version__
 
 
 class ErrorLogTests(unittest.TestCase):
@@ -36,7 +40,9 @@ class ErrorLogTests(unittest.TestCase):
                 log.logger.remove(handler_id)
 
         contents = self.log_path.read_text(encoding="utf-8")
-        self.assertRegex(contents, r"ERROR.*XX.*Synthetic error")
+        self.assertRegex(
+            contents, rf"\S+ v{re.escape(__version__)} ERROR/🔍🧲/XX Synthetic error"
+        )
         self.assertIn("Synthetic critical failure", contents)
         self.assertNotIn("Synthetic info", contents)
         self.assertNotIn("Synthetic warning", contents)
@@ -95,7 +101,7 @@ source_log.error("Synthetic worker error")
             patch("quasarr.providers.hostname_issues.record_configured_hostnames"),
         ):
             mark_hostname_issue("xx", "search", "Unexpected response format")
-            mark_hostname_issue("xx", "feed", "Read timed out")
+            mark_hostname_issue("xx", "feed", requests.ReadTimeout("Read timed out"))
 
         contents = self.log_path.read_text(encoding="utf-8")
         self.assertRegex(contents, r"XX.*search.*Unexpected response format")

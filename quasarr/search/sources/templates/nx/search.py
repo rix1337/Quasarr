@@ -79,9 +79,7 @@ class Source(AbstractSearchSource):
             feed = r.json()
         except Exception as e:
             warn(f"Error loading feed: {e}")
-            mark_hostname_issue(
-                self.initials, "feed", str(e) if "e" in dir() else "Error occurred"
-            )
+            mark_hostname_issue(self.initials, "feed", e)
             return releases
 
         items = feed.get("items", [])
@@ -144,9 +142,7 @@ class Source(AbstractSearchSource):
 
             except Exception as e:
                 warn(f"Error parsing feed: {e}")
-                mark_hostname_issue(
-                    self.initials, "feed", str(e) if "e" in dir() else "Error occurred"
-                )
+                mark_hostname_issue(self.initials, "feed", e)
 
         elapsed_time = time.time() - start_time
         debug(f"Time taken: {elapsed_time:.2f}s")
@@ -212,9 +208,7 @@ class Source(AbstractSearchSource):
             feed = r.json()
         except Exception as e:
             warn(f"Error loading search: {e}")
-            mark_hostname_issue(
-                self.initials, "search", str(e) if "e" in dir() else "Error occurred"
-            )
+            mark_hostname_issue(self.initials, "search", e)
             return releases
 
         items = feed.get("releases", [])
@@ -292,7 +286,7 @@ class Source(AbstractSearchSource):
                 mark_hostname_issue(
                     self.initials,
                     "search",
-                    str(e) if "e" in dir() else "Error occurred",
+                    e,
                 )
 
         elapsed_time = time.time() - start_time

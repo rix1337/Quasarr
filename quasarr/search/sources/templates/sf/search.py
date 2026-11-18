@@ -80,9 +80,7 @@ class Source(AbstractSearchSource):
                 r.raise_for_status()
             except Exception as e:
                 warn(f"Error loading feed: {e} for {formatted_date}")
-                mark_hostname_issue(
-                    self.initials, "feed", str(e) if "e" in dir() else "Error occurred"
-                )
+                mark_hostname_issue(self.initials, "feed", e)
                 return releases
 
             content = BeautifulSoup(r.text, "html.parser")
@@ -142,7 +140,7 @@ class Source(AbstractSearchSource):
                     mark_hostname_issue(
                         self.initials,
                         "feed",
-                        str(e) if "e" in dir() else "Error occurred",
+                        e,
                     )
 
         elapsed_time = time.time() - start_time
@@ -218,9 +216,7 @@ class Source(AbstractSearchSource):
             feed = r.json()
         except Exception as e:
             warn(f"Error loading search: {e}")
-            mark_hostname_issue(
-                self.initials, "search", str(e) if "e" in dir() else "Error occurred"
-            )
+            mark_hostname_issue(self.initials, "search", e)
             return releases
 
         results = feed.get("result", [])
@@ -281,7 +277,7 @@ class Source(AbstractSearchSource):
                     season_id = re.findall(r"initSeason\('(.+?)\',", series_page)[0]
                 except Exception as e:
                     debug(f"Failed to load or parse series page for {series_id}")
-                    mark_hostname_issue(self.initials, "search", str(e))
+                    mark_hostname_issue(self.initials, "search", e)
                     continue
 
                 # fetch API HTML
@@ -315,7 +311,7 @@ class Source(AbstractSearchSource):
                     mark_hostname_issue(
                         self.initials,
                         "search",
-                        str(e) if "e" in dir() else "Error occurred",
+                        e,
                     )
                     continue
 
@@ -516,9 +512,7 @@ class Source(AbstractSearchSource):
             mirrors = {"name": name, "season": season, "episodes": episodes}
         except Exception as e:
             warn(f"Error parsing mirrors: {e}")
-            mark_hostname_issue(
-                self.initials, "feed", str(e) if "e" in dir() else "Error occurred"
-            )
+            mark_hostname_issue(self.initials, "feed", e)
 
         return mirrors
 

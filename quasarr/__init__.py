@@ -412,7 +412,7 @@ def flaresolverr_checker(shared_state_dict, shared_state_lock):
                     f"Using Flaresolverr's User-Agent: <g>{shared_state.values['user_agent']}</g>"
                 )
             else:
-                error("FlareSolverr check failed - using fallback user agent")
+                warn("FlareSolverr check failed - using fallback user agent")
                 # Fallback user agent is already set in main process, but we log it
                 info(f'User Agent (fallback): "{FALLBACK_USER_AGENT}"')
 
@@ -500,7 +500,7 @@ def jdownloader_connection(shared_state_dict, shared_state_lock):
                     shared_state.values.get("device")
                 )
                 if not device_state:
-                    error("Lost connection to JDownloader. Reconnecting...")
+                    warn("Lost connection to JDownloader. Reconnecting...")
                     shared_state.update("device", False)
                     break
 

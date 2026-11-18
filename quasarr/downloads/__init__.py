@@ -28,6 +28,7 @@ from quasarr.providers.utils import (
     download_package,
     extract_client_type,
     filter_offline_links,
+    is_filecrypt_ban_page,
     normalize_download_title,
 )
 from quasarr.storage.categories import (
@@ -382,12 +383,12 @@ def process_links(
     # Filter out 404 links
     valid_links = [link for link in links if "/404.html" not in link[0]]
     if not valid_links:
-        return fail(
-            title,
-            package_id,
-            shared_state,
-            reason=f'All links are offline or IP is banned for "{title}" on {label} - "{source_url}"',
+        reason = (
+            f'All links of "{title}" on {label} lead to a 404 page - "{source_url}"'
         )
+        if any(is_filecrypt_ban_page(link[0]) for link in links):
+            reason = f'filecrypt banned the IP for now, so "{title}" on {label} cannot be opened - "{source_url}"'
+        return fail(title, package_id, shared_state, reason=reason)
     links = valid_links
 
     # Filter out verifiably offline links
@@ -557,6 +558,8 @@ def download(
         source_result = None
         label = None
         detected_source_key = None
+        # sites that own the URL but returned no links
+        empty_sources = []
 
         mirrors = get_download_category_mirrors(download_category, lowercase=True)
         download_sources = get_download_sources()
@@ -610,12 +613,13 @@ def download(
                     label = key.upper()
                     detected_source_key = key
                     break
+                empty_sources.append(key.upper())
             except Exception as e:
                 info(f"Error getting download links from {key.upper()}: {e}")
                 if not from_source_key or (
                     hostname and hostname.lower() in url.lower()
                 ):
-                    mark_hostname_issue(key, "download", str(e))
+                    mark_hostname_issue(key, "download", e)
 
         # No source matched - check if URL is a known crypter directly
         if source_result is None:
@@ -661,12 +665,13 @@ def download(
             return {"success": True, "package_id": package_id, "title": title}
 
         if source_result is None:
-            result = fail(
-                title,
-                package_id,
-                shared_state,
-                reason=f'Could not find matching source for "{title}" - "{url}"',
-            )
+            reason = f'Could not find matching source for "{title}" - "{url}"'
+            if empty_sources:
+                reason = (
+                    f'No download links found for "{title}" on '
+                    f'{", ".join(empty_sources)} - "{url}"'
+                )
+            result = fail(title, package_id, shared_state, reason=reason)
             return {"package_id": package_id, **result}
 
         result = process_links(
@@ -683,6 +688,7 @@ def download(
         return {"package_id": package_id, **result}
 
     except Exception as e:
+        error(f'Unexpected error downloading "{title}": {e}')
         if not package_id:
             # Fallback generation if we crashed early
             try:
@@ -705,9 +711,14 @@ def download(
 
 
 def fail(title, package_id, shared_state, reason="Unknown error"):
-    """Mark download as failed."""
+    """Mark download as failed.
+
+    A failed download is an outcome, not a bug: offline releases, IP bans and
+    missing links are warnings. A broken site is logged as an error where its
+    issue is marked, an unexpected exception where it is caught.
+    """
     try:
-        error(f"Reason for failure: {reason}")
+        warn(f"Reason for failure: {reason}")
         StatsHelper(shared_state).increment_failed_downloads()
         blob = json.dumps({"title": title, "error": reason})
         shared_state.get_db("failed").store(package_id, json.dumps(blob))

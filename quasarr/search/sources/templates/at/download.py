@@ -120,7 +120,7 @@ class Source(AbstractDownloadSource):
             response.raise_for_status()
         except Exception as e:
             info(f"Could not load release page for {title}: {e}")
-            mark_hostname_issue(Source.initials, "download", str(e) or "Download error")
+            mark_hostname_issue(Source.initials, "download", e)
             return {"links": [], "imdb_id": None}
 
         try:
@@ -151,7 +151,7 @@ class Source(AbstractDownloadSource):
             return {"links": links, "imdb_id": None, "title": resolved_title}
         except Exception as e:
             info(f"Could not parse release page for {title}: {e}")
-            mark_hostname_issue(Source.initials, "download", str(e) or "Download error")
+            mark_hostname_issue(Source.initials, "download", e)
             return {"links": [], "imdb_id": None}
 
 

@@ -78,7 +78,7 @@ def download(site, shared_state, url, mirrors, title, password):
         info(
             f"Site has been updated. Grabbing download links for {title} not possible!"
         )
-        mark_hostname_issue(site.initials, "download", str(e))
+        mark_hostname_issue(site.initials, "download", e)
         return {"links": []}
 
     download_links = []
@@ -126,7 +126,7 @@ def download(site, shared_state, url, mirrors, title, password):
                 download_links.append([link, hoster])
     except Exception as e:
         info(f"Site has been updated. Parsing download links for {title} not possible!")
-        mark_hostname_issue(site.initials, "download", str(e))
+        mark_hostname_issue(site.initials, "download", e)
 
     if download_links:
         clear_hostname_issue(site.initials)

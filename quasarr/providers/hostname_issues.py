@@ -7,9 +7,36 @@ Hostname Issues Tracker - Uses lazy imports to avoid circular dependency
 """
 
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date, datetime
 
+import requests
+from urllib3.exceptions import NameResolutionError
+
 from quasarr.providers.log import log_source_issue
+
+# Overloaded or rate-limiting sites, including Cloudflare's origin errors (52x).
+# 401 and 403 are not here: a rejected login or blocked request is a broken integration.
+UNREACHABLE_HTTP_STATUSES = frozenset({429, 502, 503, 504, 520, 521, 522, 523, 524})
+
+
+class SiteUnreachableError(Exception):
+    """The site could not be reached or served: an IP ban, a rate limit, or
+    FlareSolverr not solving in time. Not something Quasarr can fix."""
+
+
+# a trial run of a site's code (checking a pasted hostname) records no issues
+_quiet = ContextVar("quiet_hostname_issues", default=False)
+
+
+@contextmanager
+def quiet_hostname_issues():
+    token = _quiet.set(True)
+    try:
+        yield
+    finally:
+        _quiet.reset(token)
 
 
 def _get_db(table_name):
@@ -19,17 +46,37 @@ def _get_db(table_name):
     return DataBase(table_name)
 
 
-def is_timeout_message(error_message):
-    """Timeouts are slow hosts, not broken ones; the statistics chart keeps them apart."""
-    message = str(error_message).lower()
-    return "timed out" in message or "timeout" in message
+def is_site_unreachable(error):
+    """Whether a failure is the web's, not a broken integration or a bug.
+
+    Classifies by type, never by message text. A plain string describes an
+    issue Quasarr detected itself, which is always an error.
+    """
+    if isinstance(error, (SiteUnreachableError, requests.Timeout)):
+        return True
+    if isinstance(error, requests.HTTPError):
+        response = error.response
+        return (
+            response is not None and response.status_code in UNREACHABLE_HTTP_STATUSES
+        )
+    # includes names that no longer resolve: a dead domain is the user's setting
+    return isinstance(error, requests.ConnectionError)
 
 
-def mark_hostname_issue(shorthand, operation, error_message):
+def is_unresolved_name(error):
+    """Whether a connection failed because the hostname does not resolve."""
+    reason = error.args[0] if error.args else None
+    return isinstance(getattr(reason, "reason", reason), NameResolutionError)
+
+
+def mark_hostname_issue(shorthand, operation, error):
+    """Record a source failure; ``error`` is the exception or a description."""
+    if _quiet.get():
+        return
     shorthand = shorthand.lower()
-    message = str(error_message)
-    is_timeout = is_timeout_message(message)
-    if not is_timeout:
+    message = str(error) or type(error).__name__
+    unreachable = is_site_unreachable(error)
+    if not unreachable:
         log_source_issue(shorthand, operation, message)
 
     db = _get_db("hostname_issues")
@@ -48,7 +95,8 @@ def mark_hostname_issue(shorthand, operation, error_message):
 
         stats_db = _get_db("statistics")
         prune_daily(stats_db)
-        kind = "timeout" if is_timeout else "issue"
+        # "timeout" rows predate the wider meaning; the key stays for stored history
+        kind = "timeout" if unreachable else "issue"
         stats_db.update_store(f"{kind}:{date.today().isoformat()}:{shorthand}", "1")
         record_configured_hostnames(refresh=False)
     except Exception:
@@ -74,6 +122,8 @@ def record_configured_hostnames(refresh=True):
 
 
 def clear_hostname_issue(shorthand):
+    if _quiet.get():
+        return
     shorthand = shorthand.lower()
     db = _get_db("hostname_issues")
     db.delete(shorthand)

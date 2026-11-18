@@ -125,8 +125,15 @@ def _site_url(data):
 
 
 def _draft_source(definition):
+    from quasarr.search.sources.templates import build_template, get_template_keys
+    from quasarr.storage.setup.site_editor import _changed_parts
+
     draft = dict(definition or {})
-    draft["key"] = draft.get("key") or _PREVIEW_KEY
+    key = str(draft.get("key") or "")
+    # a built-in site runs its own code with the unsaved changes laid over it
+    if key in get_template_keys():
+        return build_template(key, _changed_parts(key, draft))
+    draft["key"] = key or _PREVIEW_KEY
     return CustomSource(draft)
 
 
@@ -593,5 +600,5 @@ def setup_custom_source_routes(app, shared_state):
         url = str(data.get("url") or "")
         links, link_error, _, _ = source.load_download_links(shared_state, url)
         if link_error:
-            return {"success": False, "error": link_error}
+            return {"success": False, "error": str(link_error)}
         return {"success": True, "links": links, "classified": classify_links(links)}

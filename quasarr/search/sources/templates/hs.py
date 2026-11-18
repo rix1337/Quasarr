@@ -105,7 +105,7 @@ def search(
 
     except Exception as e:
         warn(f"Error loading search: {e}")
-        mark_hostname_issue(site.initials, "search", str(e))
+        mark_hostname_issue(site.initials, "search", e)
         return releases
 
     elapsed_time = time.time() - start_time
@@ -495,7 +495,7 @@ def download(site, shared_state, url, mirrors, title, password):
 
     except Exception as e:
         info(f"Error loading download links: {e}")
-        mark_hostname_issue(site.initials, "download", str(e))
+        mark_hostname_issue(site.initials, "download", e)
 
     return {"links": links}
 

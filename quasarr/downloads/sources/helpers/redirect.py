@@ -14,7 +14,17 @@ from quasarr.providers.utils import (
     NAVIGATION_CHAIN_RECORDER_JS,
     detect_crypter_type,
     first_crypter_in_chain,
+    is_filecrypt_ban_page,
 )
+
+
+def _warn_404(label, url):
+    if is_filecrypt_ban_page(url):
+        warn(
+            f"filecrypt banned the IP for now, so {label} link is not resolved: <d>{url}</d>"
+        )
+    else:
+        warn(f"{label} link leads to a 404 page: <d>{url}</d>")
 
 
 def resolve_crypter_redirect(
@@ -72,7 +82,7 @@ def resolve_crypter_redirect(
             mark_hostname_issue(
                 source_initials,
                 "download",
-                str(e) if "e" in dir() else "Download error",
+                e,
             )
             return None
 
@@ -91,7 +101,7 @@ def resolve_crypter_redirect(
             next_url = urljoin(current_url, location)
             debug(f"Redirected from <d>{current_url}</d> to <d>{next_url}</d>")
             if "/404.html" in next_url:
-                warn(f"Link redirected to 404 page: <d>{next_url}</d>")
+                _warn_404(label, next_url)
                 return None
             if detect_crypter_type(next_url) is not None:
                 return next_url
@@ -106,7 +116,7 @@ def resolve_crypter_redirect(
 
         final_url = (r.url or current_url).strip()
         if "/404.html" in final_url:
-            warn(f"Link redirected to 404 page: <d>{final_url}</d>")
+            _warn_404(label, final_url)
             return None
         if r.status_code >= 400:
             warn(
@@ -115,7 +125,9 @@ def resolve_crypter_redirect(
             mark_hostname_issue(
                 source_initials,
                 "download",
-                f"HTTP {r.status_code} while resolving redirect",
+                requests.HTTPError(
+                    f"HTTP {r.status_code} while resolving redirect", response=r
+                ),
             )
             return None
         if detect_crypter_type(final_url) is not None:

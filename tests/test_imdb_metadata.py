@@ -215,12 +215,12 @@ class IMDbMetadataTests(unittest.TestCase):
                 return_value=cached,
             ),
             patch.object(IMDbHTML, "get_localized_title", return_value=None),
-            patch("quasarr.providers.imdb_metadata.error") as log_error,
+            patch("quasarr.providers.imdb_metadata.warn") as log_warn,
         ):
             title = get_localized_title(FakeSharedState(), "tt0000011", "de")
 
         self.assertIsNone(title)
-        log_error.assert_called_once_with(
+        log_warn.assert_called_once_with(
             "Could not get localized title for tt0000011 in de"
         )
 

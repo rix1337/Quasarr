@@ -480,7 +480,7 @@ class Source(AbstractSearchSource):
             if releases:
                 clear_hostname_issue(self.initials)
         except Exception as e:
-            mark_hostname_issue(self.initials, "search", str(e))
+            mark_hostname_issue(self.initials, "search", e)
             warn(f"[mx] search error: {e}")
 
         debug(

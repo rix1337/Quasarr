@@ -12,13 +12,16 @@ what the saved definition will achieve.
 import html
 import re
 import secrets
+import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urljoin, urlparse
 
 import soupsieve
 from bs4 import BeautifulSoup, Tag
 
 from quasarr.constants import CODEC_REGEX, RESOLUTION_REGEX, SEASON_EP_REGEX
+from quasarr.providers.log import debug
 from quasarr.search.sources.helpers.custom_source import (
     _SIZE_REGEX,
     _compile_field,
@@ -1489,31 +1492,172 @@ def _template_rows(source, markup, url, hostname):
     return len(rows)
 
 
+# a site's own code checks a pasted hostname within this time
+TRIAL_SECONDS = 45
+
+
+class _TrialConfig:
+    """Settings for a trial run: the pasted hostname for its site, nothing written."""
+
+    def __init__(self, config, key, hostname):
+        self._config, self._key, self._hostname = config, key, hostname
+
+    def get(self, name):
+        if self._hostname is not None and name == self._key:
+            return self._hostname
+        return self._config.get(name)
+
+    # a failed trial login must never blank the saved one
+    def save(self, *_args):
+        pass
+
+    def delete(self, *_args):
+        pass
+
+
+class _TrialTable:
+    """A session table that lives only for one trial run."""
+
+    def __init__(self):
+        self._rows = {}
+
+    def retrieve(self, key):
+        return self._rows.get(key)
+
+    def update_store(self, key, value):
+        self._rows[key] = value
+
+    store = update_store
+
+    def delete(self, key):
+        self._rows.pop(key, None)
+
+    def retrieve_all_titles(self):
+        return list(self._rows.items())
+
+
+class _TrialState:
+    """Shared state for running one site's code on a pasted hostname.
+
+    It reads the saved settings, so a login the user saved for that site is
+    used, but it writes none: sessions stay in memory and settings unchanged.
+    """
+
+    def __init__(self, real, key, hostname):
+        self._real = real
+        config, database = real.values["config"], real.values["database"]
+        sessions = _TrialTable()
+        self.values = dict(real.values)
+        self.values["config"] = lambda section: _TrialConfig(
+            config(section), key, hostname if section == "Hostnames" else None
+        )
+        self.values["database"] = lambda table: (
+            sessions if table == "sessions" else database(table)
+        )
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+    def update(self, key, value):
+        self.values[key] = value
+
+
+def trial_feed_rows(shared_state, key, hostname):
+    """Releases a built-in site's real feed reads on a pasted hostname."""
+    from quasarr.providers.hostname_issues import quiet_hostname_issues
+    from quasarr.search.sources.templates import build_template
+
+    source = build_template(key, hostname=hostname)
+    trial = _TrialState(shared_state, key, hostname)
+    # The site's own code reading releases there is strong evidence on its own;
+    # selectors alone may read a similar site, so they need a few releases.
+    enough = 1 if "feed" in source.hooks else MIN_ITEMS
+    # a kind may list next to nothing on a site, so each kind gets its turn
+    with quiet_hostname_issues():
+        for category in source.supported_categories:
+            releases = source.feed(trial, time.time(), category) or []
+            rows = sum(1 for r in releases if (r.get("details") or {}).get("title"))
+            if rows >= enough:
+                return rows
+    return 0
+
+
 def detect_templates(shared_state, markup, page_url, hostname, fetch=None):
     """Bundled templates that read this site, so no custom source is needed.
 
     Every template is tried on the page the user loaded. Templates whose key
     letters both appear in the domain (the naming rule of the built-in
-    hostnames) also get their own first feed fetched.
+    hostnames) also run their real feed on the hostname, in parallel and
+    without saving anything, which confirms sites whose code logs in or uses
+    an API as well.
     """
-    from quasarr.search.sources.helpers.custom_source import fetch_markup
+    from quasarr.providers.shared_state import extract_valid_hostname
     from quasarr.search.sources.templates import get_templates
 
-    fetch = fetch or fetch_markup
-    domain = hostname.split(".")[0]
     matches = []
+    trials = []
+    domain = hostname.split(".")[0]
     for key, source in get_templates().items():
         rows = _template_rows(source, markup, page_url, hostname)
-        if rows < MIN_ITEMS and all(letter in domain for letter in key):
-            feeds = source.spec["feeds"]
-            if feeds:
-                url = next(iter(feeds.values())).replace("{host}", hostname)
-                page = fetch(shared_state, url, SEARCH_DISCOVERY_TIMEOUT, False)
-                rows = _template_rows(source, page.markup, url, hostname)
         if rows >= MIN_ITEMS:
             matches.append({"key": key.upper(), "name": source.name, "rows": rows})
-    matches.sort(key=lambda m: m["rows"], reverse=True)
+        # the same naming rule the sites page offers built-in sites by
+        elif extract_valid_hostname(hostname, key).get("domain"):
+            if fetch is None:
+                trials.append((key, source.name, source.requires_login))
+            elif source.spec["feeds"]:
+                # an injected fetch reads the first feed page instead of running the site
+                url = next(iter(source.spec["feeds"].values())).replace(
+                    "{host}", hostname
+                )
+                page = fetch(shared_state, url, SEARCH_DISCOVERY_TIMEOUT, False)
+                rows = _template_rows(source, page.markup, url, hostname)
+                if rows >= MIN_ITEMS:
+                    matches.append(
+                        {"key": key.upper(), "name": source.name, "rows": rows}
+                    )
+    # A site's saved login only goes to a pasted hostname when nothing else fits it:
+    # the page itself, then the sites without login, then the sites with one.
+    for with_login in (False, True):
+        if matches:
+            break
+        matches += _run_trials(
+            shared_state,
+            hostname,
+            [(key, name) for key, name, login in trials if login == with_login],
+        )
+    # sister sites run the same code and read each other; the domain's first letter decides a tie
+    matches.sort(
+        key=lambda m: (m["rows"], domain[:1] == m["key"][:1].lower()), reverse=True
+    )
     return matches
+
+
+def _run_trials(shared_state, hostname, trials):
+    """Built-in sites whose real feed reads the hostname, tried in parallel."""
+    if not trials:
+        return []
+    found = []
+    pool = ThreadPoolExecutor(max_workers=len(trials))
+    futures = {
+        pool.submit(trial_feed_rows, shared_state, key, hostname): (key, name)
+        for key, name in trials
+    }
+    try:
+        for future in as_completed(futures, timeout=TRIAL_SECONDS):
+            key, name = futures[future]
+            try:
+                rows = future.result()
+            except Exception as e:
+                debug(f"{key.upper()} did not read {hostname}: {e}")
+                continue
+            if rows:
+                found.append({"key": key.upper(), "name": name, "rows": rows})
+    except TimeoutError:
+        debug(f"Not every built-in site answered for {hostname} in time")
+    # a slow site keeps running on its own; the answer does not wait for it
+    pool.shutdown(wait=False, cancel_futures=True)
+    return found
 
 
 # --- Template export -----------------------------------------------------------
@@ -1693,6 +1837,12 @@ FIELD_COLORS = {
 
 _PREVIEW_STYLE = (
     ".q-picking [data-q]{cursor:crosshair}"
+    # iOS sends a tap on a plain element as a click only when it looks clickable;
+    # manipulation drops the wait for a double-tap zoom
+    "html{touch-action:manipulation;-webkit-tap-highlight-color:transparent}"
+    "@media (hover:none){.q-picking [data-q]{cursor:pointer}}"
+    # sites hide the page until their own scripts run, which never run here
+    "html,body{display:block !important;visibility:visible !important;opacity:1 !important}"
     # one release on its own: everything else is hidden
     ".q-solo body *:not(.q-keep):not(.q-shown):not(.q-shown *){display:none !important}"
     ".q-hover{outline:2px dashed #0dcaf0 !important;outline-offset:1px}"
@@ -1719,16 +1869,35 @@ _PREVIEW_SCRIPT = """
     if (node) node.classList.add('q-hover');
   }
   // shows only one release, so details can only be picked inside it
+  var revealed = [];
   function solo(q) {
     document.querySelectorAll('.q-keep, .q-shown').forEach(function(node) {
       node.classList.remove('q-keep', 'q-shown');
     });
+    revealed.forEach(function(entry) { entry[0].setAttribute('style', entry[1]); });
+    revealed = [];
     shown = q === null || q === undefined
       ? null : document.querySelector('[data-q="' + Number(q) + '"]');
     document.documentElement.classList.toggle('q-solo', !!shown);
     if (!shown) return;
     shown.classList.add('q-shown');
     for (var node = shown.parentElement; node; node = node.parentElement) node.classList.add('q-keep');
+    // releases inside tabs or spoilers the site opens with its own scripts stay hidden
+    // here, as those do not run; the shown release and its parents are opened
+    for (node = shown; node; node = node.parentElement) reveal(node);
+  }
+  function reveal(node) {
+    var style = getComputedStyle(node);
+    var collapsed = style.overflow !== 'visible' && (parseFloat(style.maxHeight) === 0 || parseFloat(style.height) === 0);
+    if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && !collapsed) return;
+    revealed.push([node, node.getAttribute('style') || '']);
+    if (style.display === 'none') node.style.setProperty('display', 'block', 'important');
+    node.style.setProperty('visibility', 'visible', 'important');
+    node.style.setProperty('opacity', '1', 'important');
+    if (collapsed) {
+      node.style.setProperty('height', 'auto', 'important');
+      node.style.setProperty('max-height', 'none', 'important');
+    }
   }
   function mark(name, list) {
     document.querySelectorAll('.' + name).forEach(function(node) { node.classList.remove(name); });
@@ -1761,6 +1930,11 @@ _PREVIEW_SCRIPT = """
   document.addEventListener('mouseover', function(event) {
     if (picking) hover(numbered(event.target));
   }, true);
+  // touch has no hover: the outline shows where a finger lands, and goes when it scrolls instead
+  document.addEventListener('pointerdown', function(event) {
+    if (picking && event.pointerType !== 'mouse') hover(numbered(event.target));
+  }, true);
+  document.addEventListener('pointercancel', function() { if (picking) hover(null); }, true);
   document.addEventListener('click', function(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -2139,7 +2313,7 @@ def import_template(text):
 
     from quasarr.search.sources.helpers.custom_source import (
         DefinitionError,
-        compile_definition,
+        known_definition,
     )
 
     text = str(text or "").strip()
@@ -2162,6 +2336,8 @@ def import_template(text):
         for k, v in definition.items()
         if k not in ("key", "hostname", "schema", "enabled")
     }
-    # the placeholders only let the engine check everything else
-    compile_definition({**definition, "key": "c1", "hostname": "example.invalid"})
-    return definition
+    # the placeholders only let the engine check everything else; keys it does not read go
+    checked = known_definition(
+        {**definition, "key": "c1", "hostname": "example.invalid"}
+    )
+    return {k: v for k, v in checked.items() if k not in ("key", "hostname")}

@@ -25,7 +25,7 @@ from quasarr.constants import (
 from quasarr.providers import shared_state
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title, get_year
-from quasarr.providers.log import debug, error, info, warn
+from quasarr.providers.log import debug, info, warn
 from quasarr.providers.utils import (
     convert_to_mb,
     date_numbering_title_search_strings,
@@ -88,10 +88,8 @@ class Source(AbstractSearchSource):
                 search_category=search_category,
             )
         except Exception as e:
-            error(f"Error loading feed: {e}")
-            mark_hostname_issue(
-                self.initials, "feed", str(e) if "e" in dir() else "Error occurred"
-            )
+            warn(f"Error loading feed: {e}")
+            mark_hostname_issue(self.initials, "feed", e)
             releases = []
         debug(f"Time taken: {time.time() - start_time:.2f}s")
 
@@ -185,10 +183,8 @@ class Source(AbstractSearchSource):
                         if page_url not in visited and page_url not in pending:
                             pending.append(page_url)
         except Exception as e:
-            error(f"Error loading search: {e}")
-            mark_hostname_issue(
-                self.initials, "search", str(e) if "e" in dir() else "Error occurred"
-            )
+            warn(f"Error loading search: {e}")
+            mark_hostname_issue(self.initials, "search", e)
             releases = []
         debug(f"Time taken: {time.time() - start_time:.2f}s")
 

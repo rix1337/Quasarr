@@ -221,7 +221,7 @@ def render_history_charts(history):
         [
             ["hosts", "Sites added", "#22c55e"],
             ["issues", "Sites with errors", "#ef4444"],
-            ["timeouts", "Sites with timeouts", "#f59e0b"],
+            ["timeouts", "Sites unreachable", "#f59e0b"],
         ],
         {"issues": history["issue_hosts"], "timeouts": history["timeout_hosts"]},
     )

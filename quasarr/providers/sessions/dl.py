@@ -99,7 +99,7 @@ def create_and_persist_session(shared_state):
         info("Session successfully created using user/password")
     except Exception as e:
         info(f"Failed to create session - {e}")
-        mark_hostname_issue(hostname, "session", str(e))
+        mark_hostname_issue(hostname, "session", e)
         return None
 
     # Persist session to database

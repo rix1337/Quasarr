@@ -61,7 +61,7 @@ class Source(AbstractDownloadSource):
             release_data = r.json()
         except Exception as e:
             info(f"Could not get release details: {e}")
-            mark_hostname_issue(Source.initials, "download", str(e))
+            mark_hostname_issue(Source.initials, "download", e)
             return {"links": []}
 
         links_data = release_data.get("links", [])

@@ -4,8 +4,18 @@ import unittest
 from datetime import date, timedelta
 from unittest.mock import patch
 
-from quasarr.providers.hostname_issues import mark_hostname_issue
+import requests
+from urllib3.exceptions import MaxRetryError, NameResolutionError
+
+from quasarr.providers.cloudflare import FlareSolverrError
+from quasarr.providers.hostname_issues import SiteUnreachableError, mark_hostname_issue
 from quasarr.providers.statistics import HISTORY_DAYS, StatsHelper
+
+
+def _http_error(status):
+    response = requests.Response()
+    response.status_code = status
+    return requests.HTTPError(f"{status} Server Error", response=response)
 
 
 class FakeDb:
@@ -82,23 +92,43 @@ class StatsHistoryTests(unittest.TestCase):
     def test_mark_hostname_issue_classifies_timeouts(self):
         rows = {}
         db = FakeDb(rows)
+        temporary = {
+            "ta": requests.ReadTimeout("Read timed out"),
+            "tb": _http_error(522),
+            "tc": _http_error(503),
+            "td": requests.ConnectionError("Remote end closed connection"),
+            "te": FlareSolverrError("Error communicating with FlareSolverr"),
+            "tf": SiteUnreachableError("Request limit reached"),
+            "tg": requests.ConnectionError(
+                MaxRetryError(
+                    None, "/", NameResolutionError("source.invalid", None, OSError())
+                )
+            ),
+        }
+        errors = {
+            "ea": _http_error(403),
+            "ef": _http_error(401),
+            "ec": "Login rejected",
+            # text that only mentions a timeout is not one
+            "ed": "Read timed out",
+        }
         with (
             patch("quasarr.providers.hostname_issues._get_db", return_value=db),
             patch("quasarr.providers.hostname_issues.record_configured_hostnames"),
             patch("quasarr.providers.statistics.record_configured_hostnames"),
         ):
-            mark_hostname_issue(
-                "XX",
-                "search",
-                "HTTPSConnectionPool(host='source.invalid', port=443): "
-                "Read timed out. (read timeout=10)",
-            )
-            mark_hostname_issue("YY", "search", "Login rejected")
+            for key, failure in temporary.items():
+                mark_hostname_issue(key, "search", failure)
+            for key, failure in errors.items():
+                mark_hostname_issue(key, "search", failure)
 
         today = date.today().isoformat()
-        self.assertIn(f"timeout:{today}:xx", rows)
-        self.assertNotIn(f"issue:{today}:xx", rows)
-        self.assertIn(f"issue:{today}:yy", rows)
+        for key in temporary:
+            self.assertIn(f"timeout:{today}:{key}", rows, key)
+            self.assertNotIn(f"issue:{today}:{key}", rows, key)
+        for key in errors:
+            self.assertIn(f"issue:{today}:{key}", rows, key)
+            self.assertNotIn(f"timeout:{today}:{key}", rows, key)
 
     def test_hostname_count_carries_forward(self):
         helper, rows = self.make_helper()

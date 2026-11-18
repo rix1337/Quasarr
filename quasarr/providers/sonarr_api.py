@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from quasarr.providers.log import error, trace, warn
+from quasarr.providers.log import trace, warn
 
 _SHARED_STATE_KEY = "sonarr_client"
 
@@ -106,7 +106,7 @@ def get_tmdb_id(shared_state, imdb_id):
     """Return the tmdbId Sonarr resolves for the given IMDb ID, or None."""
     client = get_client(shared_state)
     if client is None:
-        error("Sonarr metadata lookup skipped: Sonarr is not configured")
+        warn("Sonarr metadata lookup skipped: Sonarr is not configured")
         return None
 
     series = client.series_lookup_imdb(imdb_id)
@@ -127,7 +127,7 @@ def get_tvdb_id(shared_state, imdb_id):
     """Return the tvdbId Sonarr resolves for the given IMDb ID, or None."""
     client = get_client(shared_state)
     if client is None:
-        error("Sonarr metadata lookup skipped: Sonarr is not configured")
+        warn("Sonarr metadata lookup skipped: Sonarr is not configured")
         return None
 
     series = client.series_lookup_imdb(imdb_id)

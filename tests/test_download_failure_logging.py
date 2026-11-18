@@ -3,11 +3,11 @@
 import unittest
 from unittest.mock import MagicMock, call, patch
 
-from quasarr.downloads import fail
+from quasarr.downloads import fail, process_links
 
 
 class DownloadFailureLoggingTests(unittest.TestCase):
-    def test_terminal_failure_logs_error_and_failed_state_warning(self):
+    def test_failed_download_is_a_warning_not_an_error(self):
         shared_state = MagicMock()
         stats = MagicMock()
 
@@ -26,11 +26,13 @@ class DownloadFailureLoggingTests(unittest.TestCase):
         self.assertEqual(
             {"success": True, "title": "Synthetic.Release", "failed": True}, result
         )
-        error_log.assert_called_once_with(
-            "Reason for failure: Synthetic redirect failure"
-        )
-        warn_log.assert_called_once_with(
-            'Package "Synthetic.Release" marked as failed!'
+        error_log.assert_not_called()
+        self.assertEqual(
+            [
+                call("Reason for failure: Synthetic redirect failure"),
+                call('Package "Synthetic.Release" marked as failed!'),
+            ],
+            warn_log.call_args_list,
         )
         stats.increment_failed_downloads.assert_called_once_with()
         shared_state.get_db.return_value.store.assert_called_once()
@@ -51,17 +53,38 @@ class DownloadFailureLoggingTests(unittest.TestCase):
                 reason="Synthetic redirect failure",
             )
 
-        self.assertEqual(
-            [
-                call("Reason for failure: Synthetic redirect failure"),
-                call(
-                    'Error marking package "synthetic-package-id" as failed: '
-                    "synthetic database failure"
-                ),
-            ],
-            error_log.call_args_list,
+        error_log.assert_called_once_with(
+            'Error marking package "synthetic-package-id" as failed: '
+            "synthetic database failure"
         )
-        warn_log.assert_not_called()
+        warn_log.assert_called_once_with(
+            "Reason for failure: Synthetic redirect failure"
+        )
+
+    def test_only_filecrypt_404_page_is_an_ip_ban(self):
+        reasons = {}
+        for url in (
+            "https://filecrypt.cc/404.html",
+            "https://crypter.invalid/404.html",
+        ):
+            with patch("quasarr.downloads.fail") as failed:
+                process_links(
+                    MagicMock(),
+                    {"links": [[url, "rapidgator"]]},
+                    "Synthetic.Release",
+                    "",
+                    "synthetic-package-id",
+                    None,
+                    "https://source.invalid/release",
+                    0,
+                    "XX",
+                )
+            reasons[url] = failed.call_args.kwargs["reason"]
+
+        self.assertIn(
+            "filecrypt banned the IP", reasons["https://filecrypt.cc/404.html"]
+        )
+        self.assertIn("lead to a 404 page", reasons["https://crypter.invalid/404.html"])
 
 
 if __name__ == "__main__":

@@ -13,7 +13,11 @@ from bs4 import BeautifulSoup
 from requests.exceptions import RequestException, Timeout
 
 from quasarr.constants import SESSION_MAX_AGE_SECONDS, SESSION_REQUEST_TIMEOUT_SECONDS
-from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
+from quasarr.providers.hostname_issues import (
+    SiteUnreachableError,
+    clear_hostname_issue,
+    mark_hostname_issue,
+)
 from quasarr.providers.log import debug, info, trace
 from quasarr.providers.utils import is_flaresolverr_available, is_site_usable
 
@@ -72,14 +76,14 @@ def create_and_persist_session(shared_state):
                 timeout=SESSION_REQUEST_TIMEOUT_SECONDS,
             )
             fs_resp.raise_for_status()
-        except Timeout:
+        except Timeout as e:
             info("FlareSolverr request timed out")
-            mark_hostname_issue(hostname, "session", "FlareSolverr request timed out")
+            mark_hostname_issue(hostname, "session", e)
             return None
         except RequestException as e:
             # This covers HTTP errors and connection issues *other than* timeout
             info(f"FlareSolverr server error: {e}")
-            mark_hostname_issue(hostname, "session", str(e))
+            mark_hostname_issue(hostname, "session", e)
             return None
 
         fs_json = fs_resp.json()
@@ -87,7 +91,9 @@ def create_and_persist_session(shared_state):
         if fs_json.get("status") != "ok" or "solution" not in fs_json:
             info("FlareSolverr did not return a valid solution")
             mark_hostname_issue(
-                hostname, "session", "FlareSolverr did not return a valid solution"
+                hostname,
+                "session",
+                SiteUnreachableError("FlareSolverr did not return a valid solution"),
             )
             return None
 
@@ -108,7 +114,7 @@ def create_and_persist_session(shared_state):
 
     except Exception as e:
         debug(f"Could not prime session via FlareSolverr: {e}")
-        mark_hostname_issue(hostname, "session", str(e))
+        mark_hostname_issue(hostname, "session", e)
         return None
 
     if user and pw:
@@ -317,7 +323,9 @@ def fetch_via_flaresolverr(
         )
     except requests.exceptions.RequestException as e:
         info(f"Could not reach FlareSolverr: {e}")
-        mark_hostname_issue(hostname, "session", f"FlareSolverr error: {e}")
+        mark_hostname_issue(
+            hostname, "session", SiteUnreachableError(f"FlareSolverr error: {e}")
+        )
         return {
             "status_code": None,
             "headers": {},
@@ -330,7 +338,11 @@ def fetch_via_flaresolverr(
         raise RuntimeError(f"Could not reach FlareSolverr: {e}") from e
 
     if resp.status_code >= 400:
-        mark_hostname_issue(hostname, "session", f"Request failed: {resp.status_code}")
+        mark_hostname_issue(
+            hostname,
+            "session",
+            requests.HTTPError(f"Request failed: {resp.status_code}", response=resp),
+        )
         raise RuntimeError(f"Request failed: {resp.status_code}")
 
     fs_json = resp.json()

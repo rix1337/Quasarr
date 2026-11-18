@@ -16,7 +16,7 @@ import time
 
 from quasarr.providers import shared_state
 from quasarr.providers.hostname_issues import mark_hostname_issue
-from quasarr.providers.log import error
+from quasarr.providers.log import error, warn
 
 TABLE = "custom_sources"
 REVISION_KEY = "custom_sources_rev"
@@ -67,7 +67,7 @@ def _read_rows():
             definitions[key] = json.loads(decrypt_secret(value))
         except Exception as e:
             # The row stays untouched so restoring the matching key recovers it.
-            error(f"Could not read custom source {key.upper()}: {e}")
+            warn(f"Could not read custom source {key.upper()}: {e}")
             mark_hostname_issue(key, "load", f"Stored definition unreadable: {e}")
     return definitions
 
@@ -99,7 +99,7 @@ def get_custom_sources():
             try:
                 sources[key] = CustomSource(definition)
             except Exception as e:
-                error(f"Custom source {key.upper()} is invalid: {e}")
+                warn(f"Custom source {key.upper()} is invalid: {e}")
                 mark_hostname_issue(key, "load", f"Stored definition invalid: {e}")
         _cache["revision"] = revision
         _cache["sources"] = sources
@@ -108,7 +108,7 @@ def get_custom_sources():
 
 def save_definition(definition):
     """Validate, encrypt and store a definition; assigns a key to new ones."""
-    from quasarr.search.sources.helpers.custom_source import compile_definition
+    from quasarr.search.sources.helpers.custom_source import known_definition
     from quasarr.storage.config import encrypt_secret
 
     definition = dict(definition)
@@ -124,7 +124,8 @@ def save_definition(definition):
     definition["key"] = str(definition["key"]).lower()
     definition["schema"] = SCHEMA_VERSION
     definition.setdefault("enabled", True)
-    compile_definition(definition)
+    # validates, and drops keys Quasarr does not read so they never look like settings
+    definition = known_definition(definition, keep=("key", "schema", "enabled"))
     db.update_store(definition["key"], encrypt_secret(json.dumps(definition)))
     bump_revision()
     return definition

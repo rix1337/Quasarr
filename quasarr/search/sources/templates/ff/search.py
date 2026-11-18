@@ -21,7 +21,11 @@ from quasarr.constants import (
 )
 from quasarr.providers import shared_state
 from quasarr.providers.cloudflare import LazyFlareSolverrSession
-from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
+from quasarr.providers.hostname_issues import (
+    SiteUnreachableError,
+    clear_hostname_issue,
+    mark_hostname_issue,
+)
 from quasarr.providers.imdb_metadata import get_localized_title
 from quasarr.providers.log import debug, info, trace, warn
 from quasarr.providers.utils import (
@@ -95,9 +99,7 @@ class Source(AbstractSearchSource):
                 r.raise_for_status()
             except Exception as e:
                 warn(f"Error loading feed: {e} for {formatted_date}")
-                mark_hostname_issue(
-                    self.initials, "feed", str(e) if "e" in dir() else "Error occurred"
-                )
+                mark_hostname_issue(self.initials, "feed", e)
                 return releases
 
             content = BeautifulSoup(r.text, "html.parser")
@@ -147,7 +149,7 @@ class Source(AbstractSearchSource):
                     mark_hostname_issue(
                         self.initials,
                         "feed",
-                        str(e) if "e" in dir() else "Error occurred",
+                        e,
                     )
 
         debug(f"Time taken: {time.time() - start_time:.2f}s")
@@ -233,7 +235,7 @@ class Source(AbstractSearchSource):
             mark_hostname_issue(
                 self.initials,
                 "search",
-                str(e) if "e" in dir() else "Error occurred",
+                e,
             )
             return releases
 
@@ -340,7 +342,7 @@ def _load_movie_data(source, shared_state, movie_id, headers, cf_session):
         movie_page = r.text
     except Exception as e:
         debug(f"Failed to load movie page for {movie_id}: {e}")
-        mark_hostname_issue(source.initials, "search", str(e))
+        mark_hostname_issue(source.initials, "search", e)
         return None
 
     content = BeautifulSoup(movie_page, "html.parser")
@@ -369,7 +371,7 @@ def _load_movie_data(source, shared_state, movie_id, headers, cf_session):
         data_html = r.json().get("html", "")
     except Exception as e:
         debug(f"Failed to load movie API for {movie_id}: {e}")
-        mark_hostname_issue(source.initials, "search", str(e))
+        mark_hostname_issue(source.initials, "search", e)
         return None
 
     movie_data = {
@@ -393,7 +395,9 @@ def _report_rate_limit(response, initials, operation):
             return False
         if not isinstance(payload, dict) or payload.get("error") != "limit reached":
             return False
-    mark_hostname_issue(initials, operation, "Request limit reached")
+    mark_hostname_issue(
+        initials, operation, SiteUnreachableError("Request limit reached")
+    )
     return True
 
 

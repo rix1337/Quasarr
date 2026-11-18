@@ -22,7 +22,7 @@ from quasarr.constants import (
 from quasarr.providers import shared_state
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title, get_year
-from quasarr.providers.log import debug, error, trace, warn
+from quasarr.providers.log import debug, info, trace, warn
 from quasarr.providers.utils import (
     generate_download_link,
     get_base_search_category_id,
@@ -74,7 +74,7 @@ class Source(AbstractSearchSource):
             debug(f"Received IMDb ID: <y>{imdb_id}</y>")
             title = get_localized_title(shared_state, imdb_id, "de", search_category)
             if not title:
-                error(f"No title found for IMDb '{imdb_id}'")
+                info(f"No title found for IMDb '{imdb_id}'")
                 return releases
             trace(f"Resolved IMDb '{imdb_id}' to: '{title}'")
             search_string = html.unescape(title)
@@ -383,10 +383,8 @@ class Source(AbstractSearchSource):
             trace(f"Returning {len(releases)} total releases (deduplicated)")
 
         except Exception as e:
-            error(f"Error in search: {e}")
-            mark_hostname_issue(
-                self.initials, "search", str(e) if "e" in dir() else "Error occurred"
-            )
+            warn(f"Error in search: {e}")
+            mark_hostname_issue(self.initials, "search", e)
 
             debug(f"{traceback.format_exc()}")
             return releases

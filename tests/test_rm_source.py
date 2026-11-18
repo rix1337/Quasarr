@@ -574,7 +574,7 @@ class SearchFlowTests(unittest.TestCase):
 
         self.assertEqual([], releases)
         mark.assert_called_once()
-        self.assertIn("Unexpected page layout", mark.call_args.args[2])
+        self.assertIn("Unexpected page layout", str(mark.call_args.args[2]))
 
     def test_unparsable_post_is_skipped_without_marking_the_host(self):
         with (

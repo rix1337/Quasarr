@@ -6,7 +6,7 @@ import time
 
 import requests
 
-from quasarr.providers.log import error, trace, warn
+from quasarr.providers.log import trace, warn
 
 _SHARED_STATE_KEY = "radarr_client"
 
@@ -91,7 +91,7 @@ def get_tmdb_id(shared_state, imdb_id):
     """Return the tmdbId Radarr resolves for the given IMDb ID, or None."""
     client = get_client(shared_state)
     if client is None:
-        error("Radarr metadata lookup skipped: Radarr is not configured")
+        warn("Radarr metadata lookup skipped: Radarr is not configured")
         return None
 
     movie = client.movie_lookup_imdb(imdb_id)
