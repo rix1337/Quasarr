@@ -96,7 +96,7 @@ class Source(AbstractSearchSource):
             releases = _build_search_results(shared_state, items, search_category)
         except Exception as e:
             warn(f"Error loading feed: {e}")
-            mark_hostname_issue(self.initials, "feed", str(e))
+            mark_hostname_issue(self.initials, "feed", e)
 
         debug(f"Time taken: {time.time() - start_time:.2f}s")
 
@@ -141,7 +141,7 @@ class Source(AbstractSearchSource):
                 clear_hostname_issue(self.initials)
         except Exception as e:
             warn(f"Error loading search: {e}")
-            mark_hostname_issue(self.initials, "search", str(e))
+            mark_hostname_issue(self.initials, "search", e)
 
         debug(f"Time taken: {time.time() - start_time:.2f}s")
 

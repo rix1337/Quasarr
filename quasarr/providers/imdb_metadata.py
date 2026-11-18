@@ -11,7 +11,7 @@ from json import dumps, loads
 import requests
 from bs4 import BeautifulSoup
 
-from quasarr.providers.log import debug, error
+from quasarr.providers.log import debug, warn
 
 
 def _get_db(table_name):
@@ -647,7 +647,7 @@ def get_localized_title(
         _update_cache(imdb_id, "localized", sanitized_title, language)
         return _normalize_localized_title(sanitized_title, language)
 
-    error(f"Could not get localized title for {imdb_id} in {language}")
+    warn(f"Could not get localized title for {imdb_id} in {language}")
     return None
 
 

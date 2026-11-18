@@ -19,7 +19,6 @@ from quasarr.constants import (
 from quasarr.providers.imdb_metadata import get_imdb_metadata
 from quasarr.providers.log import (
     debug,
-    error,
     get_source_logger,
     info,
     trace,
@@ -78,13 +77,13 @@ def get_search_results(
         from quasarr.providers.radarr_api import get_client as get_radarr_client
 
         if get_radarr_client(shared_state) is None:
-            error("Movie search unavailable: Radarr is not configured")
+            warn("Movie search unavailable: Radarr is not configured")
             return []
     elif base_search_category == SEARCH_CAT_SHOWS:
         from quasarr.providers.sonarr_api import get_client as get_sonarr_client
 
         if get_sonarr_client(shared_state) is None:
-            error("TV search unavailable: Sonarr is not configured")
+            warn("TV search unavailable: Sonarr is not configured")
             return []
 
     # Anchored before metadata warming: sources derive their own budget from this,

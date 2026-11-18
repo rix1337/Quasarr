@@ -118,9 +118,7 @@ class Source(AbstractSearchSource):
             results = soup.find_all("div", class_="item")
         except Exception as e:
             info(f"{search_type} load error: {e}")
-            mark_hostname_issue(
-                self.initials, search_type, str(e) if "e" in dir() else "Error occurred"
-            )
+            mark_hostname_issue(self.initials, search_type, e)
             return releases
 
         if not results:
@@ -185,7 +183,7 @@ class Source(AbstractSearchSource):
                     mark_hostname_issue(
                         self.initials,
                         search_type,
-                        str(e) if "e" in dir() else "Error occurred",
+                        e,
                     )
                 # the relative "Posted N days ago" drifts with every search
                 published = _parse_published_meta(soup) or published

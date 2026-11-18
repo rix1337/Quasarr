@@ -38,7 +38,12 @@ from quasarr.constants import (
 )
 from quasarr.downloads.mirror_filters import is_known_mirror, mirror_allowed
 from quasarr.downloads.sources.helpers.abstract_source import AbstractDownloadSource
-from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
+from quasarr.providers.hostname_issues import (
+    UNREACHABLE_HTTP_STATUSES,
+    SiteUnreachableError,
+    clear_hostname_issue,
+    mark_hostname_issue,
+)
 from quasarr.providers.log import debug, get_logger
 from quasarr.providers.utils import sanitize_title
 from quasarr.search.sources.helpers.search_source import AbstractSearchSource
@@ -804,6 +809,13 @@ class FetchResult(NamedTuple):
     status: int | None
     # a security check answered the direct request
     blocked: bool = False
+    # the failed request's exception, so hostname issues classify it by type
+    cause: Exception | None = None
+
+    @property
+    def issue(self):
+        """The failure to report as a hostname issue."""
+        return self.cause or self.error
 
 
 class _HostSession:
@@ -864,7 +876,7 @@ def _fetch_once(
                     chunks.append(chunk)
                 content = b"".join(chunks)
     except Exception as e:
-        return FetchResult(None, f"Request failed: {e}", None)
+        return FetchResult(None, f"Request failed: {e}", None, cause=e)
 
     if len(content) > MAX_BODY_BYTES:
         return FetchResult(None, "Page is larger than 5 MB", status)
@@ -880,7 +892,13 @@ def _fetch_once(
     if status == 404:
         return FetchResult(None, "Page not found (404)", status)
     if not 200 <= status < 300:
-        return FetchResult(None, f"HTTP status {status}", status)
+        message = f"HTTP status {status}"
+        cause = (
+            SiteUnreachableError(message)
+            if status in UNREACHABLE_HTTP_STATUSES
+            else None
+        )
+        return FetchResult(None, message, status, cause=cause)
     return FetchResult(markup, None, status)
 
 
@@ -1650,7 +1668,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 data,
             )
             if fetched.error:
-                mark_hostname_issue(self.initials, "search", fetched.error)
+                mark_hostname_issue(self.initials, "search", fetched.issue)
                 continue
             soup = BeautifulSoup(fetched.markup, "html.parser")
             for anchor in follow["selector"].select(soup):
@@ -1724,7 +1742,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             report, fetched = self.load_listing(
                 shared_state, url, self.spec["list"], FEED_REQUEST_TIMEOUT_SECONDS, data
             )
-            issue = fetched.error or describe_report(report)
+            issue = fetched.issue or describe_report(report)
             if issue:
                 mark_hostname_issue(self.initials, "feed", issue)
                 return []
@@ -1738,7 +1756,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             ]
             return self._releases(shared_state, rows)
         except Exception as e:
-            mark_hostname_issue(self.initials, "feed", str(e))
+            mark_hostname_issue(self.initials, "feed", e)
             return []
         finally:
             self._log("search").debug(f"Time taken: {time.time() - start_time:.2f}s")
@@ -1867,7 +1885,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             found = []
             for report, fetched in pages:
                 if fetched.error:
-                    mark_hostname_issue(self.initials, "search", fetched.error)
+                    mark_hostname_issue(self.initials, "search", fetched.issue)
                     continue
                 self._log_report("Search", report)
                 found += report["rows"]
@@ -1913,13 +1931,16 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 rows.append(row)
             return self._releases(shared_state, rows)
         except Exception as e:
-            mark_hostname_issue(self.initials, "search", str(e))
+            mark_hostname_issue(self.initials, "search", e)
             return []
         finally:
             self._log("search").debug(f"Time taken: {time.time() - start_time:.2f}s")
 
     def load_download_links(self, shared_state, url):
-        """Fetch one release page; returns (links, error, status, imdb_id)."""
+        """Fetch one release page; returns (links, error, status, imdb_id).
+
+        A failed request's error is its exception, so issues classify it by type.
+        """
         if not is_on_host(url, self.hostname):
             return [], "Release page is not on this site", None, None
         download = self.spec["download"]
@@ -1932,7 +1953,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             self.spec["flaresolverr"],
         )
         if fetched.error:
-            return [], fetched.error, fetched.status, None
+            return [], fetched.issue, fetched.status, None
         links = parse_download_links(fetched.markup, url, download, self.hostname)
         if links is None:
             return [], "Could not find main content section", fetched.status, None
@@ -1999,7 +2020,8 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
                 return result
             if link_error:
                 empty = link_error == "No download links matched"
-                if (status is not None or "Request failed" in link_error) and (
+                # a request that failed, not a page this site's settings cannot read
+                if (status is not None or isinstance(link_error, Exception)) and (
                     download["empty_is_issue"] or not empty
                 ):
                     mark_hostname_issue(self.initials, "download", link_error)
@@ -2025,7 +2047,7 @@ class CustomSource(AbstractSearchSource, AbstractDownloadSource):
             clear_hostname_issue(self.initials)
             return {**result, "links": links}
         except Exception as e:
-            mark_hostname_issue(self.initials, "download", str(e))
+            mark_hostname_issue(self.initials, "download", e)
             return {"links": []}
 
     def get_package_identity(self, url):

@@ -11,6 +11,7 @@ from quasarr.providers.cloudflare import (
     LazyFlareSolverrSession,
     _clear_cloudflare_gate_cache,
 )
+from quasarr.providers.hostname_issues import SiteUnreachableError
 from quasarr.search.sources.templates.ff.download import Source as FfDownloadSource
 from quasarr.search.sources.templates.ff.search import Source as FfSearchSource
 from quasarr.search.sources.templates.sf.download import Source as SfDownloadSource
@@ -246,7 +247,11 @@ class FfSourceTests(unittest.TestCase):
         )
         self.assertIsNone(details["imdb_id"])
         self.assertEqual(0, details["size"])
-        self.assertEqual([("ff", "feed", "Request limit reached")], issues)
+        self.assertEqual(
+            [("ff", "feed", "Request limit reached")],
+            [(key, operation, str(issue)) for key, operation, issue in issues],
+        )
+        self.assertIsInstance(issues[0][2], SiteUnreachableError)
         self.assertTrue(details["date"].startswith("Wed, 24 Jun 2026 10:15:00 "))
         clear_issue.assert_not_called()
 

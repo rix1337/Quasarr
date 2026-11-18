@@ -16,7 +16,7 @@ from quasarr.constants import (
 from quasarr.providers import shared_state
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title, get_year
-from quasarr.providers.log import debug, error, info, warn
+from quasarr.providers.log import debug, info, warn
 from quasarr.providers.sessions.dd import (
     create_and_persist_session,
     retrieve_and_validate_session,
@@ -66,7 +66,7 @@ class Source(AbstractSearchSource):
         try:
             dd_session = retrieve_and_validate_session(shared_state)
         except Exception as e:
-            mark_hostname_issue(self.initials, "search", str(e))
+            mark_hostname_issue(self.initials, "search", e)
             return releases
 
         if not dd_session:
@@ -223,15 +223,13 @@ class Source(AbstractSearchSource):
                     mark_hostname_issue(
                         self.initials,
                         "search",
-                        str(e) if "e" in dir() else "Error occurred",
+                        e,
                     )
                     continue
 
         except Exception as e:
-            error(f"Error loading feed: {e}")
-            mark_hostname_issue(
-                self.initials, search_type, str(e) if "e" in dir() else "Error occurred"
-            )
+            warn(f"Error loading feed: {e}")
+            mark_hostname_issue(self.initials, search_type, e)
 
         elapsed_time = time.time() - start_time
         debug(f"Time taken: {elapsed_time:.2f}s")

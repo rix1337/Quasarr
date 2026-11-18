@@ -185,7 +185,7 @@ class Source(AbstractDownloadSource):
                     resolved.append([real_url, mirror_name])
             return {"links": resolved, "imdb_id": imdb_id}
         except Exception as e:
-            mark_hostname_issue(Source.initials, "download", str(e))
+            mark_hostname_issue(Source.initials, "download", e)
 
         return {"links": [], "imdb_id": None}
 
@@ -278,9 +278,7 @@ def _parse_mirrors(base_url, entry):
         mirrors = {"name": name, "season": season, "episodes": episodes}
     except Exception as e:
         warn(f"Error parsing mirrors: {e}")
-        mark_hostname_issue(
-            Source.initials, "download", str(e) if "e" in dir() else "Download error"
-        )
+        mark_hostname_issue(Source.initials, "download", e)
 
     return mirrors
 

@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from bs4 import BeautifulSoup, NavigableString
 
 from quasarr.constants import DOWNLOAD_REQUEST_TIMEOUT_SECONDS, SHARE_HOSTERS_LOWERCASE
+from quasarr.downloads.mirror_filters import mirror_allowed
 from quasarr.downloads.sources.helpers.abstract_source import AbstractDownloadSource
 from quasarr.providers.hostname_issues import mark_hostname_issue
 from quasarr.providers.log import debug, info
@@ -132,7 +133,7 @@ class Source(AbstractDownloadSource):
             mark_hostname_issue(
                 Source.initials,
                 "download",
-                str(e) if "e" in dir() else "Download error",
+                e,
             )
             invalidate_session(shared_state)
             return {"links": [], "password": ""}
@@ -545,9 +546,12 @@ def _extract_links_and_password_from_post(post_content, host, requested_mirrors=
             else None
         )
 
-        if requested_mirrors and normalized_mirror:
-            if normalized_mirror not in requested_mirrors:
-                return
+        # a generic label ("download-links") names no hoster and passes here;
+        # the final check filters its decrypted links
+        if normalized_mirror and not mirror_allowed(
+            normalized_mirror, requested_mirrors
+        ):
+            return
 
         identifier = normalized_mirror if normalized_mirror else crypter_type
 

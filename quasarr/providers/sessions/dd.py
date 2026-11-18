@@ -33,7 +33,7 @@ def create_and_persist_session(shared_state):
         csrf_token = r.json().get("csrfToken")
     except Exception as e:
         info(f"Could not retrieve DD CSRF token: {e}")
-        mark_hostname_issue(hostname, "session", str(e))
+        mark_hostname_issue(hostname, "session", e)
         return None
 
     if not csrf_token:
@@ -55,7 +55,7 @@ def create_and_persist_session(shared_state):
         )
     except Exception as e:
         info(f"DD login request failed: {e}")
-        mark_hostname_issue(hostname, "session", str(e))
+        mark_hostname_issue(hostname, "session", e)
         return None
 
     if r.status_code == 401:
@@ -108,7 +108,7 @@ def retrieve_and_validate_session(shared_state):
                 )
         except Exception as e:
             info(f"Session retrieval failed: {e}")
-            mark_hostname_issue(hostname, "session", str(e))
+            mark_hostname_issue(hostname, "session", e)
             dd_session = create_and_persist_session(shared_state)
 
     return dd_session

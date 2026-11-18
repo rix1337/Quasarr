@@ -23,6 +23,7 @@ body:
         - label: No, hostnames are not part of this issue. I am also not asking for any clarification here!
           required: true
   - type: dropdown
+    id: site_kind
     attributes:
       label: Which kind of site is involved?
       description: |
@@ -41,6 +42,7 @@ body:
         - label: No. Every site involved is a built-in site I did not change, or I reset it and the problem remains.
           required: true
   - type: textarea
+    id: environment
     attributes:
       label: Environment
       description: Tell us about your setup
@@ -53,12 +55,14 @@ body:
     validations:
       required: true
   - type: textarea
+    id: description
     attributes:
       label: Description
       description: Describe all steps to reproduce the issue. Without these, noone will be able to help you!
     validations:
       required: true
   - type: textarea
+    id: logs
     attributes:
       label: Error from the console
       description: |
@@ -69,6 +73,7 @@ body:
     validations:
       required: true
   - type: textarea
+    id: ini
     attributes:
       label: Quasarr.ini
       description: |

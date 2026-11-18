@@ -12,6 +12,7 @@ wizard. Passwords never reach the page; site text is shown as text only.
 import re
 from concurrent.futures import ThreadPoolExecutor
 
+import requests
 from bottle import request, response
 
 import quasarr.providers.web_server
@@ -29,6 +30,7 @@ from quasarr.providers.auth import require_api_key
 from quasarr.providers.hostname_issues import (
     clear_hostname_issue,
     get_all_hostname_issues,
+    is_unresolved_name,
     record_configured_hostnames,
 )
 from quasarr.providers.html_images import FLAG_SVGS, LANGUAGE_FLAG_EMOJI
@@ -278,15 +280,16 @@ def check_hostname(shared_state, hostname, named_key=None, fetch=None):
 
 def _short_error(page):
     """A fetch error in words a user can act on."""
-    text = str(page.error)
     if page.status:
         return f"it answered with HTTP {page.status}"
-    if "resolve" in text or "NameResolution" in text:
-        return "the name does not resolve"
-    if "timed out" in text.lower() or "timeout" in text.lower():
+    if isinstance(page.cause, requests.Timeout):
         return "it did not answer in time"
-    if "SSL" in text:
+    if isinstance(page.cause, requests.exceptions.SSLError):
         return "its certificate failed the check"
+    if isinstance(page.cause, requests.ConnectionError) and is_unresolved_name(
+        page.cause
+    ):
+        return "the name does not resolve"
     return "the connection failed"
 
 

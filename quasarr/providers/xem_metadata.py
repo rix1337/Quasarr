@@ -9,7 +9,7 @@ import requests
 
 from quasarr.providers import shared_state
 from quasarr.providers.imdb_metadata import TitleCleaner
-from quasarr.providers.log import debug, error, trace, warn
+from quasarr.providers.log import debug, trace, warn
 from quasarr.providers.utils import search_string_in_sanitized_title
 
 
@@ -61,7 +61,7 @@ def _fetch_all_names():
 
         return data
     except Exception as e:
-        error(f"TheXEM allNames fetch failed: {e}")
+        warn(f"TheXEM allNames fetch failed: {e}")
         return None
 
 

@@ -63,9 +63,7 @@ class Source(AbstractSearchSource):
                 data = json.loads(r.content)
             except Exception as e:
                 info(f"feed load error: {e}")
-                mark_hostname_issue(
-                    self.initials, "feed", str(e) if "e" in dir() else "Error occurred"
-                )
+                mark_hostname_issue(self.initials, "feed", e)
                 return releases
 
             for release in data:
@@ -183,7 +181,7 @@ class Source(AbstractSearchSource):
                 mark_hostname_issue(
                     self.initials,
                     "search",
-                    str(e) if "e" in dir() else "Error occurred",
+                    e,
                 )
 
         one_hour_ago = (datetime.now() - timedelta(hours=1)).strftime(

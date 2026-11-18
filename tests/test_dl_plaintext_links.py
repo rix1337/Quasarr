@@ -125,6 +125,23 @@ class DlPlaintextLinksTests(unittest.TestCase):
         )
         self.assertEqual("www.source.invalid", password)
 
+    def test_generic_crypter_label_passes_mirror_filter(self):
+        # the label names no hoster; the final check filters the decrypted links
+        links, _ = _extract_links_and_password_from_post(
+            """
+            <div>
+                <a href="https://filecrypt.cc/Container/one.html">Download-Links</a>
+                <a href="https://filecrypt.cc/Container/two.html">DDownload.com</a>
+            </div>
+            """,
+            "source.invalid",
+            {"rapidgator"},
+        )
+
+        self.assertEqual(
+            ["https://filecrypt.cc/Container/one.html"], [link[0] for link in links]
+        )
+
     def test_extracts_plaintext_crypter_urls_without_mirror_filter(self):
         post_html = """
             <div class="bbWrapper">

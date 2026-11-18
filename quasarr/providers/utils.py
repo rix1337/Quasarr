@@ -41,7 +41,7 @@ from quasarr.constants import (
     SESSION_REQUEST_TIMEOUT_SECONDS,
 )
 from quasarr.providers import radarr_api, sonarr_api
-from quasarr.providers.log import crit, debug, error, trace, warn
+from quasarr.providers.log import crit, debug, trace, warn
 from quasarr.search.sources.helpers import (
     get_login_required_hostnames,
     get_radarr_required_hostnames,
@@ -128,7 +128,7 @@ def check_ip():
 def check_flaresolverr(shared_state, flaresolverr_url):
     # Ensure it ends with /v<digit+>
     if not re.search(r"/v\d+$", flaresolverr_url):
-        error(f"FlareSolverr URL does not end with /v#: {flaresolverr_url}")
+        warn(f"FlareSolverr URL does not end with /v#: {flaresolverr_url}")
         return False
 
     # Try sending a simple test request
@@ -154,15 +154,15 @@ def check_flaresolverr(shared_state, flaresolverr_url):
             try:
                 flaresolverr_version = json_data.get("version")
             except Exception as e:
-                error(f"Could not grab Flaresolverr version: {str(e)}")
+                warn(f"Could not grab Flaresolverr version: {str(e)}")
                 return False
             return flaresolverr_version
         else:
-            error(f"Unexpected FlareSolverr response: {json_data}")
+            warn(f"Unexpected FlareSolverr response: {json_data}")
             return False
 
     except Exception as e:
-        error(f"Failed to connect to FlareSolverr: {e}")
+        warn(f"Failed to connect to FlareSolverr: {e}")
         return False
 
 
@@ -330,6 +330,17 @@ def detect_crypter_type(url):
     elif "keeplinks." in url_lower:
         return "keeplinks"
     return None
+
+
+def is_filecrypt_ban_page(url):
+    """Whether a link landed on the page filecrypt shows a banned IP.
+
+    filecrypt answers a banned IP with HTTP 200 on its 404.html page. No other
+    crypter does this; elsewhere a 404 page means the page is gone.
+    """
+    return detect_crypter_type(url) == "filecrypt" and urlparse(url).path.endswith(
+        "/404.html"
+    )
 
 
 # flaresolverr-next: recorded at document start on every (redirect) document the

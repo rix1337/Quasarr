@@ -18,10 +18,27 @@ if TYPE_CHECKING:
 
 from dotenv import load_dotenv
 
+from quasarr.providers.version import __version__
+
 load_dotenv(override=True)
 
 # To change the log format, modify the _format variable. It uses loguru's formatting syntax.
 _format = "<d>{time:YYYY-MM-DDTHH:mm:ss}</d> <lvl>{level:5}</lvl>{extra[context]}<b><M>{extra[source]}</M></b>{extra[padding]} {message}"
+
+
+def _error_log_format(record) -> str:
+    """Plain error log line: the version for reports, the origin split by slashes
+    since the file has no colors to tell the level, context and site apart."""
+    extra = record["extra"]
+    parts = (extra.get("context", "").strip(), extra.get("source", "").strip())
+    extra["origin"] = "".join(f"/{part}" for part in parts if part)
+    return (
+        "{time:YYYY-MM-DDTHH:mm:ss} v"
+        + __version__
+        + " {level}{extra[origin]} {message}\n"
+    )
+
+
 # The _context_max_width is used to calculate the padding for extra[context] based on the max amount of context emojis.
 _context_max_width = wcswidth("⬜⬜⬜")
 
@@ -281,8 +298,12 @@ def _counting_sink(message: Message) -> None:
     _subsequent_indent = message.__len__()
 
 
+def error_log_path(config_path: str | Path) -> Path:
+    return Path(config_path) / "Quasarr.error.log"
+
+
 def configure_error_log(config_path: str | Path) -> int:
-    path = Path(config_path) / "Quasarr.error.log"
+    path = error_log_path(config_path)
     backup = path.with_suffix(".log.1")
     lock = FileLock(path.with_suffix(".log.lock"), timeout=1)
 
@@ -304,7 +325,7 @@ def configure_error_log(config_path: str | Path) -> int:
 
     return logger.add(
         write_error,
-        format=_format,
+        format=_error_log_format,
         level="ERROR",
         colorize=False,
         backtrace=False,

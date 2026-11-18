@@ -18,7 +18,7 @@ from quasarr.constants import (
 from quasarr.providers import shared_state
 from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
 from quasarr.providers.imdb_metadata import get_localized_title
-from quasarr.providers.log import debug, error, trace, warn
+from quasarr.providers.log import debug, info, trace, warn
 from quasarr.providers.utils import (
     generate_download_link,
     is_imdb_id,
@@ -60,10 +60,8 @@ class Source(AbstractSearchSource):
                 r.raise_for_status()
                 data = json.loads(r.content)
             except Exception as e:
-                error(f"Feed load error: {e}")
-                mark_hostname_issue(
-                    self.initials, "feed", str(e) if "e" in dir() else "Error occurred"
-                )
+                warn(f"Feed load error: {e}")
+                mark_hostname_issue(self.initials, "feed", e)
                 return releases
 
             for release in data:
@@ -143,14 +141,14 @@ class Source(AbstractSearchSource):
 
         imdb_id = is_imdb_id(search_string)
         if not imdb_id:
-            error(f"No IMDb ID found in search string '{search_string}'")
+            debug(f"No IMDb ID found in search string '{search_string}'")
             return releases
 
         localized_title = get_localized_title(
             shared_state, imdb_id, "de", search_category
         )
         if not localized_title:
-            error(f"No localized title for IMDb {imdb_id}")
+            info(f"No localized title for IMDb {imdb_id}")
             return releases
 
         headers = {"User-Agent": shared_state.values["user_agent"]}
@@ -167,10 +165,8 @@ class Source(AbstractSearchSource):
             soup = BeautifulSoup(r.content, "html.parser")
             results = soup.find_all("a", href=re.compile(r"^/serie/"))
         except Exception as e:
-            error(f"Search load error: {e}")
-            mark_hostname_issue(
-                self.initials, "search", str(e) if "e" in dir() else "Error occurred"
-            )
+            warn(f"Search load error: {e}")
+            mark_hostname_issue(self.initials, "search", e)
             return releases
 
         one_hour_ago = (datetime.now() - timedelta(hours=1)).strftime(

@@ -106,13 +106,25 @@ class Source(AbstractDownloadSource):
                         links = [
                             [link["url"], link["hostname"]] for link in filtered_links
                         ]
+                        if release["links"] and not links:
+                            offered = sorted(
+                                {link["hostname"] for link in release["links"]}
+                            )
+                            return {
+                                "links": [],
+                                "error": (
+                                    f"DD only offers {', '.join(offered)}, which the "
+                                    "mirror-whitelist of this category does not allow"
+                                ),
+                                "terminal": True,
+                            }
                         break
                 except Exception as e:
                     info(f"Error parsing download: {e}")
                     mark_hostname_issue(
                         Source.initials,
                         "download",
-                        str(e) if "e" in dir() else "Download error",
+                        e,
                     )
                     continue
 
@@ -121,7 +133,7 @@ class Source(AbstractDownloadSource):
             mark_hostname_issue(
                 Source.initials,
                 "download",
-                str(e) if "e" in dir() else "Download error",
+                e,
             )
 
         return {"links": links}

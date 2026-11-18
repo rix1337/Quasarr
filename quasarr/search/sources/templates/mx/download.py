@@ -22,7 +22,11 @@ from quasarr.providers.cloudflare import (
     flaresolverr_destroy_session,
     flaresolverr_get,
 )
-from quasarr.providers.hostname_issues import clear_hostname_issue, mark_hostname_issue
+from quasarr.providers.hostname_issues import (
+    SiteUnreachableError,
+    clear_hostname_issue,
+    mark_hostname_issue,
+)
 from quasarr.providers.log import debug, info
 from quasarr.providers.utils import is_flaresolverr_available
 
@@ -152,7 +156,11 @@ def _solve_turnstile_token(shared_state, site_host, sitekey=_DEFAULT_TURNSTILE_S
 
     session_id = flaresolverr_create_session(shared_state)
     if not session_id:
-        mark_hostname_issue("mx", "download", "Could not create FlareSolverr session")
+        mark_hostname_issue(
+            "mx",
+            "download",
+            SiteUnreachableError("Could not create FlareSolverr session"),
+        )
         return None
 
     doc_start_js = _TURNSTILE_DOCUMENT_START_JS.replace("SITEKEY", json.dumps(sitekey))
@@ -176,7 +184,7 @@ def _solve_turnstile_token(shared_state, site_host, sitekey=_DEFAULT_TURNSTILE_S
         return token
     except Exception as e:
         debug(f"[mx] Turnstile browser solve failed: {e}")
-        mark_hostname_issue("mx", "download", str(e))
+        mark_hostname_issue("mx", "download", e)
         return None
     finally:
         flaresolverr_destroy_session(shared_state, session_id)
@@ -203,7 +211,11 @@ def _decode_mx_link(shared_state, target):
     )
     if r.status_code >= 400:
         debug(f"[mx] decode POST failed ({r.status_code}): {r.text[:200]}")
-        mark_hostname_issue("mx", "download", f"Decode HTTP {r.status_code}")
+        mark_hostname_issue(
+            "mx",
+            "download",
+            requests.HTTPError(f"Decode HTTP {r.status_code}", response=r),
+        )
         return None
     return _extract_decoded_url(r.json())
 

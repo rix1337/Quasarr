@@ -74,7 +74,9 @@ def create_and_persist_session(shared_state):
         return nx_session
     else:
         info("Could not create NX session")
-        mark_hostname_issue(hostname, "session", f"HTTP {r.status_code}")
+        mark_hostname_issue(
+            hostname, "session", requests.HTTPError(f"HTTP {r.status_code}", response=r)
+        )
         return None
 
 
@@ -96,7 +98,7 @@ def retrieve_and_validate_session(shared_state):
                 )
         except Exception as e:
             info(f"Session retrieval failed: {e}")
-            mark_hostname_issue(hostname, "session", str(e))
+            mark_hostname_issue(hostname, "session", e)
             nx_session = create_and_persist_session(shared_state)
 
     return nx_session

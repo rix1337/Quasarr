@@ -171,9 +171,7 @@ class Source(AbstractSearchSource):
 
         except Exception as e:
             warn(f"Forum feed error: {e}")
-            mark_hostname_issue(
-                self.initials, "feed", str(e) if "e" in dir() else "Error occurred"
-            )
+            mark_hostname_issue(self.initials, "feed", e)
             invalidate_session(shared_state)
 
         elapsed = time.time() - start_time
@@ -394,9 +392,7 @@ class Source(AbstractSearchSource):
 
         except Exception as e:
             warn(f"[Page {page_num}] error: {e}")
-            mark_hostname_issue(
-                self.initials, "search", str(e) if "e" in dir() else "Error occurred"
-            )
+            mark_hostname_issue(self.initials, "search", e)
             return page_releases, None, ()
 
     def search(
@@ -540,9 +536,7 @@ class Source(AbstractSearchSource):
 
         except Exception as e:
             info(f"search error: {e}")
-            mark_hostname_issue(
-                self.initials, "search", str(e) if "e" in dir() else "Error occurred"
-            )
+            mark_hostname_issue(self.initials, "search", e)
             invalidate_session(shared_state)
 
         trace(

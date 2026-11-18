@@ -66,11 +66,11 @@ class Source(AbstractDownloadSource):
                 info(f"Release page for {title or slug} no longer exists")
                 return {"links": [], "imdb_id": None}
             info(f"Could not load release data for {title or slug}: {e}")
-            mark_hostname_issue(Source.initials, "download", str(e))
+            mark_hostname_issue(Source.initials, "download", e)
             return {"links": [], "imdb_id": None}
         except Exception as e:
             info(f"Could not load release data for {title or slug}: {e}")
-            mark_hostname_issue(Source.initials, "download", str(e))
+            mark_hostname_issue(Source.initials, "download", e)
             return {"links": [], "imdb_id": None}
 
     def get_package_identity(self, url: str) -> str | None:

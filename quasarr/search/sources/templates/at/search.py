@@ -91,7 +91,7 @@ class Source(AbstractSearchSource):
             )
         except Exception as e:
             warn(f"Error loading feed: {e}")
-            mark_hostname_issue(self.initials, "feed", str(e) or "Error occurred")
+            mark_hostname_issue(self.initials, "feed", e)
             return releases
 
         seen_sources = set()
@@ -180,7 +180,7 @@ class Source(AbstractSearchSource):
                 )
             except Exception as e:
                 warn(f"Error loading search for {variant['query']}: {e}")
-                mark_hostname_issue(self.initials, "search", str(e) or "Error occurred")
+                mark_hostname_issue(self.initials, "search", e)
                 continue
 
             seen_sources = set()

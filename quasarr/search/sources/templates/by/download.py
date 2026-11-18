@@ -96,7 +96,7 @@ class Source(AbstractDownloadSource):
                     return rq.text, url
                 except Exception as e:
                     info(f"Error fetching iframe URL: {url}")
-                    mark_hostname_issue(Source.initials, "download", str(e))
+                    mark_hostname_issue(Source.initials, "download", e)
                     return None, url
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
@@ -236,7 +236,7 @@ class Source(AbstractDownloadSource):
             mark_hostname_issue(
                 Source.initials,
                 "download",
-                str(e) if "e" in dir() else "Download error",
+                e,
             )
 
         return {"links": links}

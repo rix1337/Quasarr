@@ -421,6 +421,6 @@ class Source(AbstractDownloadSource):
             mark_hostname_issue(
                 Source.initials,
                 "download",
-                str(e) if "e" in dir() else "Download error",
+                e,
             )
             return {"links": []}

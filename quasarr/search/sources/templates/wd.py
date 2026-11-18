@@ -143,13 +143,15 @@ def download(site, shared_state, url, mirrors, title, password):
                 f"Site has been updated or is protected. "
                 f"Grabbing download links for {title} not possible! ({e})"
             )
-            mark_hostname_issue(site.initials, "download", str(e))
+            mark_hostname_issue(site.initials, "download", e)
             return {"links": [], "imdb_id": None}
 
     try:
         if status_code and status_code >= 400:
             mark_hostname_issue(
-                site.initials, "download", f"Download error: {str(status_code)}"
+                site.initials,
+                "download",
+                requests.HTTPError(f"Download error: {status_code}", response=r),
             )
 
         soup = BeautifulSoup(text, "html.parser")
@@ -319,7 +321,5 @@ def _resolve_wd_redirect(shared_state, url, session_id=None):
             return None
     except Exception as e:
         info(f"Error fetching redirected URL for {url}: {e}")
-        mark_hostname_issue(
-            "wd", "download", str(e) if "e" in dir() else "Download error"
-        )
+        mark_hostname_issue("wd", "download", e)
     return None

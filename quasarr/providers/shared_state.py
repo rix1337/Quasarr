@@ -288,7 +288,7 @@ def get_devices(user, password):
         devices = jd.list_devices()
         return devices
     except (TokenExpiredException, RequestTimeoutException, MYJDException) as e:
-        error("Error connecting to JDownloader: " + str(e))
+        warn("Error connecting to JDownloader: " + str(e))
         return []
 
 

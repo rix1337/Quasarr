@@ -4,6 +4,9 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import requests
+from urllib3.exceptions import MaxRetryError, NameResolutionError
+
 from quasarr.search.sources.helpers.custom_source import FetchResult
 from quasarr.storage.setup import sites
 
@@ -95,8 +98,13 @@ class CheckHostnameTests(unittest.TestCase):
         self.assertEqual(["AB"], [c["key"] for c in result["possible"]])
 
     def test_unreachable_site_gets_a_short_reason(self):
+        unresolved = requests.ConnectionError(
+            MaxRetryError(
+                None, "/", NameResolutionError("site.invalid", None, OSError())
+            )
+        )
         fetch = lambda *_args, **_kwargs: FetchResult(  # noqa: E731
-            None, "Failed to resolve 'site.invalid'", None
+            None, f"Request failed: {unresolved}", None, cause=unresolved
         )
         with patch(
             "quasarr.search.sources.helpers.custom_suggest.detect_templates",

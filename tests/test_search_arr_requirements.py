@@ -31,7 +31,7 @@ class SearchArrRequirementTests(unittest.TestCase):
         )
 
     def test_movie_search_stops_without_radarr(self):
-        with patch("quasarr.search.error") as log_error:
+        with patch("quasarr.search.warn") as log_warn:
             results = get_search_results(
                 self._state(),
                 "radarr",
@@ -40,16 +40,16 @@ class SearchArrRequirementTests(unittest.TestCase):
             )
 
         self.assertEqual([], results)
-        log_error.assert_called_once_with(
+        log_warn.assert_called_once_with(
             "Movie search unavailable: Radarr is not configured"
         )
 
     def test_tv_feed_stops_without_sonarr(self):
-        with patch("quasarr.search.error") as log_error:
+        with patch("quasarr.search.warn") as log_warn:
             results = get_search_results(self._state(), "sonarr", SEARCH_CAT_SHOWS)
 
         self.assertEqual([], results)
-        log_error.assert_called_once_with(
+        log_warn.assert_called_once_with(
             "TV search unavailable: Sonarr is not configured"
         )
 
@@ -57,7 +57,7 @@ class SearchArrRequirementTests(unittest.TestCase):
         with (
             patch("quasarr.search.get_sources", return_value={}),
             patch("quasarr.search.get_search_category_sources", return_value=[]),
-            patch("quasarr.search.error") as log_error,
+            patch("quasarr.search.warn") as log_warn,
         ):
             results = get_search_results(
                 self._state(),
@@ -67,7 +67,7 @@ class SearchArrRequirementTests(unittest.TestCase):
             )
 
         self.assertEqual([], results)
-        log_error.assert_not_called()
+        log_warn.assert_not_called()
 
     def test_movie_search_warms_metadata_from_radarr(self):
         state = self._state(radarr_client=object())
